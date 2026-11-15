@@ -426,6 +426,27 @@ class TrayIcon:
         if cmd:
             self.menue(cmd)
 
+    def _aendern(self, flags, tip=None, titel="", text=""):
+        if not self.ok:
+            return
+        try:
+            n = self.nid
+            n.uFlags = flags
+            if tip is not None:
+                n.szTip = tip[:120]
+            n.szInfoTitle, n.szInfo, n.dwInfoFlags = titel[:60], text[:240], 1
+            self._sh.Shell_NotifyIconW(1, self._ct.byref(n))                      # NIM_MODIFY
+            n.uFlags = 0x1 | 0x2 | 0x4
+        except Exception:
+            log("Symbol-Aenderung fehlgeschlagen: " + traceback.format_exc())
+
+    def tooltip(self, tip):
+        self._aendern(0x1 | 0x2 | 0x4, tip=tip)
+
+    def hinweis(self, titel, text):
+        """Sprechblase neben der Uhr."""
+        self._aendern(0x1 | 0x2 | 0x10, titel=titel, text=text)
+
     def entfernen(self):
         if self.ok:
             try:
@@ -775,6 +796,8 @@ def mit_fenster():
         text, geaendert, launcher, sha = aktualisieren(melden)
         if sha:
             st["installiert"], st["neueste"] = sha, sha
+            if tray and tray.ok:
+                tray.tooltip("RoK Tracker")
         melden(text)
         if geaendert and laeuft():
             st["veraltet"] = True
@@ -989,6 +1012,10 @@ def mit_fenster():
                 sha, _ = neueste_version()
                 if sha:
                     st["neueste"] = sha
+                    if tray and tray.ok and st["installiert"] and sha != st["installiert"] and st.get("gemeldet") != sha:
+                        st["gemeldet"] = sha
+                        ui(lambda: (tray.tooltip("RoK Tracker - Update verfügbar"),
+                                    tray.hinweis("RoK Tracker", "Ein Update ist verfügbar. Klick auf das Symbol, dann auf Update.")))
             ui(zeige)
         threading.Thread(target=lauf, daemon=True).start()
 
@@ -996,6 +1023,13 @@ def mit_fenster():
         if not st["busy"]:
             pruefen(False)
         root.after(3000, takt)
+
+    def update_takt():
+        """Fragt alle 3 Stunden bei GitHub nach, auch wenn das Fenster im Infobereich versteckt ist."""
+        if not st["busy"]:
+            pruefen(True)
+        root.after(3 * 3600 * 1000, update_takt)
+    root.after(3 * 3600 * 1000, update_takt)
 
     tray = None
     def zeigen():
