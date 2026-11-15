@@ -1383,7 +1383,7 @@ document.addEventListener("click",e=>{const y=e.target.closest(".seg button");if
 <button role="tab" data-t="dt">Pro Tag</button>
 <button role="tab" data-t="nm" id="nmsec">Namen eintragen <span class="cnt" id="c_nm"></span></button>
 </nav>
-<div class="pane" id="p_loot"><div id="apbox"></div><div id="ittot"></div><div class="tu"><label>Zeit anzeigen in <select id="tunit"><option value="min">Minuten</option><option value="h">Stunden</option><option value="d">Tagen</option></select></label></div><div class="loot" id="loot"></div><p class="note" id="lootnote"></p><div class="lap" id="lap"></div></div>
+<div class="pane" id="p_loot"><div class="tu"><label>Zeit anzeigen in <select id="tunit"><option value="min">Minuten</option><option value="h">Stunden</option><option value="d">Tagen</option></select></label></div><div class="loot" id="loot"></div><p class="note" id="lootnote"></p><div class="lap" id="lap"></div><div id="apbox"></div><div id="ittot"></div></div>
 <div class="pane" id="p_ft"><div id="ft"></div></div>
 <div class="pane" id="p_bt"><div class="chbox" id="chbox"></div><div id="bt"></div></div>
 <div class="pane" id="p_pv"><p class="note">Zusammengehörende Berichte stehen in einer Zeile. Ark of Osiris steht getrennt im eigenen Reiter und ist hier nicht mitgezählt.</p><div id="pv"></div></div>
