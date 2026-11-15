@@ -10,7 +10,7 @@ Optional: python rok_barbs.py --folder "D:\\anderer\\pfad" --port 8765
 Das Programm liest nur Dateien. Es verändert nichts im Spielordner.
 Benötigt nur Python 3.8+ (keine zusätzlichen Pakete).
 """
-import argparse, json, os, re, shutil, sqlite3, struct, sys, threading, time, webbrowser
+import argparse, base64, json, os, re, shutil, sqlite3, struct, sys, threading, time, webbrowser
 from datetime import datetime
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import urlparse, parse_qs
@@ -558,6 +558,30 @@ class DB:
             r = self.c.execute("SELECT v FROM settings WHERE k=?", (k,)).fetchone()
         return r[0] if r else default
 
+    def avatars(self):
+        out = {}
+        for r in self.q("SELECT k, v FROM settings WHERE k LIKE 'avatar:%'"):
+            out[r["k"][7:]] = r["v"].split("|", 1)[0]
+        return out
+
+    def get_avatar(self, key):
+        r = self.get_setting("avatar:" + key, "")
+        parts = r.split("|", 2)
+        return (parts[1], parts[2]) if len(parts) == 3 else None
+
+    def set_avatar(self, key, dataurl):
+        if not re.fullmatch(r"[A-Za-z0-9_]{1,40}", key):
+            raise ValueError("ungültiger Schlüssel")
+        if not dataurl:
+            with self.lock:
+                self.c.execute("DELETE FROM settings WHERE k=?", ("avatar:" + key,))
+                self.c.commit()
+            return
+        m = re.fullmatch(r"data:(image/(?:png|jpeg|webp));base64,([A-Za-z0-9+/=]+)", dataurl)
+        if not m or len(dataurl) > 900000:
+            raise ValueError("Bild ungültig oder zu groß")
+        self.set_setting("avatar:" + key, "%d|%s|%s" % (int(time.time()), m.group(1), m.group(2)))
+
     def set_setting(self, k, v):
         with self.lock:
             self.c.execute("INSERT OR REPLACE INTO settings VALUES(?,?)", (k, str(v)))
@@ -648,7 +672,7 @@ class DB:
             for key in ("forts", "pvp"):
                 d.setdefault(key, 0)
         accounts = self.q("SELECT account, MAX(acc_name) acc_name FROM reports WHERE account!='' GROUP BY account ORDER BY MAX(ts) DESC")
-        return dict(unknown=self.unknown(), totals=tot, pvp_totals=pv, aoo_totals=po, aoo=aoos, profile=self.profile_stats(d_from, d_to, account), main_account=self.get_setting("main_account"),
+        return dict(unknown=self.unknown(), totals=tot, pvp_totals=pv, aoo_totals=po, aoo=aoos, profile=self.profile_stats(d_from, d_to, account), main_account=self.get_setting("main_account"), avatars=self.avatars(),
                     profile_fields=PROFILE_FIELDS, loot=loot, battles=battles, forts=forts, pvp=pvps,
                     accounts=accounts, days=sorted(days.values(), key=lambda d: d["day"], reverse=True)[:90])
 
@@ -761,7 +785,12 @@ body{margin:0;color:var(--ink);font:15px/1.5 Inter,"Segoe UI",system-ui,sans-ser
 html{background:var(--bg)}
 main{max-width:1160px;margin:0 auto;padding:22px 16px 70px}
 .hero{display:grid;grid-template-columns:auto 1fr;gap:20px;padding:22px;border:1px solid var(--line);border-radius:20px;background:linear-gradient(135deg,var(--soft),var(--card));margin-bottom:14px;box-shadow:0 18px 40px -26px rgba(0,0,0,.7)}
-.av{width:88px;height:88px;border-radius:50%;padding:3px;background:conic-gradient(from 210deg,#3b82f6,#34d399,#fbbf24,#3b82f6)}
+.av{width:88px;height:88px;border-radius:50%;padding:3px;background:conic-gradient(from 210deg,#3b82f6,#34d399,#fbbf24,#3b82f6);position:relative;cursor:pointer}
+.av img{width:100%;height:100%;border-radius:50%;object-fit:cover;display:block}
+.av::after{content:"📷";position:absolute;inset:3px;border-radius:50%;display:grid;place-items:center;background:rgba(0,0,0,.55);font-size:1.5rem;opacity:0;transition:opacity .15s}
+.av:hover::after,.av:focus-visible::after{opacity:1}
+.avc{display:flex;flex-direction:column;align-items:center;gap:6px}
+.avc button{background:none;border:0;padding:0;color:var(--mute);font-size:.76rem;text-decoration:underline}
 .av span{display:grid;place-items:center;width:100%;height:100%;border-radius:50%;background:var(--card);font-weight:800;font-size:1.6rem;letter-spacing:.02em}
 .hrow{display:flex;flex-wrap:wrap;gap:14px;align-items:flex-start;justify-content:space-between}
 h1{font-size:1.7rem;line-height:1.15;margin:0;letter-spacing:-.01em}h2{font-size:1.05rem;margin:0;display:inline}
@@ -831,7 +860,7 @@ tr.flash td,details.flash{animation:fl 2.6s ease-out}
 @media(prefers-reduced-motion:reduce){tr.flash td,details.flash{animation:none;outline:2px solid var(--acc)}}
 @media(max-width:640px){.grid{grid-template-columns:1fr 1fr}.kc{grid-template-columns:1fr}.kc .ic{display:none}.hero{grid-template-columns:1fr}.av{width:64px;height:64px}.av span{font-size:1.2rem}.rb{padding-left:16px}}
 </style></head><body><main>
-<section class="hero"><div class="av"><span id="hav">⚔</span></div><div>
+<section class="hero"><div class="avc"><div class="av" id="avbox" tabindex="0" role="button" title="Avatar ändern"><span id="hav">⚔</span></div><button id="avreset" hidden>Avatar zurücksetzen</button><input type="file" id="avfile" accept="image/*" hidden></div><div>
 <div class="hrow"><div><h1 id="hname">Barbaren-Tracker</h1><div id="per"></div><div id="st"></div></div>
 <div class="bar"><select id="acc" hidden></select><button id="mainbtn" hidden></button><select id="range">
 <option value="today">Heute</option><option value="yesterday">Gestern</option><option value="7">Letzte 7 Tage</option>
@@ -1020,13 +1049,23 @@ const pvList=l=>l.map(x=>{const so=x.role==='solo',t=x.totals;
  const compact=n=>n>=1e9?(n/1e9).toFixed(2)+(LANG==='en'?' B':' Mrd'):n>=1e6?(n/1e6).toFixed(2)+(LANG==='en'?' M':' Mio'):n>=1e4?(n/1e3).toFixed(1)+(LANG==='en'?' K':' Tsd'):f(n);
  const accSel=$('acc').value,pa=accSel?s.accounts.find(x=>x.account===accSel):(s.accounts.length===1?s.accounts[0]:null);
  const nm=pa?(pa.acc_name||pa.account):(s.accounts.length>1?'Alle Accounts':'Barbaren-Tracker');
- $('hname').textContent=nm+(pa&&pa.account===s.main_account?' ★':'');$('hav').textContent=nm.normalize('NFKD').replace(/[^A-Za-z0-9]/g,'').slice(0,2).toUpperCase()||'⚔';
+ $('hname').textContent=nm+(pa&&pa.account===s.main_account?' ★':'');
+ const avKey=pa?pa.account:'all',avV=(s.avatars||{})[avKey];window.avKey=avKey;$('avreset').hidden=!avV;
+ if(avV){if($('hav').dataset.v!==avKey+avV){$('hav').innerHTML=`<img src="/avatar/${avKey}?v=${avV}" alt="">`;$('hav').dataset.v=avKey+avV}}
+ else{$('hav').dataset.v='';$('hav').textContent=nm.normalize('NFKD').replace(/[^A-Za-z0-9]/g,'').slice(0,2).toUpperCase()||'⚔'}
  const pr=s.profile.find(x=>pa&&x.account===pa.account)||(s.profile.length===1&&!(s.accounts.length>1&&!pa)?s.profile[0]:null);
  $('hchips').innerHTML=pr?[['power','⚡','Macht'],['kill_points','⚔️','Kill Points'],['dead','💀','Tote'],['helps','🤝','Hilfen'],['gathered','🧺','Gesammelt']].filter(x=>pr.last[x[0]]!=null)
    .map(x=>`<div class="chip"><b>${x[1]} ${compact(pr.last[x[0]])}</b><span>${x[2]}${pr.delta[x[0]]?`<em class="${pr.delta[x[0]]>=0?'good':'bad'}">${dd(pr.delta[x[0]])}</em>`:''}</span></div>`).join(''):'';
  showTab(tab);
  $('dt').innerHTML='<tr><th>Tag</th><th>Solo-Berichte</th><th>Rallys</th><th>Festungen</th><th>Gegner (solo)</th><th>Barbaren-Truppen (solo)</th><th>Größter Gegner</th><th>XP</th><th>Verwundet (solo)</th><th>Spielerkampf-Berichte</th></tr>'+
   s.days.filter(d=>d.day>=a&&d.day<=b).map(d=>`<tr><td>${dm(d.day)}</td><td>${f(d.solo)}</td><td>${f(d.rallies)}</td><td>${f(d.forts)}</td><td>${f(d.foes)}</td><td>${f(d.killed)}</td><td>${f(d.maxfoe)}</td><td>${f(d.xp)}</td><td>${f(d.hurt)}</td><td>${f(d.pvp)}</td></tr>`).join('')}
+const avPost=async data=>{await fetch('/api/avatar',{method:'POST',body:JSON.stringify({key:window.avKey||'all',data})});lastSig='';load()};
+$('avbox').onclick=()=>$('avfile').click();$('avbox').onkeydown=e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();$('avfile').click()}};
+$('avreset').onclick=()=>avPost('');
+$('avfile').onchange=e=>{const fl=e.target.files[0];e.target.value='';if(!fl)return;const im=new Image(),u=URL.createObjectURL(fl);
+ im.onload=()=>{const S=256,c=document.createElement('canvas');c.width=c.height=S;const k=Math.max(S/im.width,S/im.height),w=im.width*k,h=im.height*k;
+  c.getContext('2d').drawImage(im,(S-w)/2,(S-h)/2,w,h);URL.revokeObjectURL(u);let d=c.toDataURL('image/webp',.9);if(!d.startsWith('data:image/webp'))d=c.toDataURL('image/jpeg',.9);avPost(d)};
+ im.onerror=()=>{URL.revokeObjectURL(u);alert('Bild konnte nicht gelesen werden.')};im.src=u};
 $('mainbtn').onclick=async()=>{const a=$('acc').value;if(!a)return;const cur=lastMain;await fetch('/api/main',{method:'POST',body:JSON.stringify({account:cur===a?'':a})});lastSig='';load()};
 $('pbtn').onclick=()=>$('pfile').click();
 $('pfile').onchange=async e=>{let n=0,err='';for(const fl of e.target.files){try{const r=await fetch('/api/profile',{method:'POST',body:await fl.text()}).then(r=>r.json());if(r.ok)n+=r.n;else err=r.error}catch(x){err=String(x)}}
@@ -1036,7 +1075,7 @@ $('pfile').onchange=async e=>{let n=0,err='';for(const fl of e.target.files){try
 const EN=[
 [`Barbaren-Tracker`,`Barbarian Tracker`],[`Heute`,`Today`],[`Gestern`,`Yesterday`],[`Letzte 7 Tage`,`Last 7 days`],[`Letzte 30 Tage`,`Last 30 days`],
 [`Dieser Monat`,`This month`],[`Alles`,`All time`],[`Zeitraum wählen`,`Custom range`],[`von`,`from`],[`bis`,`to`],[`und`,`and`],
-[`Alle Berichte aufklappen`,`Expand all reports`],[`zuklappen`,`Collapse all`],
+[`Avatar ändern`,`Change avatar`],[`Avatar zurücksetzen`,`Reset avatar`],[`Alle Berichte aufklappen`,`Expand all reports`],[`zuklappen`,`Collapse all`],
 [`Beute`,`Loot`],[`Festungen`,`Forts`],[`Barbarenkämpfe`,`Barbarian Battles`],[`Spielerkämpfe`,`PvP Battles`],[`Profil`,`Profile`],[`Pro Tag`,`Per Day`],[`Namen eintragen`,`Enter Names`],
 [`offen`,`open`],[`weitere`,`more`],[`letzte`,`last`],
 [`Solo-Berichte`,`Solo reports`],[`Rallys`,`Rallies`],[`Festungen zerstört`,`Forts destroyed`],[`Gegner besiegt (solo)`,`Enemies defeated (solo)`],
@@ -1139,6 +1178,19 @@ def make_handler(db, watcher):
                 q = parse_qs(u.query)
                 self.send(json.dumps(db.stats(q.get("from", ["0000-01-01"])[0], q.get("to", ["9999-12-31"])[0],
                                               q.get("account", [""])[0])), "application/json")
+            elif u.path.startswith("/avatar/"):
+                av = db.get_avatar(u.path[8:])
+                if not av:
+                    self.send_response(404)
+                    self.end_headers()
+                    return
+                data = base64.b64decode(av[1])
+                self.send_response(200)
+                self.send_header("Content-Type", av[0])
+                self.send_header("Content-Length", str(len(data)))
+                self.send_header("Cache-Control", "max-age=3600")
+                self.end_headers()
+                self.wfile.write(data)
             elif u.path.startswith("/icon/"):
                 key = u.path[6:]
                 folder = os.path.join(watcher.data_dir, "icons")
@@ -1161,6 +1213,15 @@ def make_handler(db, watcher):
                 self.send_error(404)
         def do_POST(self):
             path = urlparse(self.path).path
+            if path == "/api/avatar":
+                try:
+                    n = int(self.headers.get("Content-Length", 0))
+                    d = json.loads(self.rfile.read(min(n, 1000000)))
+                    db.set_avatar(str(d.get("key", "")), d.get("data", ""))
+                    self.send(json.dumps({"ok": True}), "application/json")
+                except Exception as e:
+                    self.send(json.dumps({"ok": False, "error": str(e)}), "application/json")
+                return
             if path == "/api/quit":          # vom Starter (rok_start.pyw) genutzt, um eine laufende Version zu beenden
                 org = self.headers.get("Origin")
                 if org and not org.startswith("http://127.0.0.1"):
