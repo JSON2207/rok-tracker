@@ -1176,6 +1176,7 @@ details.rep>summary:hover{background:var(--accsoft)}
 .tabs button:hover{background:var(--soft);color:var(--ink)}
 .tabs button.on{background:var(--acc);color:#fff;box-shadow:0 8px 20px -8px var(--acc)}
 .sbtabs{flex-direction:column;gap:1px;overflow:visible;padding:0 0 6px 16px;margin:0;border:0;border-radius:0;background:none}.sbtabs button{text-align:left;width:100%;padding:7px 12px;font-weight:500;font-size:.9rem;white-space:normal}.sbtabs button.on{background:var(--accsoft);color:var(--acc);box-shadow:none}.sbtabs .on .cnt{background:var(--card);color:var(--acc)}
+.sbtop{padding-left:0;padding-bottom:0}.sbtop button{padding:10px 12px 10px 38px;font-size:.95rem;font-weight:600;border:0;background:none;border-radius:12px;box-shadow:none;color:var(--muted,inherit)}.sbtop button:hover{background:var(--accsoft)}.sbtop button.on{background:var(--accsoft);color:var(--acc);font-weight:700}
 .tabs .cnt{margin-left:6px;padding:1px 8px;border-radius:999px;background:var(--soft)}.tabs .on .cnt{background:rgba(255,255,255,.24);color:#fff}
 .pane{margin-top:12px;background:var(--card);border:1px solid var(--line);border-radius:18px;padding:20px}
 [data-item]{cursor:pointer}
@@ -1251,12 +1252,12 @@ document.addEventListener('toggle',e=>{const d=e.target;if(d instanceof HTMLDeta
 let tab='loot';try{tab=localStorage.getItem('roktab')||'loot'}catch(e){}
 const HASHTAB={profil:'pf',loot:'loot',beute:'loot',forts:'ft',festungen:'ft',barbaren:'bt',pvp:'pv',aoo:'ao',tag:'dt',namen:'nm'};
 if(location.hash.length>1&&HASHTAB[location.hash.slice(1).toLowerCase()])tab=HASHTAB[location.hash.slice(1).toLowerCase()];
-function showTab(t){const btn=document.querySelector(`#tabs [data-t="${t}"]`);if(!btn||btn.hidden)t='loot';tab=t;
- document.querySelectorAll('#tabs button').forEach(b=>{const on=b.dataset.t===t;b.classList.toggle('on',on);b.setAttribute('aria-selected',on)});
+function showTab(t){const btn=document.querySelector(`button[data-t="${t}"]`);if(!btn||btn.hidden)t='loot';tab=t;
+ document.querySelectorAll('button[data-t]').forEach(b=>{const on=b.dataset.t===t;b.classList.toggle('on',on);b.setAttribute('aria-selected',on)});
  document.querySelectorAll('.pane').forEach(p=>p.hidden=p.id!=='p_'+t);
  try{localStorage.setItem('roktab',t)}catch(e){}}
-$('tabs').onclick=e=>{const b=e.target.closest('button');if(b)showTab(b.dataset.t)};showTab(tab);
-(function(){const t=$('tabs'),a=document.querySelector('#sb a[data-p="/"]');if(t&&a){t.classList.add('sbtabs');a.after(t)}})();
+document.addEventListener('click',e=>{const b=e.target.closest('button[data-t]');if(b)showTab(b.dataset.t)});showTab(tab);
+(function(){const t=$('tabs'),a=document.querySelector('#sb a[data-p="/"]');if(t&&a){const n=document.createElement('nav');n.id='tabs2';n.className='sbtabs sbtop';['pf','dt','nm'].forEach(k=>{const b=t.querySelector('[data-t="'+k+'"]');if(b)n.appendChild(b)});t.classList.add('sbtabs');a.after(t);t.after(n)}})();
 let repOpen=false;$('expand').onclick=()=>{repOpen=!repOpen;document.querySelectorAll('details.rep').forEach(d=>d.open=repOpen);$('expand').textContent=repOpen?(LANG==='en'?'Collapse all reports':'Alle Berichte zuklappen'):(LANG==='en'?'Expand all reports':'Alle Berichte aufklappen')};
 
 function range(){const v=$('range').value,t=new Date();$('cu').hidden=v!=='custom';
