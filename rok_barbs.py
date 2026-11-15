@@ -159,7 +159,11 @@ def extract_battle(mail):
                 kp_gained=int(d["KillScore"]), kp_lost=int(k["KillScore"]), power=int(d["Power"])))
     if not battles and not pvp:
         return None
-    return dict(kind="battle", mail_id=str(mail["id"]), ts=mail["time"] / 1e6, account=acc,
+    try:        # Startzeit des Marsches steht in der Marsch-Kennung (<Spieler>_<Sekunden>_..)
+        start = float(str(me.get("CTK", "")).split("_")[1])
+    except (IndexError, ValueError):
+        start = None
+    return dict(kind="battle", mail_id=str(mail["id"]), ts=mail["time"] / 1e6, account=acc, start=start,
                 acc_name=mine.get("PName", ""), role=role, parts=parts, hero1=int(mine.get("HId", 0)),
                 battles=battles, pvp=pvp)
 
@@ -239,6 +243,10 @@ class DB:
         DELETE FROM reports WHERE mail_id NOT IN (SELECT mail_id FROM battles UNION SELECT mail_id FROM pvp
                                                   UNION SELECT mail_id FROM forts);
         """)
+        try:
+            self.c.execute("ALTER TABLE battles ADD COLUMN start REAL")
+        except sqlite3.OperationalError:
+            pass
         if self.c.execute("PRAGMA user_version").fetchone()[0] < 5:
             # Version 5: Spielerkämpfe werden mit korrekter Feldzuordnung neu eingelesen (alle Dateien einmal neu)
             for col in ("enemy_hurt INT", "enemy_severe INT", "mode TEXT"):
@@ -292,11 +300,11 @@ class DB:
                 for b in r["battles"]:
                     cur = self.c.execute(
                         "INSERT INTO battles(mail_id,ts,day,account,role,parts,hero1,foe_hid,foe_kind,foe_lvl,"
-                        "foe_troops,own_troops,remaining,hurt,severe,heal,dead,power,xp) "
-                        "VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+                        "foe_troops,own_troops,remaining,hurt,severe,heal,dead,power,xp,start) "
+                        "VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
                         (r["mail_id"], r["ts"], day, acc, r["role"], r["parts"], r["hero1"], b["foe_hid"],
                          b["foe_kind"], b["foe_lvl"], b["foe_troops"], b["own_troops"], b["remaining"], b["hurt"],
-                         b["severe"], b["heal"], b["dead"], b["power"], b["xp"]))
+                         b["severe"], b["heal"], b["dead"], b["power"], b["xp"], r.get("start")))
                     lp("b", cur.lastrowid, b["loot"])
                 for x in r["pvp"]:
                     self.c.execute(
@@ -637,53 +645,76 @@ class DB:
             self.c.commit()
         return n
 
-    def ap_costs(self):
-        """AP-Kosten je Kettenlaenge (1 Bericht = 1 Kette mit n Barbaren). Stehen nicht in den Berichten, werden eingetragen."""
+    CHAIN_DEF = dict(gap=10, base=50, step=2, min=40)
+
+    def chain_cfg(self):
+        """Barb-Chaining: Pause (Min) bis zur neuen Serie, AP der ersten Chain, Reduktion je Chain, Minimum."""
         try:
-            d = json.loads(self.get_setting("ap_costs", "{}"))
+            d = json.loads(self.get_setting("chain_cfg", "{}"))
         except ValueError:
             d = {}
-        return {int(k): int(v) for k, v in d.items() if str(k).isdigit() and isinstance(v, (int, float)) and v > 0}
-
-    def set_ap_costs(self, d):
-        clean = {}
-        for k, v in (d or {}).items():
+        out = dict(self.CHAIN_DEF)
+        for k, hi in (("gap", 1440), ("base", 1000), ("step", 100), ("min", 1000)):
             try:
-                k, v = int(k), int(v)
+                v = int(d.get(k, out[k]))
             except (TypeError, ValueError):
                 continue
-            if 1 <= k <= 12 and 0 < v <= 5000:
-                clean[str(k)] = v
-        self.set_setting("ap_costs", json.dumps(clean))
-        return self.ap_costs()
-
-    def chain_stats(self, w, a):
-        """Barb-Chaining: Ketten je Laenge, daraus AP-Summe und Beute pro AP (nur Ketten mit bekannten Kosten)."""
-        costs = self.ap_costs()
-        lens = {r["n"]: r["c"] for r in self.q(
-            "SELECT n, COUNT(*) c FROM (SELECT mail_id, COUNT(*) n FROM battles WHERE " + w + " AND role='solo' GROUP BY mail_id) GROUP BY n", a)}
-        out = dict(costs=costs, lens=lens, chains=sum(lens.values()), barbs=sum(n * c for n, c in lens.items()),
-                   ap=0, kchains=0, kbarbs=0, speed=0, gems=0, xp=0)
-        for n, c in lens.items():
-            if n not in costs:
-                continue
-            out["ap"] += costs[n] * c
-            out["kchains"] += c
-            out["kbarbs"] += n * c
-            for r in self.q("SELECT item_id, SUM(qty) qty FROM loot WHERE src='b' AND src_id IN (SELECT id FROM battles WHERE " + w +
-                            " AND role='solo' AND mail_id IN (SELECT mail_id FROM battles WHERE " + w +
-                            " AND role='solo' GROUP BY mail_id HAVING COUNT(*)=?)) GROUP BY item_id", a + a + (n,)):
-                it = ITEMS.get(r["item_id"])
-                if not it:
-                    continue
-                v = r["qty"] * it["unit"]
-                if it["kind"].startswith("speed_"):
-                    out["speed"] += v
-                elif it["kind"] == "gems":
-                    out["gems"] += v
-                elif it["kind"] == "xp_books":
-                    out["xp"] += v
+            if 0 <= v <= hi and not (k in ("gap", "base", "min") and v == 0):
+                out[k] = v
         return out
+
+    def set_chain_cfg(self, d):
+        cur = self.chain_cfg()
+        cur.update({k: d[k] for k in cur if k in (d or {})})
+        self.set_setting("chain_cfg", json.dumps(cur))
+        return self.chain_cfg()
+
+    def chain_resets(self):
+        try:
+            return set(json.loads(self.get_setting("chain_resets", "[]")))
+        except ValueError:
+            return set()
+
+    def set_chain_reset(self, mail_id, on):
+        r = self.chain_resets()
+        (r.add if on else r.discard)(str(mail_id))
+        self.set_setting("chain_resets", json.dumps(sorted(r)))
+
+    def chains(self, account=""):
+        """Alle Barbaren-Chains (1 Solo-Bericht = 1 Angriff mit n Barbaren hintereinander), in Serien eingeteilt.
+        Neue Serie: erste Chain, Pause laenger als der Grenzwert oder von Hand markiert. AP je Chain sinken in der Serie."""
+        cfg, resets = self.chain_cfg(), self.chain_resets()
+        rows = self.q("SELECT mail_id, account, MIN(ts) ts, MIN(day) day, COUNT(*) n, MIN(start) start FROM battles "
+                      "WHERE role='solo' AND foe_kind!='fort'" + (" AND account=?" if account else "") +
+                      " GROUP BY mail_id ORDER BY account, MIN(ts)", (account,) if account else ())
+        prev_acc = prev_end = None
+        k = sid = 0
+        for r in rows:
+            st = min(r["start"] or r["ts"], r["ts"])
+            manual = r["mail_id"] in resets
+            new = manual or r["account"] != prev_acc or prev_end is None or st - prev_end > cfg["gap"] * 60
+            k = 1 if new else k + 1
+            sid += 1 if new else 0
+            r.update(k=k, sid=sid, new=new, manual=manual, ap=max(cfg["min"], cfg["base"] - cfg["step"] * (k - 1)))
+            prev_acc, prev_end = r["account"], r["ts"]
+        return rows
+
+    def chain_stats(self, d_from, d_to, account=""):
+        cfg = self.chain_cfg()
+        rows = [r for r in self.chains(account) if d_from <= r["day"] <= d_to]
+        series = {}
+        for r in rows:
+            series.setdefault(r["sid"], []).append(r)
+        days = {}
+        for r in rows:
+            d = days.setdefault(r["day"], dict(day=r["day"], chains=0, barbs=0, ap=0, series=set()))
+            d["chains"] += 1; d["barbs"] += r["n"]; d["ap"] += r["ap"]; d["series"].add(r["sid"])
+        for d in days.values():
+            d["series"] = len(d["series"])
+        barbs = sum(r["n"] for r in rows)
+        return dict(cfg=cfg, chains=len(rows), barbs=barbs, ap=sum(r["ap"] for r in rows), series=len(series),
+                    longest=max((len(v) for v in series.values()), default=0),
+                    days=sorted(days.values(), key=lambda d: d["day"], reverse=True)[:31])
 
     def quick(self, account=""):
         """Daten fuer die rechte Schnellzugriff-Spalte: Feed, 14-Tage-Verlauf, seltene Drops, Status."""
@@ -827,9 +858,11 @@ class DB:
             r["total"] = r["qty"] * it["unit"] if it else None
         L = self.loot_of
         battles = self.report_battles(wb, a, fmt)
-        chain = self.chain_stats(wb, a)
+        chain = self.chain_stats(d_from, d_to, account)
+        cinfo = {c["mail_id"]: c for c in self.chains(account)}
         for b in battles:
-            b["ap"] = chain["costs"].get(b["n"]) if b["role"] == "solo" else None
+            c = cinfo.get(b["mail_id"])
+            b["ck"], b["ap"], b["cnew"], b["cman"] = (c["k"], c["ap"], c["new"], c["manual"]) if c else (None, None, False, False)
         for f in forts:
             f["time"] = fmt(f["ts"])
             f["hero"] = HEROES.get(f["hero1"], "Kommandant #%d" % f["hero1"]) if f["hero1"] is not None else ""
@@ -1053,7 +1086,7 @@ button:focus-visible,select:focus-visible,input:focus-visible,summary:focus-visi
 .chips{display:flex;flex-wrap:wrap;gap:10px;margin-top:16px}
 .chip{border:1px dashed var(--dash);border-radius:12px;padding:8px 14px;min-width:132px;background:rgba(127,127,127,.04)}
 .chip b{display:block;font-size:1.15rem;font-variant-numeric:tabular-nums}.chip span{color:var(--mute);font-size:.82rem}.chip em{font-style:normal;font-weight:600;margin-left:4px}
-.chbox{margin-bottom:14px}.chin{display:flex;flex-wrap:wrap;gap:10px;margin:8px 0}.chin label{display:flex;flex-direction:column;gap:3px;font-size:.82rem;color:var(--mute)}.chin input{width:92px}.chin small{font-size:.72rem}
+.chbox{margin-bottom:14px}.chin{display:flex;flex-wrap:wrap;gap:10px;margin:8px 0}.chin label{display:flex;flex-direction:column;gap:3px;font-size:.82rem;color:var(--mute)}.chin input{width:92px}.chr{cursor:pointer}.chin small{font-size:.72rem}
 .grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(214px,1fr));gap:12px;margin:12px 0}
 .k{border:1px dashed var(--dash);border-radius:14px;padding:12px 16px;background:rgba(127,127,127,.04)}
 .k b{display:block;font-size:1.55rem;line-height:1.2;font-variant-numeric:tabular-nums}.k span{display:block;color:var(--mute);font-size:.84rem}.k span.good{color:var(--good)}.k span.bad{color:var(--bad)}
@@ -1208,18 +1241,17 @@ const lootList=l=>l.length?`<ul class="ll">${l.map(x=>`<li${x.unk?` class="unk" 
 const facts=a=>`<dl class="fa">${a.map(([k,v,c])=>`<div><dt>${k}</dt><dd class="${c||''}">${v}</dd></div>`).join('')}</dl>`;
 const rep=(k,head,body)=>`<details class="rep" data-k="${k}"${openRep.has(k)?' open':''}><summary>${head}</summary><div class="rb">${body}</div></details>`;
 const tbl=(h,rows)=>`<div class="wrap"><table><tr>${h.map(x=>`<th>${x}</th>`).join('')}</tr>${rows.join('')}</table></div>`;
-let chEdit=false;
 function renderChain(c){const el=$('chbox');if(!c){el.innerHTML='';return}
  if(el.contains(document.activeElement)&&document.activeElement.tagName==='INPUT')return;
- const L=[1,2,3,4,5,6],r1=x=>(Math.round(x*10)/10).toLocaleString(LOC);
- const unk=Object.entries(c.lens).filter(([n])=>!c.costs[n]).reduce((a,[n,k])=>a+k,0);
- el.innerHTML=`<h3>Barb-Chaining: Effizienz</h3><p class="note">AP-Kosten stehen nicht in den Berichten. Trage ein, was eine Kette mit n Barbaren kostet (ein Bericht = eine Kette).</p>
- <div class="chin">${L.map(n=>`<label>${n} Barbar${n>1?'en':''}<input type="number" min="0" step="1" data-n="${n}" value="${c.costs[n]||''}" placeholder="AP"><small>${c.lens[n]||0}× Kette</small></label>`).join('')}</div>
- <div class="grid">${kpi('Ketten (solo)',f(c.chains))+kpi('Barbaren gekillt',f(c.barbs))+kpi('Ø Barbaren pro Kette',c.chains?r1(c.barbs/c.chains):'–')+
- (c.ap?kpi('AP verbraucht',f(c.ap))+kpi('AP pro Barbar',r1(c.ap/c.kbarbs))+kpi('Barbaren pro 100 AP',r1(c.kbarbs/c.ap*100))+kpi('Speedup-Min pro 100 AP',r1(c.speed/c.ap*100))+kpi('Edelsteine pro 100 AP',r1(c.gems/c.ap*100))+kpi('Tome-XP pro 100 AP',r1(c.xp/c.ap*100)):'')}</div>
- ${c.ap&&unk?`<p class="note">${f(unk)} Ketten mit noch unbekannten Kosten sind nicht eingerechnet.</p>`:''}`}
-$('chbox').addEventListener('change',async e=>{const i=e.target.closest('input[data-n]');if(!i)return;const costs={};$('chbox').querySelectorAll('input[data-n]').forEach(x=>{if(+x.value>0)costs[x.dataset.n]=+x.value});
- await fetch('/api/apcost',{method:'POST',body:JSON.stringify(costs)});lastSig='';load()});
+ const r1=x=>(Math.round(x*10)/10).toLocaleString(LOC),g=c.cfg;
+ el.innerHTML=`<h3>Barb-Chaining</h3><p class="note">Eine Chain ist ein Angriff, in dem du mehrere Barbaren hintereinander besiegst. Eine neue Serie beginnt, wenn du länger als die eingestellte Pause nicht angreifst oder bei einem Bericht „Neustart“ markierst. Die AP je Chain sinken in einer Serie.</p>
+ <div class="chin"><label>Pause für neue Serie (Min)<input type="number" min="1" data-c="gap" value="${g.gap}"></label><label>AP erste Chain<input type="number" min="1" data-c="base" value="${g.base}"></label><label>AP-Reduktion je Chain<input type="number" min="0" data-c="step" value="${g.step}"></label><label>Mindest-AP<input type="number" min="1" data-c="min" value="${g.min}"></label></div>
+ <div class="grid">${kpi('Serien',f(c.series))+kpi('Chains',f(c.chains))+kpi('Ø Chains pro Serie',c.series?r1(c.chains/c.series):'–')+kpi('Längste Serie (Chains)',f(c.longest))+kpi('Barbaren gekillt',f(c.barbs))+kpi('Ø Barbaren pro Chain',c.chains?r1(c.barbs/c.chains):'–')+kpi('AP verbraucht',f(c.ap))+kpi('AP pro Barbar',c.barbs?r1(c.ap/c.barbs):'–')}</div>
+ ${c.days.length?tbl(['Tag','Serien','Chains','Barbaren','Ø Barbaren pro Chain','AP'],c.days.map(d=>`<tr><td>${dm(d.day)}</td><td>${f(d.series)}</td><td>${f(d.chains)}</td><td>${f(d.barbs)}</td><td>${r1(d.barbs/d.chains)}</td><td>${f(d.ap)}</td></tr>`)):''}`}
+$('chbox').addEventListener('change',async e=>{const i=e.target.closest('input[data-c]');if(!i)return;const d={};$('chbox').querySelectorAll('input[data-c]').forEach(x=>{if(+x.value>0)d[x.dataset.c]=+x.value});
+ await fetch('/api/chaincfg',{method:'POST',body:JSON.stringify(d)});lastSig='';load()});
+$('bt').addEventListener('click',async e=>{const b=e.target.closest('button.chr');if(!b)return;e.preventDefault();
+ await fetch('/api/chainreset',{method:'POST',body:JSON.stringify({mail_id:b.dataset.id,on:b.dataset.on==='1'})});lastSig='';load()});
 const none=t=>`<p class="note">${t}</p>`;
 const empty=(n,t)=>`<tr><td colspan="${n}" class="note">${t}</td></tr>`;
 const KINDS=[['speed_training','Training-Speedup (Min)'],['speed_universal','Universal-Speedup (Min)'],['speed_healing','Heilungs-Speedup (Min)'],['wood','Holz'],['stone','Stein'],['gold','Gold'],['food','Mais'],['gems','Edelsteine'],['xp_books','XP-Buch'],['packs','Ressourcenpaket'],['ap','Aktionspunkte'],['other','Sonstiges']];
@@ -1294,9 +1326,10 @@ async function load(){const[a,b]=range();
  renderChain(s.chain);
  $('bt').innerHTML=s.battles.map(x=>{const so=x.role==='solo',t=x.totals;
   return rep('b'+x.mail_id,
-   `<span class="tm">${x.time}</span>${role[x.role]}<b>${esc(x.title)}</b><span class="note">${esc(x.hero)}</span>${x.ap?`<span class="tag">${x.ap} AP</span>`:''}<span class="sm">${chipsH(x.loot)}</span>`,
+   `<span class="tm">${x.time}</span>${role[x.role]}<b>${esc(x.title)}</b><span class="note">${esc(x.hero)}</span>${x.ck?`<span class="tag">${x.cnew?'Neustart · ':''}Chain ${x.ck} · ${x.ap} AP</span>`:''}<span class="sm">${chipsH(x.loot)}</span>`,
    facts(so?[['Gegner im Bericht',x.n],['Gegner-Truppen',f(t.foe_troops)],['Leicht verwundet',f(t.hurt)],['Schwer verwundet',f(t.severe),'bad'],['Kommandanten-XP',f(t.xp)]]
            :[['Teilnehmer',x.parts],['Gegner im Bericht',x.n],['Kommandanten-XP',f(t.xp)]])+
+   (so?`<p><button type="button" class="chr" data-id="${x.mail_id}" data-on="${x.cman?0:1}">${x.cman?'Neustart-Markierung entfernen':'Als Neustart markieren'}</button></p>`:'')+
    (so?(x.n>1?'<h3>Die einzelnen Gegner</h3>'+tbl(['Gegner','Gegner-Truppen','Eigene Truppen','Leicht verwundet','Schwer verwundet','XP','Beute'],
         x.rounds.map(r=>`<tr><td>${esc(r.foe)}</td><td>${f(r.foe_troops)}</td><td>${f(r.own_troops)}</td><td>${f(r.hurt)}</td><td class="bad">${f(r.severe)}</td><td>${f(r.xp)}</td><td class="lt">${chipsH(r.loot)}</td></tr>`)):'')
       :'<p class="note">Truppen und Verluste gelten bei Rallys für alle Teilnehmer zusammen und werden nicht einzeln angezeigt.</p>')+
@@ -1350,7 +1383,7 @@ $('pfile').onchange=async e=>{let n=0,err='';for(const fl of e.target.files){try
 const EN=[
 [`Barbaren-Tracker`,`Barbarian Tracker`],[`Heute`,`Today`],[`Gestern`,`Yesterday`],[`Letzte 7 Tage`,`Last 7 days`],[`Letzte 30 Tage`,`Last 30 days`],
 [`Dieser Monat`,`This month`],[`Alles`,`All time`],[`Zeitraum wählen`,`Custom range`],[`von`,`from`],[`bis`,`to`],[`und`,`and`],
-[`Allianz-Tracker`,`Alliance Tracker`],[`Zum Loot-Tracker`,`Back to loot tracker`],[`Loot-Tracker`,`Loot tracker`],[`Barb-Chaining: Effizienz`,`Barb chaining: efficiency`],[`AP-Kosten stehen nicht in den Berichten. Trage ein, was eine Kette mit n Barbaren kostet (ein Bericht = eine Kette).`,`AP costs are not in the reports. Enter what a chain of n barbarians costs (one report = one chain).`],[`Ketten (solo)`,`Chains (solo)`],[`Barbaren gekillt`,`Barbarians killed`],[`Ø Barbaren pro Kette`,`Avg barbarians per chain`],[`AP verbraucht`,`AP used`],[`AP pro Barbar`,`AP per barbarian`],[`Barbaren pro 100 AP`,`Barbarians per 100 AP`],[`Speedup-Min pro 100 AP`,`Speedup min per 100 AP`],[`Edelsteine pro 100 AP`,`Gems per 100 AP`],[`Tome-XP pro 100 AP`,`Tome XP per 100 AP`],[`Sprache`,`Language`],[`Seiten`,`Pages`],[`Ansicht`,`View`],[`Breite`,`Width`],[`Ausrichtung`,`Alignment`],[`Schmal`,`Narrow`],[`Breit`,`Wide`],[`Voll`,`Full`],[`Links`,`Left`],[`Mitte`,`Center`],[`Rechts`,`Right`],[`Allianz-Ranking`,`Alliance ranking`],[`Member-Rangliste`,`Member ranking`],[`Mitglieder`,`members`],
+[`Allianz-Tracker`,`Alliance Tracker`],[`Zum Loot-Tracker`,`Back to loot tracker`],[`Loot-Tracker`,`Loot tracker`],[`Barb-Chaining`,`Barb chaining`],[`Eine Chain ist ein Angriff, in dem du mehrere Barbaren hintereinander besiegst. Eine neue Serie beginnt, wenn du länger als die eingestellte Pause nicht angreifst oder bei einem Bericht „Neustart“ markierst. Die AP je Chain sinken in einer Serie.`,`A chain is one attack in which you defeat several barbarians in a row. A new series starts when you do not attack for longer than the set pause or mark a report as "restart". The AP per chain decrease within a series.`],[`Pause für neue Serie (Min)`,`Pause for new series (min)`],[`AP erste Chain`,`AP first chain`],[`AP-Reduktion je Chain`,`AP reduction per chain`],[`Mindest-AP`,`Minimum AP`],[`Serien`,`Series`],[`Chains`,`Chains`],[`Ø Chains pro Serie`,`Avg chains per series`],[`Längste Serie (Chains)`,`Longest series (chains)`],[`Barbaren gekillt`,`Barbarians killed`],[`Ø Barbaren pro Chain`,`Avg barbarians per chain`],[`AP verbraucht`,`AP used`],[`AP pro Barbar`,`AP per barbarian`],[`Ø Barbaren pro Chain`,`Avg barbarians per chain`],[`Als Neustart markieren`,`Mark as restart`],[`Neustart-Markierung entfernen`,`Remove restart mark`],[`Sprache`,`Language`],[`Seiten`,`Pages`],[`Ansicht`,`View`],[`Breite`,`Width`],[`Ausrichtung`,`Alignment`],[`Schmal`,`Narrow`],[`Breit`,`Wide`],[`Voll`,`Full`],[`Links`,`Left`],[`Mitte`,`Center`],[`Rechts`,`Right`],[`Allianz-Ranking`,`Alliance ranking`],[`Member-Rangliste`,`Member ranking`],[`Mitglieder`,`members`],
 [`Klick auf eine Spaltenüberschrift sortiert die Liste. Grün und rot zeigen die Veränderung seit dem vorherigen Stand. Ranglisten ohne Resource Assistance und Armory Contributions.`,`Click a column header to sort the list. Green and red show the change since the previous snapshot. Rankings without Resource Assistance and Armory Contributions.`],
 [`Ø Rang`,`Avg rank`],[`Durchschnitt der Plätze in den eingeschalteten Kategorien, niedriger ist besser`,`Average of the ranks in the categories that are on, lower is better`],
 [`Klick auf eine Kategorie über der Tabelle schaltet sie aus, mit der Maus ziehen ändert die Reihenfolge der Spalten. Die Einstellungen werden gespeichert. Eine ausgeschaltete Kategorie wird ausgeblendet und zählt nicht zum Ø Rang. Ø Rang ist der Durchschnitt der Plätze in den eingeschalteten Kategorien, niedriger ist besser. Die Zahl dahinter ist der Platz in dieser Durchschnittswertung.`,`Click a category above the table to switch it off, drag it with the mouse to change the column order. The settings are saved. A switched-off category is hidden and does not count toward the avg rank. Avg rank is the average of the ranks in the categories that are on, lower is better. The number after it is the position in that average ranking.`],
@@ -1757,10 +1790,15 @@ def make_handler(db, watcher):
                 except Exception as e:
                     self.send(json.dumps({"ok": False, "error": str(e)}), "application/json")
                 return
-            if path == "/api/apcost":
+            if path in ("/api/chaincfg", "/api/chainreset"):
                 try:
                     n = int(self.headers.get("Content-Length", 0))
-                    self.send(json.dumps({"ok": True, "costs": db.set_ap_costs(json.loads(self.rfile.read(min(n, 5000))))}), "application/json")
+                    d = json.loads(self.rfile.read(min(n, 5000)))
+                    if path == "/api/chaincfg":
+                        self.send(json.dumps({"ok": True, "cfg": db.set_chain_cfg(d)}), "application/json")
+                    else:
+                        db.set_chain_reset(d["mail_id"], bool(d.get("on")))
+                        self.send(json.dumps({"ok": True}), "application/json")
                 except Exception as e:
                     self.send(json.dumps({"ok": False, "error": str(e)}), "application/json")
                 return
