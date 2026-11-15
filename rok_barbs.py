@@ -637,6 +637,33 @@ class DB:
             self.c.commit()
         return n
 
+    def alliance_ui(self):
+        """Gespeicherte Ansicht der Allianz-Seite: Reihenfolge, ausgeschaltete Kategorien, Sortierung."""
+        try:
+            d = json.loads(self.get_setting("alliance_ui", "{}"))
+        except ValueError:
+            d = {}
+        keys = [k for k, _ in ALLIANCE_CATS]
+        order = [k for k in d.get("order", []) if k in keys]
+        order += [k for k in keys if k not in order]
+        off = [k for k in d.get("off", []) if k in keys]
+        srt = d.get("sort") if d.get("sort") in keys + ["avg_all"] else "avg_all"
+        return dict(order=order, off=off, sort=srt, dir=-1 if d.get("dir") == -1 else 1)
+
+    def set_alliance_ui(self, d):
+        cur = self.alliance_ui()
+        keys = [k for k, _ in ALLIANCE_CATS]
+        if isinstance(d.get("order"), list):
+            cur["order"] = [k for k in d["order"] if k in keys]
+        if isinstance(d.get("off"), list):
+            cur["off"] = [k for k in d["off"] if k in keys]
+        if d.get("sort") in keys + ["avg_all"]:
+            cur["sort"] = d["sort"]
+        if d.get("dir") in (1, -1):
+            cur["dir"] = d["dir"]
+        self.set_setting("alliance_ui", json.dumps(cur))
+        return self.alliance_ui()
+
     def alliance_stats(self):
         rows = self.q("SELECT day, cat, name, rank, value FROM alliance ORDER BY day")
         days, members = {}, {}
@@ -654,7 +681,9 @@ class DB:
                 prev = next((h for h in reversed(hist[:-1]) if h[1] is not None), None)
                 m["c"][cat] = dict(v=last[1], r=last[2], day=last[0], pd=prev[0] if prev else None,
                                    d=(last[1] - prev[1]) if prev and last[1] is not None else None)
-        return dict(cats=[dict(key=k, label=l) for k, l in ALLIANCE_CATS], latest=latest,
+        ui = self.alliance_ui()
+        names = dict(ALLIANCE_CATS)
+        return dict(cats=[dict(key=k, label=names[k]) for k in ui["order"]], ui=ui, latest=latest,
                     days={c: sorted(d) for c, d in days.items()}, members=sorted(members.values(), key=lambda m: m["name"].lower()))
 
     def profile_stats(self, d_from, d_to, account=""):
@@ -1142,7 +1171,7 @@ const EN=[
 [`Allianz-Tracker`,`Alliance Tracker`],[`Zum Loot-Tracker`,`Back to loot tracker`],[`Member-Rangliste`,`Member ranking`],[`Mitglieder`,`members`],
 [`Klick auf eine Spaltenüberschrift sortiert die Liste. Grün und rot zeigen die Veränderung seit dem vorherigen Stand. Ranglisten ohne Resource Assistance und Armory Contributions.`,`Click a column header to sort the list. Green and red show the change since the previous snapshot. Rankings without Resource Assistance and Armory Contributions.`],
 [`Ø Rang`,`Avg rank`],[`Durchschnitt der Plätze in den eingeschalteten Kategorien, niedriger ist besser`,`Average of the ranks in the categories that are on, lower is better`],
-[`Klick auf eine Kategorie über der Tabelle schaltet sie aus. Eine ausgeschaltete Kategorie wird ausgeblendet und zählt nicht zum Ø Rang. Ø Rang ist der Durchschnitt der Plätze in den eingeschalteten Kategorien, niedriger ist besser. Die Zahl dahinter ist der Platz in dieser Durchschnittswertung.`,`Click a category above the table to switch it off. A switched-off category is hidden and does not count toward the avg rank. Avg rank is the average of the ranks in the categories that are on, lower is better. The number after it is the position in that average ranking.`],
+[`Klick auf eine Kategorie über der Tabelle schaltet sie aus, mit der Maus ziehen ändert die Reihenfolge der Spalten. Die Einstellungen werden gespeichert. Eine ausgeschaltete Kategorie wird ausgeblendet und zählt nicht zum Ø Rang. Ø Rang ist der Durchschnitt der Plätze in den eingeschalteten Kategorien, niedriger ist besser. Die Zahl dahinter ist der Platz in dieser Durchschnittswertung.`,`Click a category above the table to switch it off, drag it with the mouse to change the column order. The settings are saved. A switched-off category is hidden and does not count toward the avg rank. Avg rank is the average of the ranks in the categories that are on, lower is better. The number after it is the position in that average ranking.`],
 [`Als HTML exportieren`,`Export as HTML`],[`Speichert die Rangliste als eigenständige Datei, die du weitergeben kannst`,`Saves the ranking as a standalone file you can share`],[`Allianz-Daten einfügen …`,`Import alliance data …`],[`Mitglied suchen …`,`Search member …`],[`Allianz`,`Alliance`],
 [`Ranglisten deiner Allianz aus Screenshots (ohne Resource Assistance und Armory Contributions). Die Datei, die ich dir schicke, fügst du hier ein. Frühere Stände bleiben gespeichert, so siehst du, wer wie viel dazugewonnen hat.`,`Rankings of your alliance from screenshots (without Resource Assistance and Armory Contributions). Import the file I send you here. Earlier snapshots are kept, so you can see who gained how much.`],
 [`Noch keine Allianz-Daten. Schick mir Screenshots der Ranglisten, ich erstelle dir die Datei zum Einfügen.`,`No alliance data yet. Send me screenshots of the rankings and I will create the file to import.`],
@@ -1251,21 +1280,23 @@ a.btn{font:inherit;color:var(--ink);background:var(--soft);border:1px solid var(
 <div class="pane" style="margin-top:0"><div class="chips" id="achips" role="group" aria-label="Kategorien im Durchschnitt"></div><div class="nmbar"><input id="asearch" type="search" placeholder="Mitglied suchen …"> <span class="note" id="ainfo"></span> <span class="note" id="amsg"></span></div>
 <div class="wrap"><table id="al"></table></div>
 <p class="note">Klick auf eine Spaltenüberschrift sortiert die Liste. Grün und rot zeigen die Veränderung seit dem vorherigen Stand. Ranglisten ohne Resource Assistance und Armory Contributions.</p>
-<p class="note">Klick auf eine Kategorie über der Tabelle schaltet sie aus. Eine ausgeschaltete Kategorie wird ausgeblendet und zählt nicht zum Ø Rang. Ø Rang ist der Durchschnitt der Plätze in den eingeschalteten Kategorien, niedriger ist besser. Die Zahl dahinter ist der Platz in dieser Durchschnittswertung.</p></div>
+<p class="note">Klick auf eine Kategorie über der Tabelle schaltet sie aus, mit der Maus ziehen ändert die Reihenfolge der Spalten. Die Einstellungen werden gespeichert. Eine ausgeschaltete Kategorie wird ausgeblendet und zählt nicht zum Ø Rang. Ø Rang ist der Durchschnitt der Plätze in den eingeschalteten Kategorien, niedriger ist besser. Die Zahl dahinter ist der Platz in dieser Durchschnittswertung.</p></div>
 </main><script>
 let LANG='de';try{LANG=localStorage.getItem('roklang')==='en'?'en':'de'}catch(e){}
 const LOC=LANG==='en'?'en-US':'de-DE',$=id=>document.getElementById(id),f=n=>Number(n).toLocaleString(LOC);
 const esc=s=>String(s==null?'':s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
 const MON=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
 const dm=d=>LANG==='en'?(p=>p.length===3?+p[2]+' '+MON[+p[1]-1]+' '+p[0]:d)(d.split('-')):d.split('-').reverse().join('.');
+function saveUi(){if(!lastAl)return;fetch('/api/alliance_ui',{method:'POST',body:JSON.stringify({order:lastAl.cats.map(c=>c.key),off:lastAl.cats.map(c=>c.key).filter(k=>!alOn.has(k)),sort:alSort,dir:alDir})}).catch(()=>{})}
 let lastAl=null,lastSig='',alSort='power',alDir=-1,alQ='',alOn=null;const alOpen=new Set();
 function renderAlliance(a){lastAl=a;if(!a)return;const cats=a.cats,ms=a.members;
  const newest=Object.values(a.latest||{}).sort().pop();
  $('asub').textContent=newest?'Member-Rangliste · Stand '+dm(newest):'Member-Rangliste';
  const AV=[['avg_all','Ø Rang',[]]];
-  if(alOn===null)alOn=new Set(cats.map(c=>c.key));
+  if(alOn===null){const u=a.ui||{};alOn=new Set(cats.map(c=>c.key).filter(k=>!(u.off||[]).includes(k)));
+   if(u.sort&&(u.sort==='avg_all'||cats.some(c=>c.key===u.sort))){alSort=u.sort;alDir=u.dir||(u.sort==='avg_all'?1:-1)}}
   const vc=cats.filter(c=>alOn.has(c.key));if(alSort!=='avg_all'&&!alOn.has(alSort)){alSort='avg_all';alDir=1}
-  $('achips').innerHTML=cats.map(c=>`<button type="button" class="chip" data-k="${c.key}" aria-pressed="${alOn.has(c.key)}">${c.label}</button>`).join('');
+  $('achips').innerHTML=cats.map(c=>`<button type="button" class="chip" draggable="true" data-k="${c.key}" aria-pressed="${alOn.has(c.key)}">${c.label}</button>`).join('');
   const avg=(m,ex)=>{const r=vc.filter(c=>!ex.includes(c.key)).map(c=>m.c[c.key]&&m.c[c.key].r).filter(v=>v!=null);return r.length?r.reduce((x,y)=>x+y,0)/r.length:null};
   ms.forEach(m=>{m.a={};AV.forEach(([k,,ex])=>m.a[k]=avg(m,ex))});
   ms.forEach(m=>m.ap={});AV.forEach(([k])=>{const o=ms.filter(m=>m.a[k]!=null).map(m=>m.a[k]).sort((x,y)=>x-y);ms.forEach(m=>{m.ap[k]=m.a[k]==null?null:o.indexOf(m.a[k])+1})});
@@ -1283,10 +1314,14 @@ function renderAlliance(a){lastAl=a;if(!a)return;const cats=a.cats,ms=a.members;
   rows.map((m,i)=>`<tr class="m" data-n="${esc(m.name)}"><td class="r">${i+1}</td><td class="n nm">${alOpen.has(m.name)?'▾':'▸'} ${esc(m.name)}</td>${AV.map(([k])=>acell(m,k)).join('')}${vc.map(c=>cell(m,c.key)).join('')}</tr>${alOpen.has(m.name)?hist(m):''}`).join(''):
   '<tr><td class="note">Noch keine Allianz-Daten. Schick mir Screenshots der Ranglisten, ich erstelle dir die Datei zum Einfügen.</td></tr>';
  $('ainfo').textContent=ms.length?`${rows.length} / ${ms.length} Mitglieder`:''}
-$('al').addEventListener('click',e=>{const th=e.target.closest('th[data-k]');if(th){if(alSort===th.dataset.k)alDir=-alDir;else{alSort=th.dataset.k;alDir=alSort.startsWith('avg_')?1:-1}return renderAlliance(lastAl)}
+$('al').addEventListener('click',e=>{const th=e.target.closest('th[data-k]');if(th){if(alSort===th.dataset.k)alDir=-alDir;else{alSort=th.dataset.k;alDir=alSort.startsWith('avg_')?1:-1}saveUi();return renderAlliance(lastAl)}
  const tr=e.target.closest('tr.m');if(tr){const n=tr.dataset.n;alOpen.has(n)?alOpen.delete(n):alOpen.add(n);renderAlliance(lastAl)}});
 $('asearch').oninput=()=>{alQ=$('asearch').value;renderAlliance(lastAl)};
-$('achips').addEventListener('click',e=>{const b=e.target.closest('.chip');if(!b||!alOn)return;const k=b.dataset.k;alOn.has(k)?alOn.delete(k):alOn.add(k);renderAlliance(lastAl)});
+$('achips').addEventListener('click',e=>{const b=e.target.closest('.chip');if(!b||!alOn)return;const k=b.dataset.k;alOn.has(k)?alOn.delete(k):alOn.add(k);saveUi();renderAlliance(lastAl)});
+let dragK=null;$('achips').addEventListener('dragstart',e=>{const b=e.target.closest('.chip');if(!b)return;dragK=b.dataset.k;e.dataTransfer.effectAllowed='move';try{e.dataTransfer.setData('text/plain',dragK)}catch(x){}});
+$('achips').addEventListener('dragover',e=>{if(dragK&&e.target.closest('.chip'))e.preventDefault()});
+$('achips').addEventListener('drop',e=>{const t=e.target.closest('.chip');if(!t||!dragK||!lastAl)return;e.preventDefault();const to=t.dataset.k;if(to===dragK){dragK=null;return}
+ const cs=lastAl.cats.slice(),from=cs.findIndex(c=>c.key===dragK),at=cs.findIndex(c=>c.key===to);const [m]=cs.splice(from,1);cs.splice(at,0,m);lastAl.cats=cs;dragK=null;saveUi();renderAlliance(lastAl)});
 $('abtn').onclick=()=>$('afile').click();
 $('aexp').href='/allianz/export?lang='+LANG;
 $('afile').onchange=async e=>{let n=0,err='';for(const fl of e.target.files){try{const r=await fetch('/api/alliance',{method:'POST',body:await fl.text()}).then(r=>r.json());if(r.ok)n+=r.n;else err=r.error}catch(x){err=String(x)}}
@@ -1513,6 +1548,13 @@ def make_handler(db, watcher):
                     d = json.loads(self.rfile.read(min(n, 2000000)))
                     snaps = d.get("snapshots", []) if isinstance(d, dict) else d
                     self.send(json.dumps({"ok": True, "n": db.add_profile(snaps)}), "application/json")
+                except Exception as e:
+                    self.send(json.dumps({"ok": False, "error": str(e)}), "application/json")
+                return
+            if path == "/api/alliance_ui":
+                try:
+                    n = int(self.headers.get("Content-Length", 0))
+                    self.send(json.dumps({"ok": True, "ui": db.set_alliance_ui(json.loads(self.rfile.read(min(n, 5000))))}), "application/json")
                 except Exception as e:
                     self.send(json.dumps({"ok": False, "error": str(e)}), "application/json")
                 return
