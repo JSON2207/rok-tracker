@@ -11,7 +11,7 @@ Das Programm liest nur Dateien. Es verändert nichts im Spielordner.
 Benötigt nur Python 3.8+ (keine zusätzlichen Pakete).
 """
 import argparse, base64, json, os, re, shutil, sqlite3, struct, sys, threading, time, webbrowser
-from datetime import datetime
+from datetime import datetime, timedelta
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import urlparse, parse_qs
 
@@ -637,6 +637,53 @@ class DB:
             self.c.commit()
         return n
 
+    def quick(self, account=""):
+        """Daten fuer die rechte Schnellzugriff-Spalte: Feed, 14-Tage-Verlauf, seltene Drops, Status."""
+        if account == "main":
+            account = self.get_setting("main_account", "") or ""
+        now = datetime.now()
+        days = [(now - timedelta(days=i)).strftime("%Y-%m-%d") for i in range(13, -1, -1)]
+        ac, aa = (" AND account=?", (account,)) if account else ("", ())
+        per = {d: dict(day=d, speed=0, gems=0, xp=0, forts=0, barb=0) for d in days}
+        for r in self.q("SELECT day, item_id, SUM(qty) qty FROM loot WHERE day>=?" + ac + " GROUP BY day, item_id", (days[0],) + aa):
+            it = ITEMS.get(r["item_id"])
+            if not it or r["day"] not in per:
+                continue
+            k, v = it["kind"], r["qty"] * it["unit"]
+            if k.startswith("speed_"):
+                per[r["day"]]["speed"] += v
+            elif k == "gems":
+                per[r["day"]]["gems"] += v
+            elif k == "xp_books":
+                per[r["day"]]["xp"] += v
+        forts = self.fort_entries(account, days[0])
+        for e in forts:
+            if e["day"] in per:
+                per[e["day"]]["forts"] += 1
+        for r in self.q("SELECT day, COUNT(DISTINCT mail_id) n FROM battles WHERE day>=? AND foe_kind!='fort'" + ac + " GROUP BY day", (days[0],) + aa):
+            if r["day"] in per:
+                per[r["day"]]["barb"] = r["n"]
+        fmt = lambda ts: datetime.fromtimestamp(ts).strftime("%d.%m. %H:%M")
+        top = lambda loot: [dict(name=x["name"], qty=x["qty"]) for x in sorted(loot, key=lambda x: -x["qty"])[:4]] + \
+              ([dict(name="", qty=len(loot) - 4)] if len(loot) > 4 else [])
+        feed = [dict(ts=e["ts"], time=fmt(e["ts"]), type="fort", title=("Lvl %d" % e["level"]) if e["level"] else "",
+                     role=e["role"], loot=top(e["loot"])) for e in forts[:15]]
+        for b in self.report_battles("day>=? AND foe_kind!='fort'" + ac, (days[-3],) + aa, fmt)[:15]:
+            feed.append(dict(ts=b["ts"], time=b["time"], type="barb", title=b["title"], role=b["role"], loot=top(b["loot"])))
+        feed.sort(key=lambda e: -e["ts"])
+        basic = {"speed_training", "speed_universal", "speed_healing", "wood", "stone", "gold", "food", "gems", "xp_books", "packs", "ap"}
+        ign = self.ignored()
+        rare = []
+        for r in self.q("SELECT item_id, SUM(qty) qty, MAX(day) last FROM loot WHERE 1=1" + ac + " GROUP BY item_id", aa):
+            it = ITEMS.get(r["item_id"])
+            if it and it["kind"] not in basic and r["item_id"] not in ign and "vermutet" not in it["name"]:
+                rare.append(dict(name=it["name"], qty=r["qty"], last=r["last"]))
+        rare.sort(key=lambda x: (x["last"], x["qty"]), reverse=True)
+        me = self.q("SELECT name FROM profile WHERE 1=1" + ac + " ORDER BY day DESC LIMIT 1", aa)
+        last = self.q("SELECT MAX(ts) t FROM reports WHERE 1=1" + ac, aa)
+        return dict(days=[per[d] for d in days], feed=feed[:14], rare=rare[:10], me=me[0]["name"] if me else "",
+                    last=fmt(last[0]["t"]) if last and last[0]["t"] else "", today=days[-1])
+
     def alliance_ui(self):
         """Gespeicherte Ansicht der Allianz-Seite: Reihenfolge, ausgeschaltete Kategorien, Sortierung."""
         try:
@@ -856,6 +903,76 @@ class Watcher(threading.Thread):
             time.sleep(2)
 
 # ---------------------------------------------------------------- Weboberfläche
+QP_BLOCK = r"""<style>
+.qb{position:fixed;top:12px;right:12px;z-index:60;padding:5px 11px;font-size:.9rem;cursor:pointer}
+body.qpopen .qb{display:none}
+.qp{position:fixed;top:0;right:0;bottom:0;width:340px;z-index:70;background:var(--card);border-left:1px solid var(--line);display:flex;flex-direction:column;transform:translateX(102%);transition:transform .18s ease}
+body.qpopen .qp{transform:none}
+.qph{display:flex;align-items:center;justify-content:space-between;padding:14px 14px 8px 16px}.qph b{font-size:1.05rem}.qph span button{padding:3px 9px;font-size:.95rem;cursor:pointer;margin-left:4px}
+.qch{display:flex;flex-wrap:wrap;gap:5px;padding:0 14px 8px}.qch[hidden]{display:none}.qch button{padding:3px 10px;font-size:.78rem;border-radius:99px;cursor:pointer}.qch button[aria-pressed=false]{opacity:.5;text-decoration:line-through}
+.qwl{overflow-y:auto;padding:4px 14px 24px;display:flex;flex-direction:column;gap:12px}
+.qw{background:var(--soft);border:1px solid var(--line);border-radius:12px;padding:11px 12px}.qw h4{margin:0 0 8px;font-size:.78rem;font-weight:700;color:var(--mute);display:flex;justify-content:space-between;align-items:center;gap:6px}
+.qw .q0{color:var(--mute);font-size:.82rem}
+.qf{display:flex;flex-direction:column;gap:7px;max-height:320px;overflow-y:auto}.qf>div{border-bottom:1px solid var(--line);padding-bottom:6px;font-size:.82rem}.qf>div:last-child{border:0}
+.qf .r1{display:flex;gap:6px;align-items:baseline;flex-wrap:wrap}.qf time{color:var(--mute);font-size:.74rem}.qf .tg{font-size:.7rem;padding:1px 7px;border-radius:99px;background:var(--accsoft);color:var(--acc)}.qf .tg.b{background:rgba(251,191,36,.16);color:var(--warn)}
+.qf .ls{color:var(--mute);margin-top:2px;font-size:.78rem}
+.qg{display:grid;grid-template-columns:1fr 1fr;gap:8px}.qg>div{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:8px 10px}.qg small{display:block;color:var(--mute);font-size:.72rem}.qg b{font-size:1.1rem}.qg em{font-style:normal;font-size:.74rem;display:block}
+.up{color:var(--good)}.dn{color:var(--bad)}.eq{color:var(--mute)}
+.qt{display:flex;gap:4px;flex-wrap:wrap;margin-bottom:6px}.qt button{padding:2px 8px;font-size:.74rem;cursor:pointer}.qt button.on{background:var(--acc);border-color:var(--acc);color:#fff}
+.qp svg{width:100%;height:auto;display:block}.qp svg rect.bar{fill:var(--acc)}.qp svg rect.bar.td{fill:var(--good)}.qp svg text{fill:var(--mute);font-size:9px}
+.ql{display:flex;flex-direction:column;gap:5px;font-size:.84rem}.ql>div{display:flex;justify-content:space-between;gap:8px}.ql span:last-child{color:var(--mute);white-space:nowrap}
+.qa{display:grid;grid-template-columns:1fr auto;gap:2px 10px;font-size:.82rem}.qa b{text-align:right}
+.qbig{font-size:1.6rem;font-weight:800;line-height:1.1}
+body{transition:padding-left .18s ease,padding-right .18s ease}
+@media(min-width:1500px){body.qpopen{padding-right:340px}}
+@media(max-width:1499px){body.qpopen .qp{box-shadow:0 0 30px #0006}}
+@media(max-width:480px){.qp{width:100%}}
+</style>
+<button type="button" id="qbtn" class="qb" title="Schnellzugriff">⚡ Schnellzugriff</button>
+<aside id="qp" class="qp" aria-label="Schnellzugriff"><div class="qph"><b>⚡ Schnellzugriff</b><span><button type="button" id="qset" title="Widgets auswählen" aria-label="Widgets auswählen">⚙</button><button type="button" id="qx" title="Schließen" aria-label="Schließen">✕</button></span></div>
+<div class="qch" id="qch" hidden></div><div class="qwl" id="qwl"></div></aside>
+<script>(function(){
+let LG='de';try{LG=localStorage.getItem('roklang')==='en'?'en':'de'}catch(e){}
+const TT={'Schnellzugriff':'Quick access','Widgets auswählen':'Choose widgets','Schließen':'Close','Live-Feed':'Live feed','Heute gegen gestern':'Today vs yesterday','Verlauf':'Trend','Seltene Drops':'Rare drops','Allianz':'Alliance','Letzte 7 Tage':'Last 7 days','Status':'Status','Festung':'Fort','Barbaren':'Barbarians','Speedups':'Speedups','Gems':'Gems','Tomes-XP':'Tome XP','Festungen':'Forts','heute':'today','gestern':'yesterday','Noch nichts da':'Nothing yet','Dein Ø Rang':'Your avg rank','Top 5 (Ø Rang)':'Top 5 (avg rank)','Rang':'Rank','von':'of','Dateien überwacht':'files watched','Letzter Bericht':'Last report','Vorwoche':'prev. week','7 Tage':'7 days','14 Tage':'14 days','Min':'min','Rally':'Rally','Solo':'Solo','Du bist in der Allianz-Liste nicht gefunden. Profil-Daten einlesen, damit dein Name bekannt ist.':'You were not found in the alliance list. Import profile data so your name is known.','Noch keine Allianz-Daten':'No alliance data yet'};
+const t=s=>LG==='en'?(TT[s]||s):s,LOC=LG==='en'?'en-US':'de-DE',f=n=>Number(n||0).toLocaleString(LOC);
+const esc=s=>String(s==null?'':s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const $=id=>document.getElementById(id),B=document.body;
+const W=[['feed','Live-Feed'],['vs','Heute gegen gestern'],['trend','Verlauf'],['rare','Seltene Drops'],['ali','Allianz'],['week','Letzte 7 Tage'],['stat','Status']];
+let S={on:W.map(w=>w[0]),open:window.innerWidth>=1500,m:'forts',n:14};
+try{const j=JSON.parse(localStorage.getItem('rokqp')||'null');if(j)S=Object.assign(S,j)}catch(e){}
+const save=()=>{try{localStorage.setItem('rokqp',JSON.stringify(S))}catch(e){}};
+let Q=null,AL=null,ST=null;
+const short=n=>{n=Number(n||0);return n>=1e6?(n/1e6).toFixed(2).replace(/\.?0+$/,'')+' M':n>=1e4?(n/1e3).toFixed(1).replace(/\.0$/,'')+' K':f(n)};
+const MET={forts:['Festungen',d=>d.forts],speed:['Speedups',d=>d.speed],gems:['Gems',d=>d.gems],xp:['Tomes-XP',d=>d.xp],barb:['Barbaren',d=>d.barb]};
+const arrow=(a,b)=>{const d=a-b;if(!d)return'<em class="eq">= '+t('gestern')+'</em>';const p=b?Math.round(d/b*100):null;return`<em class="${d>0?'up':'dn'}">${d>0?'▲':'▼'} ${f(Math.abs(d))}${p===null?'':' ('+(d>0?'+':'−')+Math.abs(p)+' %)'}</em>`};
+const norm=s=>String(s||'').normalize('NFKC').toLowerCase().replace(/\s+/g,'');
+function wFeed(){const l=Q.feed;return l.length?`<div class="qf">${l.map(e=>`<div><div class="r1"><time>${esc(e.time)}</time><span class="tg${e.type==='barb'?' b':''}">${t(e.type==='fort'?'Festung':'Barbaren')}</span><b>${esc(e.title)}</b>${e.role&&e.role!=='solo'?'<span class="tg">'+t('Rally')+'</span>':''}</div><div class="ls">${e.loot.length?e.loot.map(x=>x.name?f(x.qty)+'× '+esc(x.name):'+'+x.qty).join(', '):'–'}</div></div>`).join('')}</div>`:`<div class="q0">${t('Noch nichts da')}</div>`}
+function wVs(){const d=Q.days,a=d[d.length-1],b=d[d.length-2];return`<div class="qg">${['speed','gems','forts','xp'].map(k=>`<div><small>${t(MET[k][0])}${k==='speed'?' ('+t('Min')+')':''}</small><b>${short(a[k])}</b>${arrow(a[k],b[k])}</div>`).join('')}</div>`}
+function wTrend(){const n=S.n,d=Q.days.slice(-n),fn=MET[S.m][1],v=d.map(fn),mx=Math.max(1,...v),W=280,H=84,bw=W/n;
+ const bars=v.map((x,i)=>{const h=Math.round(x/mx*(H-16));return`<rect class="bar${i===n-1?' td':''}" x="${(i*bw+1.5).toFixed(1)}" y="${H-h}" width="${(bw-3).toFixed(1)}" height="${h}" rx="2"><title>${d[i].day.slice(8)}.${d[i].day.slice(5,7)}.: ${f(x)}</title></rect>`}).join('');
+ return`<div class="qt">${Object.entries(MET).map(([k,m])=>`<button type="button" data-m="${k}" class="${k===S.m?'on':''}">${t(m[0])}</button>`).join('')}</div><svg viewBox="0 0 ${W} ${H+10}">${bars}<text x="0" y="${H+9}">${d[0].day.slice(8)}.${d[0].day.slice(5,7)}.</text><text x="${W}" y="${H+9}" text-anchor="end">${t('heute')}</text><text x="${W}" y="9" text-anchor="end">max ${short(mx)}</text></svg><div class="qt" style="margin:6px 0 0"><button type="button" data-n="7" class="${n===7?'on':''}">${t('7 Tage')}</button><button type="button" data-n="14" class="${n===14?'on':''}">${t('14 Tage')}</button></div>`}
+function wRare(){const l=Q.rare;return l.length?`<div class="ql">${l.map(x=>`<div><span>${f(x.qty)}× ${esc(x.name)}</span><span>${x.last.slice(8)}.${x.last.slice(5,7)}.</span></div>`).join('')}</div>`:`<div class="q0">${t('Noch nichts da')}</div>`}
+function wWeek(){const d=Q.days,a=d.slice(-7),b=d.slice(0,7),sm=(l,k)=>l.reduce((n,x)=>n+x[k],0);return`<div class="qg">${['speed','gems','forts','xp'].map(k=>{const x=sm(a,k),y=sm(b,k),df=x-y;return`<div><small>${t(MET[k][0])}${k==='speed'?' ('+t('Min')+')':''}</small><b>${short(x)}</b><em class="${df>0?'up':df<0?'dn':'eq'}">${df>0?'▲':df<0?'▼':'='} ${f(Math.abs(df))} ${t('Vorwoche')}</em></div>`}).join('')}</div>`}
+function wAli(){if(!AL||!AL.members||!AL.members.length)return`<div class="q0">${t('Noch keine Allianz-Daten')}</div>`;
+ const off=(AL.ui&&AL.ui.off)||[],cats=AL.cats.filter(c=>!off.includes(c.key)),ms=AL.members.map(m=>{const r=cats.map(c=>m.c[c.key]&&m.c[c.key].r).filter(x=>x!=null);return{m,avg:r.length?r.reduce((a,b)=>a+b,0)/r.length:null}}).filter(x=>x.avg!=null).sort((a,b)=>a.avg-b.avg);
+ const nm=norm(Q.me),i=nm?ms.findIndex(x=>norm(x.m.name)===nm):-1,me=i>=0?ms[i]:null;
+ let h='';if(me){h+=`<div class="q0">${t('Dein Ø Rang')}</div><div class="qbig">${me.avg.toFixed(1)} <small class="q0">#${i+1} ${t('von')} ${ms.length}</small></div><div class="qa" style="margin:8px 0">${cats.map(c=>{const x=me.m.c[c.key];return`<span>${esc(c.label)}</span><b>${x&&x.r!=null?'#'+x.r:'–'}</b>`}).join('')}</div>`}else if(nm)h+=`<div class="q0" style="margin-bottom:8px">${t('Du bist in der Allianz-Liste nicht gefunden. Profil-Daten einlesen, damit dein Name bekannt ist.')}</div>`;
+ h+=`<div class="q0" style="margin-bottom:4px">${t('Top 5 (Ø Rang)')}</div><div class="qa">${ms.slice(0,5).map((x,j)=>`<span>${j+1}. ${esc(x.m.name)}</span><b>${x.avg.toFixed(1)}</b>`).join('')}</div>`;return h}
+function wStat(){const s=ST||{};return`<div class="ql"><div><span>${t('Dateien überwacht')}</span><span>${f(s.files)}</span></div><div><span>${t('Letzter Bericht')}</span><span>${esc(Q.last||'–')}</span></div></div>`}
+const FN={feed:wFeed,vs:wVs,trend:wTrend,rare:wRare,ali:wAli,week:wWeek,stat:wStat};
+function draw(){if(!Q)return;$('qwl').innerHTML=W.filter(w=>S.on.includes(w[0])).map(w=>`<section class="qw" data-w="${w[0]}"><h4>${t(w[1])}</h4>${FN[w[0]]()}</section>`).join('')||`<div class="q0">${t('Widgets auswählen')} ⚙</div>`}
+function chips(){$('qch').innerHTML=W.map(w=>`<button type="button" data-w="${w[0]}" aria-pressed="${S.on.includes(w[0])}">${t(w[1])}</button>`).join('')}
+async function pull(){if(document.hidden)return;try{const need=S.on.includes('ali'),p=[fetch('/api/quick?account=main').then(r=>r.json()),need?fetch('/api/alliance').then(r=>r.json()):null,S.on.includes('stat')?fetch('/api/status').then(r=>r.json()):null];const r=await Promise.all(p);Q=r[0];AL=r[1]||AL;ST=r[2]||ST;draw()}catch(e){}}
+function setOpen(v){S.open=v;B.classList.toggle('qpopen',v);save();if(v)pull()}
+$('qbtn').onclick=()=>setOpen(true);$('qx').onclick=()=>setOpen(false);$('qset').onclick=()=>{$('qch').hidden=!$('qch').hidden};
+$('qch').onclick=e=>{const b=e.target.closest('button');if(!b)return;const k=b.dataset.w;S.on=S.on.includes(k)?S.on.filter(x=>x!==k):W.map(w=>w[0]).filter(x=>x===k||S.on.includes(x));save();chips();draw();pull()};
+$('qwl').onclick=e=>{const b=e.target.closest('button');if(!b)return;if(b.dataset.m)S.m=b.dataset.m;else if(b.dataset.n)S.n=+b.dataset.n;else return;save();draw()};
+$('qbtn').textContent='⚡ '+t('Schnellzugriff');$('qp').querySelector('.qph b').textContent='⚡ '+t('Schnellzugriff');$('qset').title=t('Widgets auswählen');$('qx').title=t('Schließen');
+const sbn=document.querySelector('#sb .sbn');if(sbn){const r=document.createElement('div');r.className='mrow';r.innerHTML='<button type="button" id="qtog" style="cursor:pointer">⚡ '+t('Schnellzugriff')+'</button>';sbn.appendChild(r);r.firstChild.onclick=()=>setOpen(!S.open)}
+chips();B.classList.toggle('qpopen',S.open);pull();setInterval(pull,10000);document.addEventListener('visibilitychange',pull);
+})()</script>
+"""
+
 PAGE = r"""<!doctype html><html lang="de"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1"><title>Barbaren-Tracker</title>
 <style>
@@ -950,7 +1067,7 @@ tr.flash td,details.flash{animation:fl 2.6s ease-out}
 .mbtn{position:fixed;top:12px;left:12px;z-index:60;padding:5px 11px;font-size:1.2rem;line-height:1.2;cursor:pointer}body.sbopen .mbtn#mbtn{display:none}.sb{position:fixed;top:0;left:0;bottom:0;width:260px;z-index:70;background:var(--card);border-right:1px solid var(--line);display:flex;flex-direction:column;transform:translateX(-102%);transition:transform .18s ease;overflow-y:auto}body.sbopen .sb{transform:none}.sbh{display:flex;align-items:center;justify-content:space-between;padding:16px 14px 12px 18px}.sbt{font-weight:800;font-size:1.15rem;letter-spacing:.02em}.sbh .mbtn{position:static;padding:3px 9px;font-size:1rem}.sbn{display:flex;flex-direction:column;padding:6px 10px 20px;gap:2px}.sbl{font-size:.72rem;color:var(--mute);padding:10px 8px 4px}.sbn a{display:flex;align-items:center;gap:10px;padding:9px 10px;border-radius:9px;text-decoration:none;color:var(--ink)}.sbn a svg{flex:none;color:var(--mute)}.sbn a:hover{background:var(--soft)}.sbn a.cur{background:var(--accsoft);color:var(--acc);font-weight:700}.sbn a.cur svg{color:var(--acc)}.msep{height:1px;background:var(--line);margin:10px 2px 4px}.mrow{display:flex;flex-direction:column;gap:5px;padding:6px 8px;font-size:.82rem;color:var(--mute)}.mrow select{width:100%}.seg{display:flex;gap:4px}.seg button{flex:1;padding:5px 2px;font-size:.78rem;cursor:pointer}.seg button.on{background:var(--acc);border-color:var(--acc);color:#fff}.sbov{display:none}body{transition:padding-left .18s ease}@media(min-width:1100px){body.sbopen{padding-left:260px}}@media(max-width:1099px){body.sbopen .sbov{display:block;position:fixed;inset:0;background:#0007;z-index:65}}
 
 </style></head><body><main>
-<button type="button" id="mbtn" class="mbtn" aria-label="Menü" aria-expanded="true" title="Menü">☰</button><aside id="sb" class="sb" aria-label="Menü"><div class="sbh"><span class="sbt">RoK&nbsp;Tracker</span><button type="button" id="sbx" class="mbtn" aria-label="Menü schließen" title="Menü schließen">⇤</button></div><nav class="sbn"><div class="sbl">Seiten</div><a href="/" data-p="/"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l8 4v5c0 4.5-3.2 7.8-8 9-4.8-1.2-8-4.5-8-9V7z"/><path d="M9 12l2 2 4-4"/></svg><span>Loot-Tracker</span></a><a href="/allianz" data-p="/allianz"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20V10M10 20V4M16 20v-8M22 20H2"/></svg><span>Allianz-Ranking</span></a><div class="msep"></div><div class="sbl">Ansicht</div><label class="mrow"><span>Sprache</span><select id="lang" aria-label="Language / Sprache"><option value="de">🌐 Deutsch</option><option value="en">🌐 English</option></select></label><div class="mrow"><span>Breite</span><span class="seg" id="mw"><button type="button" data-v="900">Schmal</button><button type="button" data-v="1160">Normal</button><button type="button" data-v="1600">Breit</button><button type="button" data-v="100%">Voll</button></span></div><div class="mrow"><span>Ausrichtung</span><span class="seg" id="ma"><button type="button" data-v="l">Links</button><button type="button" data-v="c">Mitte</button><button type="button" data-v="r">Rechts</button></span></div></nav></aside><div id="sbov" class="sbov"></div><script>(function(){const b=document.getElementById("mbtn"),x=document.getElementById("sbx"),ov=document.getElementById("sbov"),n=document.getElementById("sb"),R=document.documentElement,B=document.body;n.querySelectorAll("a[data-p]").forEach(a=>{if(a.dataset.p===(location.pathname.replace(/\/+$/,"")||"/"))a.className="cur"});let V={w:"1600",a:"c"},O=window.innerWidth>=1100;try{V=Object.assign(V,JSON.parse(localStorage.getItem("rokview")||"{}"));const o=localStorage.getItem("roksb");if(o!==null)O=o==="1"}catch(e){}const ap=()=>{R.style.setProperty("--mw",V.w==="100%"?"100%":V.w+"px");R.style.setProperty("--ml",V.a==="l"?"0":"auto");R.style.setProperty("--mr",V.a==="r"?"0":"auto");n.querySelectorAll("#mw button").forEach(y=>y.classList.toggle("on",y.dataset.v===V.w));n.querySelectorAll("#ma button").forEach(y=>y.classList.toggle("on",y.dataset.v===V.a))};const so=v=>{O=v;B.classList.toggle("sbopen",O);b.setAttribute("aria-expanded",O);try{localStorage.setItem("roksb",O?"1":"0")}catch(e){}};n.addEventListener("click",e=>{const y=e.target.closest(".seg button");if(!y)return;if(y.parentNode.id==="mw")V.w=y.dataset.v;else V.a=y.dataset.v;try{localStorage.setItem("rokview",JSON.stringify(V))}catch(e){}ap()});ap();B.classList.toggle("sbopen",O);b.onclick=()=>so(!O);x.onclick=()=>so(false);ov.onclick=()=>so(false);document.addEventListener("keydown",e=>{if(e.key==="Escape"&&window.innerWidth<1100)so(false)})})()</script>
+<button type="button" id="mbtn" class="mbtn" aria-label="Menü" aria-expanded="true" title="Menü">☰</button><aside id="sb" class="sb" aria-label="Menü"><div class="sbh"><span class="sbt">RoK&nbsp;Tracker</span><button type="button" id="sbx" class="mbtn" aria-label="Menü schließen" title="Menü schließen">⇤</button></div><nav class="sbn"><div class="sbl">Seiten</div><a href="/" data-p="/"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l8 4v5c0 4.5-3.2 7.8-8 9-4.8-1.2-8-4.5-8-9V7z"/><path d="M9 12l2 2 4-4"/></svg><span>Loot-Tracker</span></a><a href="/allianz" data-p="/allianz"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20V10M10 20V4M16 20v-8M22 20H2"/></svg><span>Allianz-Ranking</span></a><div class="msep"></div><div class="sbl">Ansicht</div><label class="mrow"><span>Sprache</span><select id="lang" aria-label="Language / Sprache"><option value="de">🌐 Deutsch</option><option value="en">🌐 English</option></select></label><div class="mrow"><span>Breite</span><span class="seg" id="mw"><button type="button" data-v="900">Schmal</button><button type="button" data-v="1160">Normal</button><button type="button" data-v="1600">Breit</button><button type="button" data-v="100%">Voll</button></span></div><div class="mrow"><span>Ausrichtung</span><span class="seg" id="ma"><button type="button" data-v="l">Links</button><button type="button" data-v="c">Mitte</button><button type="button" data-v="r">Rechts</button></span></div></nav></aside><div id="sbov" class="sbov"></div><script>(function(){const b=document.getElementById("mbtn"),x=document.getElementById("sbx"),ov=document.getElementById("sbov"),n=document.getElementById("sb"),R=document.documentElement,B=document.body;n.querySelectorAll("a[data-p]").forEach(a=>{if(a.dataset.p===(location.pathname.replace(/\/+$/,"")||"/"))a.className="cur"});let V={w:"1600",a:"c"},O=window.innerWidth>=1100;try{V=Object.assign(V,JSON.parse(localStorage.getItem("rokview")||"{}"));const o=localStorage.getItem("roksb");if(o!==null)O=o==="1"}catch(e){}const ap=()=>{R.style.setProperty("--mw",V.w==="100%"?"100%":V.w+"px");R.style.setProperty("--ml",V.a==="l"?"0":"auto");R.style.setProperty("--mr",V.a==="r"?"0":"auto");n.querySelectorAll("#mw button").forEach(y=>y.classList.toggle("on",y.dataset.v===V.w));n.querySelectorAll("#ma button").forEach(y=>y.classList.toggle("on",y.dataset.v===V.a))};const so=v=>{O=v;B.classList.toggle("sbopen",O);b.setAttribute("aria-expanded",O);try{localStorage.setItem("roksb",O?"1":"0")}catch(e){}};n.addEventListener("click",e=>{const y=e.target.closest(".seg button");if(!y)return;if(y.parentNode.id==="mw")V.w=y.dataset.v;else V.a=y.dataset.v;try{localStorage.setItem("rokview",JSON.stringify(V))}catch(e){}ap()});ap();B.classList.toggle("sbopen",O);b.onclick=()=>so(!O);x.onclick=()=>so(false);ov.onclick=()=>so(false);document.addEventListener("keydown",e=>{if(e.key==="Escape"&&window.innerWidth<1100)so(false)})})()</script>@@QP@@
 <section class="hero"><div class="avc"><div class="av" id="avbox" tabindex="0" role="button" title="Avatar ändern"><span id="hav">⚔</span></div><button id="avreset" hidden>Avatar zurücksetzen</button><input type="file" id="avfile" accept="image/*" hidden></div><div>
 <div class="hrow"><div><h1 id="hname">Barbaren-Tracker</h1><div id="per"></div><div id="st"></div></div>
 <div class="bar"><select id="acc" hidden></select><button id="mainbtn" hidden></button><select id="range">
@@ -1274,7 +1391,7 @@ a.btn{font:inherit;color:var(--ink);background:var(--soft);border:1px solid var(
 #achips{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:12px}.chip{font:inherit;font-size:.85rem;color:var(--ink);background:var(--soft);border:1px solid var(--line);border-radius:999px;padding:5px 12px;cursor:pointer}.chip[aria-pressed="false"]{color:var(--mute);text-decoration:line-through;background:transparent}.chip[aria-pressed="true"]{border-color:var(--acc)}
 #al th,#al td{padding:9px 12px}#al td.r{color:var(--mute);width:2.5em;text-align:right}#al td.n{text-align:left}
 </style></head><body><main>
-<button type="button" id="mbtn" class="mbtn" aria-label="Menü" aria-expanded="true" title="Menü">☰</button><aside id="sb" class="sb" aria-label="Menü"><div class="sbh"><span class="sbt">RoK&nbsp;Tracker</span><button type="button" id="sbx" class="mbtn" aria-label="Menü schließen" title="Menü schließen">⇤</button></div><nav class="sbn"><div class="sbl">Seiten</div><a href="/" data-p="/"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l8 4v5c0 4.5-3.2 7.8-8 9-4.8-1.2-8-4.5-8-9V7z"/><path d="M9 12l2 2 4-4"/></svg><span>Loot-Tracker</span></a><a href="/allianz" data-p="/allianz"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20V10M10 20V4M16 20v-8M22 20H2"/></svg><span>Allianz-Ranking</span></a><div class="msep"></div><div class="sbl">Ansicht</div><label class="mrow"><span>Sprache</span><select id="lang" aria-label="Language / Sprache"><option value="de">🌐 Deutsch</option><option value="en">🌐 English</option></select></label><div class="mrow"><span>Breite</span><span class="seg" id="mw"><button type="button" data-v="900">Schmal</button><button type="button" data-v="1160">Normal</button><button type="button" data-v="1600">Breit</button><button type="button" data-v="100%">Voll</button></span></div><div class="mrow"><span>Ausrichtung</span><span class="seg" id="ma"><button type="button" data-v="l">Links</button><button type="button" data-v="c">Mitte</button><button type="button" data-v="r">Rechts</button></span></div></nav></aside><div id="sbov" class="sbov"></div><script>(function(){const b=document.getElementById("mbtn"),x=document.getElementById("sbx"),ov=document.getElementById("sbov"),n=document.getElementById("sb"),R=document.documentElement,B=document.body;n.querySelectorAll("a[data-p]").forEach(a=>{if(a.dataset.p===(location.pathname.replace(/\/+$/,"")||"/"))a.className="cur"});let V={w:"1600",a:"c"},O=window.innerWidth>=1100;try{V=Object.assign(V,JSON.parse(localStorage.getItem("rokview")||"{}"));const o=localStorage.getItem("roksb");if(o!==null)O=o==="1"}catch(e){}const ap=()=>{R.style.setProperty("--mw",V.w==="100%"?"100%":V.w+"px");R.style.setProperty("--ml",V.a==="l"?"0":"auto");R.style.setProperty("--mr",V.a==="r"?"0":"auto");n.querySelectorAll("#mw button").forEach(y=>y.classList.toggle("on",y.dataset.v===V.w));n.querySelectorAll("#ma button").forEach(y=>y.classList.toggle("on",y.dataset.v===V.a))};const so=v=>{O=v;B.classList.toggle("sbopen",O);b.setAttribute("aria-expanded",O);try{localStorage.setItem("roksb",O?"1":"0")}catch(e){}};n.addEventListener("click",e=>{const y=e.target.closest(".seg button");if(!y)return;if(y.parentNode.id==="mw")V.w=y.dataset.v;else V.a=y.dataset.v;try{localStorage.setItem("rokview",JSON.stringify(V))}catch(e){}ap()});ap();B.classList.toggle("sbopen",O);b.onclick=()=>so(!O);x.onclick=()=>so(false);ov.onclick=()=>so(false);document.addEventListener("keydown",e=>{if(e.key==="Escape"&&window.innerWidth<1100)so(false)})})()</script>
+<button type="button" id="mbtn" class="mbtn" aria-label="Menü" aria-expanded="true" title="Menü">☰</button><aside id="sb" class="sb" aria-label="Menü"><div class="sbh"><span class="sbt">RoK&nbsp;Tracker</span><button type="button" id="sbx" class="mbtn" aria-label="Menü schließen" title="Menü schließen">⇤</button></div><nav class="sbn"><div class="sbl">Seiten</div><a href="/" data-p="/"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l8 4v5c0 4.5-3.2 7.8-8 9-4.8-1.2-8-4.5-8-9V7z"/><path d="M9 12l2 2 4-4"/></svg><span>Loot-Tracker</span></a><a href="/allianz" data-p="/allianz"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20V10M10 20V4M16 20v-8M22 20H2"/></svg><span>Allianz-Ranking</span></a><div class="msep"></div><div class="sbl">Ansicht</div><label class="mrow"><span>Sprache</span><select id="lang" aria-label="Language / Sprache"><option value="de">🌐 Deutsch</option><option value="en">🌐 English</option></select></label><div class="mrow"><span>Breite</span><span class="seg" id="mw"><button type="button" data-v="900">Schmal</button><button type="button" data-v="1160">Normal</button><button type="button" data-v="1600">Breit</button><button type="button" data-v="100%">Voll</button></span></div><div class="mrow"><span>Ausrichtung</span><span class="seg" id="ma"><button type="button" data-v="l">Links</button><button type="button" data-v="c">Mitte</button><button type="button" data-v="r">Rechts</button></span></div></nav></aside><div id="sbov" class="sbov"></div><script>(function(){const b=document.getElementById("mbtn"),x=document.getElementById("sbx"),ov=document.getElementById("sbov"),n=document.getElementById("sb"),R=document.documentElement,B=document.body;n.querySelectorAll("a[data-p]").forEach(a=>{if(a.dataset.p===(location.pathname.replace(/\/+$/,"")||"/"))a.className="cur"});let V={w:"1600",a:"c"},O=window.innerWidth>=1100;try{V=Object.assign(V,JSON.parse(localStorage.getItem("rokview")||"{}"));const o=localStorage.getItem("roksb");if(o!==null)O=o==="1"}catch(e){}const ap=()=>{R.style.setProperty("--mw",V.w==="100%"?"100%":V.w+"px");R.style.setProperty("--ml",V.a==="l"?"0":"auto");R.style.setProperty("--mr",V.a==="r"?"0":"auto");n.querySelectorAll("#mw button").forEach(y=>y.classList.toggle("on",y.dataset.v===V.w));n.querySelectorAll("#ma button").forEach(y=>y.classList.toggle("on",y.dataset.v===V.a))};const so=v=>{O=v;B.classList.toggle("sbopen",O);b.setAttribute("aria-expanded",O);try{localStorage.setItem("roksb",O?"1":"0")}catch(e){}};n.addEventListener("click",e=>{const y=e.target.closest(".seg button");if(!y)return;if(y.parentNode.id==="mw")V.w=y.dataset.v;else V.a=y.dataset.v;try{localStorage.setItem("rokview",JSON.stringify(V))}catch(e){}ap()});ap();B.classList.toggle("sbopen",O);b.onclick=()=>so(!O);x.onclick=()=>so(false);ov.onclick=()=>so(false);document.addEventListener("keydown",e=>{if(e.key==="Escape"&&window.innerWidth<1100)so(false)})})()</script>@@QP@@
 <section class="ah"><div><h1>Allianz-Tracker</h1><div class="sub" id="asub">Member-Rangliste</div></div>
 <div class="bar"><a class="btn" id="aexp" href="/allianz/export?lang=de" title="Speichert die Rangliste als eigenständige Datei, die du weitergeben kannst">Als HTML exportieren</a><button id="abtn">Allianz-Daten einfügen …</button><input type="file" id="afile" accept=".json" multiple hidden></div></section>
 <div class="pane" style="margin-top:0"><div class="chips" id="achips" role="group" aria-label="Kategorien im Durchschnitt"></div><div class="nmbar"><input id="asearch" type="search" placeholder="Mitglied suchen …"> <span class="note" id="ainfo"></span> <span class="note" id="amsg"></span></div>
@@ -1329,6 +1446,9 @@ $('afile').onchange=async e=>{let n=0,err='';for(const fl of e.target.files){try
 async function load(){try{const a=await fetch('/api/alliance').then(r=>r.json());const sig=JSON.stringify(a);if(sig===lastSig)return;lastSig=sig;renderAlliance(a)}catch(e){}}
 load();setInterval(load,4000);
 """ + _I18N + r"""</script></body></html>"""
+
+PAGE = PAGE.replace("@@QP@@", QP_BLOCK)
+ALLIANCE_PAGE = ALLIANCE_PAGE.replace("@@QP@@", QP_BLOCK)
 
 EXPORT_TPL = r"""<!doctype html>
 <html lang="@@lang@@"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
@@ -1476,6 +1596,8 @@ def make_handler(db, watcher):
                 self.send_header("Content-Length", str(len(data)))
                 self.end_headers()
                 self.wfile.write(data)
+            elif u.path == "/api/quick":
+                self.send(json.dumps(db.quick(parse_qs(u.query).get("account", ["main"])[0])), "application/json")
             elif u.path == "/api/alliance":
                 self.send(json.dumps(db.alliance_stats()), "application/json")
             elif u.path == "/api/stats":
