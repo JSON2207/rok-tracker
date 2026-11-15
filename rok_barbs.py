@@ -837,7 +837,7 @@ tr.flash td,details.flash{animation:fl 2.6s ease-out}
 <option value="30">Letzte 30 Tage</option><option value="month">Dieser Monat</option><option value="all">Alles</option>
 <option value="custom">Zeitraum wählen</option></select>
 <span id="cu" hidden><label>von <input type="date" id="d1"></label> <label>bis <input type="date" id="d2"></label></span>
-<button id="expand">Alle Berichte aufklappen</button><button id="collapse">zuklappen</button></div></div>
+<button id="expand">Alle Berichte aufklappen</button><button id="collapse">zuklappen</button><button id="lang" title="Language / Sprache">English</button></div></div>
 <div class="chips" id="hchips"></div></div></section>
 <div class="grid" id="kpi"></div>
 <p class="note" id="kpinote"></p>
@@ -861,13 +861,15 @@ tr.flash td,details.flash{animation:fl 2.6s ease-out}
 <div class="pane" id="p_dt"><div class="wrap"><table id="dt"></table></div></div>
 <div class="pane" id="p_nm"><p class="note">Diese Nummern kennt das Programm noch nicht. Schau im Spiel nach (Tooltip auf das Item, Kommandant im Bericht) und trage den Namen ein. Gilt sofort auch für alle alten Berichte.</p>
 <div class="nmbar"><button id="ignall" title="Alle offenen Namen ignorieren. Sobald einer in einem neuen Bericht auftaucht, erscheint er wieder.">Alle ignorieren</button> <label>Sortieren nach <select id="nmsort"><option value="qty">Häufigkeit</option><option value="new">Datum: zuletzt gesehen (neueste zuerst)</option><option value="old">Datum: zuerst gesehen (älteste zuerst)</option></select></label>
-<span class="note">Ignorierte Items erscheinen wieder, sobald sie in einem neuen Bericht vorkommen (Markierung "neu"). Ein Klick darauf führt hierher, und "Zum Bericht" führt zurück.</span></div>
+<span class="note">Unbenannte Items erscheinen in den Berichten gelb markiert. Ein Klick darauf führt hierher, und "Zum Bericht" führt zurück. Ignorierte Namen erscheinen wieder, sobald sie in einem neuen Bericht vorkommen (Markierung "neu").</span></div>
 <div class="wrap"><table id="nm"></table></div><div id="nmign"></div></div>
 </main><script>
-const $=id=>document.getElementById(id),f=n=>Number(n).toLocaleString('de-DE');
+let LANG='de';try{LANG=localStorage.getItem('roklang')==='en'?'en':'de'}catch(e){}
+const LOC=LANG==='en'?'en-US':'de-DE',$=id=>document.getElementById(id),f=n=>Number(n).toLocaleString(LOC);
 const esc=s=>String(s==null?'':s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
 const iso=d=>{const z=new Date(d-d.getTimezoneOffset()*6e4);return z.toISOString().slice(0,10)};
-const dm=d=>d.split('-').reverse().join('.');
+const MON=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+const dm=d=>LANG==='en'?(p=>p.length===3?+p[2]+' '+MON[+p[1]-1]+' '+p[0]:d)(d.split('-')):d.split('-').reverse().join('.');
 let saved={};try{saved=JSON.parse(localStorage.getItem('rokbarbs')||'{}')}catch(e){}
 if(saved.range)$('range').value=saved.range;if(saved.d1)$('d1').value=saved.d1;if(saved.d2)$('d2').value=saved.d2;
 // Einzelne Berichte: aufgeklappt bleiben sie auch beim automatischen Aktualisieren offen
@@ -890,7 +892,7 @@ function range(){const v=$('range').value,t=new Date();$('cu').hidden=v!=='custo
  if(v==='custom'){let x=$('d1').value||iso(t),y=$('d2').value||x;if(x>y)[x,y]=[y,x];return[x,y]}
  const s=new Date();s.setDate(s.getDate()-(+v-1));return[iso(s),iso(t)]}
 const trade=(g,l)=>l>0?Math.round(g/l*100):(g>0?null:0);   // 100 % = ausgeglichener Trade (Gegner verliert so viel wie du)
-const tr=(g,l)=>{const v=trade(g,l);return v===null?'∞':v.toLocaleString('de-DE')+' %'};
+const tr=(g,l)=>{const v=trade(g,l);return v===null?'∞':v.toLocaleString(LOC)+' %'};
 const trc=(g,l)=>{const v=trade(g,l);return v===null||v>=100?'good':'bad'};
 const LI={'Training-Speedups':'⏩','Universal-Speedups':'⏱️','Heilungs-Speedups':'💊','Holz':'🪵','Stein':'🪨','Gold':'🪙','Edelsteine':'💎','XP aus Büchern':'📘','Ressourcenpakete':'📦','Aktionspunkte (Notfall)':'⚡','Mais':'🌽'};
 const slug=t=>String(t).normalize('NFKD').toLowerCase().replace(/[^a-z0-9]+/g,'_').replace(/^_|_$/g,'');
@@ -1014,7 +1016,7 @@ const pvList=l=>l.map(x=>{const so=x.role==='solo',t=x.totals;
    return `<h3>${esc(p.name||p.account)} <span class="note">ID ${p.account} · Stand ${dm(p.last_day)}${p.base_day!==p.last_day?' · Veränderung seit '+dm(p.base_day):''}</span></h3>
    <div class="grid">${ks.map(k=>`<div class="k"><b>${f(p.last[k])}</b><span>${esc(PF[k]||k)}</span>${p.delta[k]!=null?`<span class="${p.delta[k]>=0?'good':'bad'}">${dd(p.delta[k])}</span>`:''}${spark(p.rows,k)}</div>`).join('')}</div>
    <div class="wrap"><table><tr><th>Tag</th>${ks.map(k=>`<th>${esc(PF[k]||k)}</th>`).join('')}</tr>${p.rows.map(r=>`<tr><td>${dm(r.day)}</td>${ks.map(k=>`<td>${r[k]==null?'–':f(r[k])}</td>`).join('')}</tr>`).join('')}</table></div>`}).join('')||none('Noch keine Profil-Daten im gewählten Zeitraum. Schick mir einen Profil-Screenshot, ich erstelle dir die Datei zum Einfügen.');
- const compact=n=>n>=1e9?(n/1e9).toFixed(2)+' Mrd':n>=1e6?(n/1e6).toFixed(2)+' Mio':n>=1e4?(n/1e3).toFixed(1)+' Tsd':f(n);
+ const compact=n=>n>=1e9?(n/1e9).toFixed(2)+(LANG==='en'?' B':' Mrd'):n>=1e6?(n/1e6).toFixed(2)+(LANG==='en'?' M':' Mio'):n>=1e4?(n/1e3).toFixed(1)+(LANG==='en'?' K':' Tsd'):f(n);
  const accSel=$('acc').value,pa=accSel?s.accounts.find(x=>x.account===accSel):(s.accounts.length===1?s.accounts[0]:null);
  const nm=pa?(pa.acc_name||pa.account):(s.accounts.length>1?'Alle Accounts':'Barbaren-Tracker');
  $('hname').textContent=nm+(pa&&pa.account===s.main_account?' ★':'');$('hav').textContent=nm.normalize('NFKD').replace(/[^A-Za-z0-9]/g,'').slice(0,2).toUpperCase()||'⚔';
@@ -1029,6 +1031,93 @@ $('pbtn').onclick=()=>$('pfile').click();
 $('pfile').onchange=async e=>{let n=0,err='';for(const fl of e.target.files){try{const r=await fetch('/api/profile',{method:'POST',body:await fl.text()}).then(r=>r.json());if(r.ok)n+=r.n;else err=r.error}catch(x){err=String(x)}}
  $('pfmsg').textContent=err?'Fehler: '+err:n+' Eintrag/Einträge übernommen.';e.target.value='';lastSig='';load()};
 ['range','d1','d2','acc'].forEach(i=>$(i).onchange=()=>{lastSig='';load()});load();setInterval(load,4000);
+// ===== Sprache: Deutsch / English (RoK-Begriffe) =====
+const EN=[
+[`Barbaren-Tracker`,`Barbarian Tracker`],[`Heute`,`Today`],[`Gestern`,`Yesterday`],[`Letzte 7 Tage`,`Last 7 days`],[`Letzte 30 Tage`,`Last 30 days`],
+[`Dieser Monat`,`This month`],[`Alles`,`All time`],[`Zeitraum wählen`,`Custom range`],[`von`,`from`],[`bis`,`to`],[`und`,`and`],
+[`Alle Berichte aufklappen`,`Expand all reports`],[`zuklappen`,`Collapse all`],
+[`Beute`,`Loot`],[`Festungen`,`Forts`],[`Barbarenkämpfe`,`Barbarian Battles`],[`Spielerkämpfe`,`PvP Battles`],[`Profil`,`Profile`],[`Pro Tag`,`Per Day`],[`Namen eintragen`,`Enter Names`],
+[`offen`,`open`],[`weitere`,`more`],[`letzte`,`last`],
+[`Solo-Berichte`,`Solo reports`],[`Rallys`,`Rallies`],[`Festungen zerstört`,`Forts destroyed`],[`Gegner besiegt (solo)`,`Enemies defeated (solo)`],
+[`Barbaren-Truppen besiegt (solo)`,`Barbarian troops defeated (solo)`],[`Barbaren-Truppen (solo)`,`Barbarian troops (solo)`],[`Barbaren-Truppen`,`Barbarian troops`],
+[`Kommandanten-XP`,`Commander XP`],[`Leicht verwundet (solo)`,`Lightly wounded (solo)`],[`Schwer verwundet (solo)`,`Severely wounded (solo)`],
+[`Kill Count (Gegner schwer verwundet)`,`Kill Count (enemy severely wounded)`],[`Kill Count (Gegner schwer)`,`Kill Count (enemy severe)`],
+[`Eigene schwer verwundet`,`Own severely wounded`],[`Eigene leicht verwundet`,`Own lightly wounded`],[`Eigene schwer`,`Own severe`],[`Eigene leicht`,`Own light`],
+[`Trade (schwer verwundet)`,`Trade (severely wounded)`],[`Trade schwer verwundet (100 % = ausgeglichen)`,`Trade severely wounded (100 % = even)`],
+[`Trade alle Verwundeten`,`Trade all wounded`],[`Trade Kill Points`,`Trade kill points`],
+[`Gegner-Kill-Points`,`Enemy kill points`],[`Gegner-Truppen`,`Enemy troops`],[`Gegner-Tote`,`Enemy dead`],[`Gegner-KP`,`Enemy KP`],[`Gegner leicht verwundet`,`Enemy lightly wounded`],[`Gegner leicht`,`Enemy light`],
+[`Eigene Truppen`,`Own troops`],[`Eigene Tote`,`Own dead`],[`Gegner im Bericht`,`Enemies in report`],[`Die einzelnen Gegner`,`The individual enemies`],[`Größter Gegner`,`Largest enemy`],
+[`Gegner (solo)`,`Enemies (solo)`],[`Verwundet (solo)`,`Wounded (solo)`],[`Spielerkampf-Berichte`,`PvP battle reports`],
+[`Leicht verwundet`,`Lightly wounded`],[`Schwer verwundet`,`Severely wounded`],[`verwundet`,`wounded`],[`Verwundeten`,`wounded`],[`schwer`,`severely`],[`leicht`,`lightly`],
+[`Gegner`,`Enemy`],[`Eigene`,`Own`],[`Kämpfe`,`Battles`],[`Spielerkampf`,`PvP battle`],[`Tote`,`Dead`],[`Geheilt`,`Healed`],
+[`Rally gestartet`,`Rally started`],[`Rally beigetreten`,`Rally joined`],[`Barbarenfestung`,`Barbarian Fort`],[`Barbaren`,`Barbarians`],
+[`Anteil`,`Share`],[`Dein Schadensanteil`,`Your damage share`],[`Teilnehmer`,`Participants`],[`Kommandant`,`Commander`],[`Runden`,`rounds`],[`Runde`,`round`],
+[`Berichte`,`reports`],[`Bericht`,`report`],[`Zum Bericht`,`Go to report`],[`Speichern`,`Save`],[`Ignorieren`,`Ignore`],[`Alle ignorieren`,`Ignore all`],
+[`Ignoriert`,`Ignored`],[`Wieder anzeigen`,`Show again`],[`gespeichert`,`saved`],[`Fehler`,`Error`],[`neu`,`new`],[`gefunden`,`found`],
+[`Sortieren nach`,`Sort by`],[`Häufigkeit`,`Frequency`],[`Datum: zuletzt gesehen (neueste zuerst)`,`Date: last seen (newest first)`],[`Datum: zuerst gesehen (älteste zuerst)`,`Date: first seen (oldest first)`],
+[`Wert/Stück`,`Value/unit`],[`Stück`,`pcs`],[`Min`,`min`],
+[`Training-Speedups`,`Training Speedups`],[`Universal-Speedups`,`Universal Speedups`],[`Heilungs-Speedups`,`Healing Speedups`],
+[`Training-Speedup (Min)`,`Training Speedup (min)`],[`Universal-Speedup (Min)`,`Universal Speedup (min)`],[`Heilungs-Speedup (Min)`,`Healing Speedup (min)`],
+[`Training-Speedup`,`Training Speedup`],[`Universal-Speedup`,`Universal Speedup`],[`Heilungs-Speedup`,`Healing Speedup`],
+[`Holz`,`Wood`],[`Stein`,`Stone`],[`Mais`,`Food`],[`Edelsteine`,`Gems`],[`XP-Buch`,`Tome of Knowledge`],[`XP aus Büchern`,`XP from Tomes`],
+[`Ressourcenpakete`,`Resource Packs`],[`Ressourcenpaket`,`Resource Pack`],[`Aktionspunkte (Notfall)`,`Action Points (Emergency)`],[`Aktionspunkte`,`Action Points`],
+[`Notfall-AP-Wiederherstellung`,`Emergency AP Recovery`],[`vermutet`,`guessed`],[`Sonstiges`,`Other`],
+[`Macht`,`Power`],[`Höchste Macht`,`Highest Power`],[`Gebäude-Macht`,`Building Power`],[`Technologie-Macht`,`Tech Power`],[`Truppen-Macht`,`Troop Power`],[`Kommandanten-Macht`,`Commander Power`],
+[`Siege`,`Victories`],[`Niederlagen`,`Defeats`],[`Späher-Einsätze`,`Scout Missions`],[`Hilfen`,`Helps`],[`Gesammelt`,`Gathered`],[`Ressourcenhilfe`,`Resource Assistance`],
+[`T1-Kills`,`T1 Kills`],[`T2-Kills`,`T2 Kills`],[`T3-Kills`,`T3 Kills`],[`T4-Kills`,`T4 Kills`],[`T5-Kills`,`T5 Kills`],
+[`Tag`,`Day`],[`Stand`,`As of`],[`Veränderung seit`,`Change since`],[`Verlauf`,`Trend`],[`Gesamter Zeitraum`,`Entire period`],
+[`Alle Accounts`,`All accounts`],[`★ Haupt-Account`,`★ Main account`],[`☆ Als Haupt-Account`,`☆ Set as main account`],[`Haupt-Account wieder entfernen`,`Remove main account`],
+[`Beim Start immer diesen Account anzeigen`,`Always show this account on start`],[`Wähle zuerst einen einzelnen Account aus`,`Select a single account first`],
+[`Kommandant #`,`Commander #`],[`keine Beute`,`no loot`],[`Keine Beute in diesem Bericht.`,`No loot in this report.`],[`Das hast du bekommen`,`What you received`],
+[`noch nicht benannt`,`not named yet`],[`Noch nicht benannt. Klicken zum Benennen.`,`Not named yet. Click to name it.`],[`Noch nicht benannt:`,`Not named yet:`],
+[`Keine Beute im gewählten Zeitraum.`,`No loot in the selected period.`],[`Keine Festungen im gewählten Zeitraum.`,`No forts in the selected period.`],[`Keine Kämpfe im gewählten Zeitraum.`,`No battles in the selected period.`],
+[`Ordner nicht gefunden. Pfad mit --folder angeben.`,`Folder not found. Specify the path with --folder.`],[`Keine Berichts-Dateien gefunden in:`,`No report files found in:`],[`Inhalt:`,`Contents:`],[`(leer)`,`(empty)`],
+[`Profil-Datei einfügen …`,`Import profile file …`],
+[`Zu dieser Festung gibt es keine Belohnungs-Mail im Ordner, deshalb fehlen Level, Position und Beute.`,`There is no reward mail for this fort in the folder, so level, position and loot are missing.`],
+[`Truppen und Verluste gelten bei Rallys für alle Teilnehmer zusammen und werden nicht einzeln angezeigt.`,`In rallies, troops and losses apply to all participants combined and are not shown individually.`],
+[`Barbaren-Truppen = Summe der Truppenstärke aller besiegten Gegner (nicht die Anzahl). Zahlen zu Truppen und Verlusten aus Rallys gelten für alle Teilnehmer zusammen und sind hier nicht eingerechnet.`,`Barbarian troops = sum of the troop strength of all defeated enemies (not the number). Troop and loss figures from rallies apply to all participants combined and are not included here.`],
+[`Zusammengehörende Berichte stehen in einer Zeile. Ark of Osiris steht getrennt im eigenen Reiter und ist hier nicht mitgezählt.`,`Related reports are shown in one row. Ark of Osiris has its own tab and is not counted here.`],
+[`Ark of Osiris, getrennt von den anderen Spielerkämpfen gezählt.`,`Ark of Osiris, counted separately from the other PvP battles.`],
+[`Profilwerte aus deinen Screenshots. Die Datei, die ich dir schicke, fügst du hier ein. Der Verlauf wird gespeichert und nichts geht beim erneuten Einfügen doppelt verloren.`,`Profile values from your screenshots. Import the file I send you here. The history is saved, and importing again never creates duplicates.`],
+[`Noch keine Profil-Daten im gewählten Zeitraum. Schick mir einen Profil-Screenshot, ich erstelle dir die Datei zum Einfügen.`,`No profile data in the selected period yet. Send me a profile screenshot and I will create the file to import.`],
+[`Diese Nummern kennt das Programm noch nicht. Schau im Spiel nach (Tooltip auf das Item, Kommandant im Bericht) und trage den Namen ein. Gilt sofort auch für alle alten Berichte.`,`The program does not know these IDs yet. Look them up in the game (item tooltip, commander in the report) and enter the name. It applies to all older reports immediately.`],
+[`Alle offenen Namen ignorieren. Sobald einer in einem neuen Bericht auftaucht, erscheint er wieder.`,`Ignore all open names. Each one reappears as soon as it shows up in a new report.`],
+[`Unbenannte Items erscheinen in den Berichten gelb markiert. Ein Klick darauf führt hierher, und "Zum Bericht" führt zurück. Ignorierte Namen erscheinen wieder, sobald sie in einem neuen Bericht vorkommen (Markierung "neu").`,`Unnamed items are highlighted in yellow in the reports. Clicking one leads here, and "Go to report" leads back. Ignored names reappear as soon as they show up in a new report (marked "new").`],
+[`Wert pro Stück, z. B. 5 für 5 Min oder 1000 für 1.000 Holz`,`Value per unit, e.g. 5 for 5 min or 1000 for 1,000 wood`],
+[`Neuester Bericht mit diesem Item`,`Latest report with this item`],
+[`Vorerst ignorieren: nicht in der Liste offener Namen. Taucht er in einem neuen Bericht auf, erscheint er wieder.`,`Ignore for now: hidden from the open names list. It reappears if it shows up in a new report.`],
+[`Beschleunigt die Ausbildung und Aufwertung von Truppen.`,`Speeds up training and upgrading of troops.`],
+[`Universal-Beschleunigung: gilt für Bau, Forschung, Ausbildung und Heilung.`,`Universal Speedup: works for building, research, training and healing.`],
+[`Beschleunigt die Heilung verwundeter Truppen.`,`Speeds up healing of wounded troops.`],
+[`Mais: Rohstoff für Truppen und Gebäude.`,`Food: resource for troops and buildings.`],[`Holz: Rohstoff für Gebäude, Forschung und Truppen.`,`Wood: resource for buildings, research and troops.`],
+[`Stein: Rohstoff für Gebäude, Forschung und Truppen.`,`Stone: resource for buildings, research and troops.`],[`Gold: Rohstoff für Gebäude, Forschung und Truppen.`,`Gold: resource for buildings, research and troops.`],
+[`Edelsteine: Premium-Währung.`,`Gems: premium currency.`],[`Gibt einem Kommandanten Erfahrung (XP).`,`Gives a commander experience (XP).`],
+[`Ressourcenpaket. Lvl 2: zufällig 10.000 Mais, 10.000 Holz, 7.500 Stein oder 5.000 Gold (aus Barbarenfestungen, Hungry-Turkey-Event). Lvl 1 (C): zufällig 1.000 Mais, 1.000 Holz, 750 Stein oder 500 Gold.`,`Resource Pack. Lvl 2: random 10,000 Food, 10,000 Wood, 7,500 Stone or 5,000 Gold (from Barbarian Forts, Hungry Turkey event). Lvl 1 (C): random 1,000 Food, 1,000 Wood, 750 Stone or 500 Gold.`],
+[`Notfall-Aktionspunkte: stellen sofort Aktionspunkte für Angriffe auf Barbaren wieder her.`,`Emergency Action Points: instantly restore action points for attacking barbarians.`]
+];
+const ENM=new Map(EN.map(([a,b])=>[a,b]));
+const ENRE=new RegExp('(?<![\\p{L}\\p{N}])(?:'+EN.map(x=>x[0]).sort((a,b)=>b.length-a.length).map(s=>s.replace(/[.*+?^${}()|[\]\\]/g,'\\$&')).join('|')+')(?![\\p{L}\\p{N}])','giu');
+const DYN=[[/Überwache (\d+) Dateien \((\d+) neu seit Start\)/g,'Watching $1 files ($2 new since start)'],[/Lese gerade noch (\d+) Dateien, neueste zuerst …/g,'Still reading $1 files, newest first …'],
+ [/(\d+) Eintrag\/Einträge übernommen\./g,'$1 entries imported.'],
+ [/(?<!\d)(\d{1,2})\.(\d{2})\. (\d{2}:\d{2})/g,(m,d,mo,t)=>+d+' '+MON[+mo-1]+' '+t]];
+function enCase(m){let e=ENM.get(m);if(e!=null)return e;const a=m[0],up=a===a.toUpperCase()&&a!==a.toLowerCase(),alt=(up?a.toLowerCase():a.toUpperCase())+m.slice(1);e=ENM.get(alt);
+ if(e==null)return m;return up?e[0].toUpperCase()+e.slice(1):e[0].toLowerCase()+e.slice(1)}
+function enText(s){if(!/[A-Za-zÄÖÜäöüß]|\d\.\d{2}\./.test(s))return s;for(const [r,v] of DYN)s=s.replace(r,v);return s.replace(ENRE,enCase)}
+const ENATTR=['title','placeholder','data-tip','aria-label'];
+function enNode(n){
+ if(n.nodeType===3){const v=enText(n.nodeValue);if(v!==n.nodeValue)n.nodeValue=v;return}
+ if(n.nodeType!==1||n.tagName==='SCRIPT'||n.tagName==='STYLE')return;
+ if(n.tagName==='INPUT'&&n.classList.contains('n')&&!n.dataset.en){n.dataset.en=1;n.value=enText(n.value)}
+ for(const a of ENATTR){const v=n.getAttribute(a);if(v){const w=enText(v);if(w!==v)n.setAttribute(a,w)}}
+ for(const c of n.childNodes)enNode(c)}
+if(LANG==='en'){
+ document.documentElement.lang='en';document.title='Barbarian Tracker';
+ const mo=new MutationObserver(ms=>{mo.disconnect();for(const m of ms){if(m.type==='childList')m.addedNodes.forEach(enNode);else if(m.type==='characterData')enNode(m.target);else enNode(m.target)}
+  mo.observe(document.body,MO)});
+ const MO={subtree:true,childList:true,characterData:true,attributes:true,attributeFilter:ENATTR};
+ enNode(document.body);mo.observe(document.body,MO)}
+$('lang').textContent=LANG==='en'?'Deutsch':'English';
+$('lang').onclick=()=>{try{localStorage.setItem('roklang',LANG==='en'?'de':'en')}catch(e){}location.reload()};
 </script></body></html>"""
 
 def make_handler(db, watcher):
@@ -1117,6 +1206,9 @@ def make_handler(db, watcher):
     return H
 
 def main():
+    for _n in ("stdout", "stderr"):        # ohne Konsole (pythonw / .pyw) gibt es keine Ausgabe
+        if getattr(sys, _n) is None:
+            setattr(sys, _n, open(os.devnull, "w"))
     ap = argparse.ArgumentParser(description="RoK Barbaren-Tracker")
     ap.add_argument("--folder", default=DEFAULT_FOLDER, help="Pfad zum mailcache-Ordner")
     ap.add_argument("--port", type=int, default=8765)
