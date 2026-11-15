@@ -910,6 +910,8 @@ const openRep=new Set();
 document.addEventListener('toggle',e=>{const d=e.target;if(d instanceof HTMLDetailsElement&&d.dataset.k)d.open?openRep.add(d.dataset.k):openRep.delete(d.dataset.k)},true);
 // Reiter
 let tab='loot';try{tab=localStorage.getItem('roktab')||'loot'}catch(e){}
+const HASHTAB={profil:'pf',loot:'loot',beute:'loot',forts:'ft',festungen:'ft',barbaren:'bt',pvp:'pv',aoo:'ao',tag:'dt',namen:'nm'};
+if(location.hash.length>1&&HASHTAB[location.hash.slice(1).toLowerCase()])tab=HASHTAB[location.hash.slice(1).toLowerCase()];
 function showTab(t){const btn=document.querySelector(`#tabs [data-t="${t}"]`);if(!btn||btn.hidden)t='loot';tab=t;
  document.querySelectorAll('#tabs button').forEach(b=>{const on=b.dataset.t===t;b.classList.toggle('on',on);b.setAttribute('aria-selected',on)});
  document.querySelectorAll('.pane').forEach(p=>p.hidden=p.id!=='p_'+t);
