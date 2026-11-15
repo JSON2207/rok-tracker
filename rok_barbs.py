@@ -662,7 +662,7 @@ class DB:
             self.c.commit()
         return n
 
-    CHAIN_DEF = dict(gap=10, base=50, step=2, min=40, maxlvl=25)
+    CHAIN_DEF = dict(gap=10, base=50, step=2, min=40, maxlvl=25, fort_ap=140)
 
     def chain_cfg(self):
         """Barb-Chaining: Pause (Min) bis zur neuen Serie, AP der ersten Chain, Reduktion je Chain, Minimum."""
@@ -671,12 +671,12 @@ class DB:
         except ValueError:
             d = {}
         out = dict(self.CHAIN_DEF)
-        for k, hi in (("gap", 1440), ("base", 1000), ("step", 100), ("min", 1000), ("maxlvl", 100)):
+        for k, hi in (("gap", 1440), ("base", 1000), ("step", 100), ("min", 1000), ("maxlvl", 100), ("fort_ap", 1000)):
             try:
                 v = int(d.get(k, out[k]))
             except (TypeError, ValueError):
                 continue
-            if 0 <= v <= hi and not (k in ("gap", "base", "min", "maxlvl") and v == 0):
+            if 0 <= v <= hi and not (k in ("gap", "base", "min", "maxlvl", "fort_ap") and v == 0):
                 out[k] = v
         return out
 
@@ -732,6 +732,20 @@ class DB:
         return dict(cfg=cfg, chains=len(rows), barbs=barbs, ap=sum(r["ap"] for r in rows), series=len(series),
                     longest=max((len(v) for v in series.values()), default=0),
                     days=sorted(days.values(), key=lambda d: d["day"], reverse=True)[:31])
+
+    def ap_usage(self, chain, forts):
+        """AP-Verbrauch im Zeitraum: Barbaren-Chains (geschaetzt) plus Festungen zu je fort_ap AP, auch je Tag."""
+        fa = chain["cfg"]["fort_ap"]
+        days = {}
+        for d in chain["days"]:
+            days.setdefault(d["day"], dict(day=d["day"], barbs=0, forts=0))["barbs"] = d["ap"]
+        for e in forts:
+            days.setdefault(e["day"], dict(day=e["day"], barbs=0, forts=0))["forts"] += fa
+        rows = sorted(days.values(), key=lambda r: r["day"], reverse=True)
+        for r in rows:
+            r["total"] = r["barbs"] + r["forts"]
+        return dict(barbs=chain["ap"], chains=chain["chains"], forts=len(forts), fort_ap=fa, fort_total=len(forts) * fa,
+                    total=chain["ap"] + len(forts) * fa, days=rows[:31])
 
     def loot_per_ap(self, d_from, d_to, account=""):
         """Beute der Barbaren-Chains (nur Barbaren bis zum eingestellten Level) im Zeitraum und die dafuer verbrauchten AP."""
@@ -1049,7 +1063,7 @@ class DB:
                 d.setdefault(key, 0)
         accounts = self.q("SELECT account, MAX(acc_name) acc_name FROM reports WHERE account!='' GROUP BY account ORDER BY MAX(ts) DESC")
         return dict(unknown=self.unknown(), totals=tot, pvp_totals=pv, aoo_totals=po, aoo=aoos, profile=self.profile_stats(d_from, d_to, account), main_account=self.get_setting("main_account"), avatars=self.avatars(),
-                    profile_fields=PROFILE_FIELDS, chain=chain, loot=loot, battles=battles, forts=forts, pvp=pvps,
+                    apuse=self.ap_usage(chain, forts), profile_fields=PROFILE_FIELDS, chain=chain, loot=loot, battles=battles, forts=forts, pvp=pvps,
                     accounts=accounts, days=sorted(days.values(), key=lambda d: d["day"], reverse=True)[:90])
 
 # ---------------------------------------------------------------- Ordner-Überwachung
@@ -1295,6 +1309,9 @@ summary{cursor:pointer;list-style:none;display:flex;align-items:baseline;gap:10p
 summary::-webkit-details-marker{display:none}
 summary::before{content:"▸";color:var(--mute);width:1em;flex:none;transition:transform .12s}
 details[open]>summary::before{transform:rotate(90deg)}
+.apc{border:1px solid var(--line);border-radius:14px;padding:12px 16px;margin-bottom:14px;background:var(--card)}.aph{display:flex;flex-wrap:wrap;gap:8px;justify-content:space-between;align-items:center}.aph h3{margin:0}.aph input{width:5em;font:inherit;color:var(--ink);background:var(--soft);border:1px solid var(--line);border-radius:8px;padding:4px 8px}
+.apt b{font-size:1.8rem;font-variant-numeric:tabular-nums}.apb{display:flex;height:10px;border-radius:6px;overflow:hidden;background:var(--soft);margin:8px 0}.apb i{display:block;height:100%}.apb i.b,.dot.b{background:var(--acc)}.apb i.f,.dot.f{background:var(--warn)}
+.apr{display:flex;gap:8px;align-items:baseline;margin:3px 0}.dot{display:inline-block;width:10px;height:10px;border-radius:50%}
 details.rep{border:1px solid var(--line);border-radius:14px;margin-bottom:9px;background:var(--soft)}
 details.rep[open]{border-color:var(--dash)}
 details.rep>summary{padding:11px 16px;flex-wrap:wrap;row-gap:2px;border-radius:14px}
@@ -1360,7 +1377,7 @@ document.addEventListener("click",e=>{const y=e.target.closest(".seg button");if
 <button role="tab" data-t="dt">Pro Tag</button>
 <button role="tab" data-t="nm" id="nmsec">Namen eintragen <span class="cnt" id="c_nm"></span></button>
 </nav>
-<div class="pane" id="p_loot"><div class="tu"><label>Zeit anzeigen in <select id="tunit"><option value="min">Minuten</option><option value="h">Stunden</option><option value="d">Tagen</option></select></label></div><div class="loot" id="loot"></div><p class="note" id="lootnote"></p><div class="lap" id="lap"></div></div>
+<div class="pane" id="p_loot"><div id="apbox"></div><div class="tu"><label>Zeit anzeigen in <select id="tunit"><option value="min">Minuten</option><option value="h">Stunden</option><option value="d">Tagen</option></select></label></div><div class="loot" id="loot"></div><p class="note" id="lootnote"></p><div class="lap" id="lap"></div></div>
 <div class="pane" id="p_ft"><div id="ft"></div></div>
 <div class="pane" id="p_bt"><div class="chbox" id="chbox"></div><div id="bt"></div></div>
 <div class="pane" id="p_pv"><p class="note">Zusammengehörende Berichte stehen in einer Zeile. Ark of Osiris steht getrennt im eigenen Reiter und ist hier nicht mitgezählt.</p><div id="pv"></div></div>
@@ -1557,6 +1574,15 @@ async function load(){const[a,b]=range();
  lapLoad().catch(()=>{});
  $('lootnote').textContent=unk.length?'Noch nicht benannt: '+unk.map(x=>`${x.name} (${f(x.qty)}×)`).join(', '):'';
  // Festungen (jeder Festungs-Kampf, auch beigetretene Rallys)
+  const au=s.apuse,en=LANG==='en';
+ $('apbox').innerHTML=`<div class="apc"><div class="aph"><h3>AP-Verbrauch</h3><label class="note">AP pro Festung <input type="number" id="apfort" min="1" max="1000" value="${au.fort_ap}"></label></div>
+  <div class="apt"><b>${f(au.total)}</b> <span class="note">AP gesamt</span></div>
+  ${au.total?`<div class="apb"><i style="width:${(au.barbs*100/au.total).toFixed(1)}%" class="b"></i><i style="width:${(au.fort_total*100/au.total).toFixed(1)}%" class="f"></i></div>`:''}
+  <div class="apr"><span class="dot b"></span>Barbaren <b>${f(au.barbs)} AP</b> <span class="note">${f(au.chains)} Chains</span></div>
+  <div class="apr"><span class="dot f"></span>Festungen <b>${f(au.fort_total)} AP</b> <span class="note">${f(au.forts)} × ${f(au.fort_ap)}</span></div>
+  ${au.days.length>1?`<div class="wrap"><table><tr><th>Tag</th><th>Barbaren</th><th>Festungen</th><th>Gesamt</th></tr>${au.days.map(d=>`<tr><td>${dm(d.day)}</td><td>${f(d.barbs)}</td><td>${f(d.forts)}</td><td><b>${f(d.total)}</b></td></tr>`).join('')}</table></div>`:''}
+  <p class="note">Barbaren-AP sind geschätzt (Chain-Einstellungen im Tab Barbarenkämpfe), Festungen zählen auch beigetretene Rallys.</p></div>`;
+ $('apfort').onchange=async e=>{await fetch('/api/chaincfg',{method:'POST',body:JSON.stringify({fort_ap:+e.target.value})});lastSig='';load()};
  $('c_ft').textContent=s.forts.length||'';
  $('ft').innerHTML=ftTotal(s.forts)+s.forts.map(x=>rep('f'+x.key,
    `<span class="tm">${x.time}</span>${x.role?role[x.role]:''}<b>Barbarenfestung${x.level?' Lvl '+x.level:''}</b><span class="note">${x.pct==null?'':'Anteil '+x.pct+' %'}${x.tier==null?'':', Tier '+x.tier}</span><span class="sm">${chipsH(x.loot)}</span>`,
@@ -1825,6 +1851,7 @@ const EN=[
 [`ungültige Account-ID`,`invalid account ID`],
 [`Datei unvollständig`,`File incomplete`],
 [`Alle Einträge dieser Seite löschen und auf den Anfangszustand zurücksetzen?`,`Delete all entries on this page and reset to the initial state?`],[`Items insgesamt`,`Total items`],
+[`AP-Verbrauch`,`AP usage`],[`AP pro Festung`,`AP per fort`],[`AP gesamt`,`AP total`],[`Barbaren-AP sind geschätzt (Chain-Einstellungen im Tab Barbarenkämpfe), Festungen zählen auch beigetretene Rallys.`,`Barbarian AP are estimated (chain settings in the Barbarian fights tab), forts also include joined rallies.`],
 [`Arten`,`types`],
 [`Speedups:`,`Speedups:`],[`Heilung`,`Healing`],
 ];
