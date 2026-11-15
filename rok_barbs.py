@@ -859,7 +859,10 @@ tr.flash td,details.flash{animation:fl 2.6s ease-out}
 @keyframes fl{0%{box-shadow:0 0 0 3px var(--acc);background:var(--accsoft)}100%{box-shadow:0 0 0 0 transparent}}
 @media(prefers-reduced-motion:reduce){tr.flash td,details.flash{animation:none;outline:2px solid var(--acc)}}
 @media(max-width:640px){.grid{grid-template-columns:1fr 1fr}.kc{grid-template-columns:1fr}.kc .ic{display:none}.hero{grid-template-columns:1fr}.av{width:64px;height:64px}.av span{font-size:1.2rem}.rb{padding-left:16px}}
+.topbar{display:flex;justify-content:flex-end;margin:-6px 0 10px}
+.topbar select{padding:5px 10px;font-size:.88rem}
 </style></head><body><main>
+<div class="topbar"><select id="lang" aria-label="Language / Sprache" title="Language / Sprache"><option value="de">🌐 Deutsch</option><option value="en">🌐 English</option></select></div>
 <section class="hero"><div class="avc"><div class="av" id="avbox" tabindex="0" role="button" title="Avatar ändern"><span id="hav">⚔</span></div><button id="avreset" hidden>Avatar zurücksetzen</button><input type="file" id="avfile" accept="image/*" hidden></div><div>
 <div class="hrow"><div><h1 id="hname">Barbaren-Tracker</h1><div id="per"></div><div id="st"></div></div>
 <div class="bar"><select id="acc" hidden></select><button id="mainbtn" hidden></button><select id="range">
@@ -867,7 +870,7 @@ tr.flash td,details.flash{animation:fl 2.6s ease-out}
 <option value="30">Letzte 30 Tage</option><option value="month">Dieser Monat</option><option value="all">Alles</option>
 <option value="custom">Zeitraum wählen</option></select>
 <span id="cu" hidden><label>von <input type="date" id="d1"></label> <label>bis <input type="date" id="d2"></label></span>
-<button id="expand">Alle Berichte aufklappen</button><button id="collapse">zuklappen</button><button id="lang" title="Language / Sprache">English</button></div></div>
+<button id="expand">Alle Berichte aufklappen</button><button id="collapse">zuklappen</button></div></div>
 <div class="chips" id="hchips"></div></div></section>
 <div class="grid" id="kpi"></div>
 <p class="note" id="kpinote"></p>
@@ -1156,8 +1159,8 @@ if(LANG==='en'){
   mo.observe(document.body,MO)});
  const MO={subtree:true,childList:true,characterData:true,attributes:true,attributeFilter:ENATTR};
  enNode(document.body);mo.observe(document.body,MO)}
-$('lang').textContent=LANG==='en'?'Deutsch':'English';
-$('lang').onclick=()=>{try{localStorage.setItem('roklang',LANG==='en'?'de':'en')}catch(e){}location.reload()};
+$('lang').value=LANG;
+$('lang').onchange=()=>{try{localStorage.setItem('roklang',$('lang').value)}catch(e){}location.reload()};
 </script></body></html>"""
 
 def make_handler(db, watcher):
