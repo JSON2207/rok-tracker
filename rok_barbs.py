@@ -1456,8 +1456,10 @@ const EMO={speed_training:'⏩',speed_universal:'⏱️',speed_healing:'💊',wo
 const mi=x=>`<img class="mi" src="/icon/${IK.has(x.kind)?x.kind:'item_'+x.id}" alt="" onerror="icoFb(this,'${slug(x.name)}','${EMO[x.kind]||'🎁'}')">`;
 const chipsH=l=>l.length?l.slice().sort((a,b)=>(b.unk?1:0)-(a.unk?1:0)).slice(0,4).map(x=>`<span class="ch${x.unk?' unk':''}"${x.unk?` data-item="${x.id}" title="Noch nicht benannt. Klicken zum Benennen."`:''}>${mi(x)}${f(x.qty)}× ${esc(x.name)}${x.unk?' <b class="qm">?</b>':''}</span>`).join('')+(l.length>4?`<span class="ch">+${l.length-4} weitere</span>`:''):'keine Beute';
 const chips=l=>l.length?l.slice(0,3).map(x=>f(x.qty)+'× '+x.name).join(', ')+(l.length>3?` (+${l.length-3} weitere)`:''):'keine Beute';
-const ftTotal=(fl,un)=>{const m=new Map();fl.forEach(x=>(x.loot||[]).forEach(i=>{const k=i.id||i.name,o=m.get(k);if(o)o.qty+=i.qty;else m.set(k,Object.assign({},i,{total:null}))}));const l=[...m.values()].sort((a,b)=>b.qty-a.qty),n=l.reduce((a,x)=>a+x.qty,0);
- if(!l.length)return'';return`<details class="rep fttot" open><summary><b>Items insgesamt: ${f(n)}</b><span class="note">${f(l.length)} Arten · ${f(fl.length)} ${un||'Festungen'}</span></summary><div class="rb">${lootList(l)}</div></details>`};
+const ftTotal=(fl,un)=>{const m=new Map();fl.forEach(x=>(x.loot||[]).forEach(i=>{const k=i.id||i.name,o=m.get(k);if(o){o.qty+=i.qty;if(i.total!=null)o.total=(o.total||0)+i.total}else m.set(k,Object.assign({},i))}));const l=[...m.values()].sort((a,b)=>b.qty-a.qty),n=l.reduce((a,x)=>a+x.qty,0);
+ if(!l.length)return'';const sp={};l.forEach(x=>{if(/^speed_/.test(x.kind||'')&&x.total!=null)sp[x.kind]=(sp[x.kind]||0)+x.total});const SN={speed_training:'Training',speed_universal:'Universal',speed_healing:'Heilung'},sk=Object.keys(sp),st=sk.reduce((a,k)=>a+sp[k],0),dh=m=>{const d=Math.floor(m/1440),h=Math.floor(m%1440/60);return (d?d+' d ':'')+h+' h'};
+ const spl=sk.length?`<p class="spd"><b>Speedups: ${f(st)} Min</b> <span class="note">(${dh(st)})</span> ${sk.map(k=>`<span class="ch">${SN[k]} ${f(sp[k])} Min</span>`).join(' ')}</p>`:'';
+ return`<details class="rep fttot" open><summary><b>Items insgesamt: ${f(n)}</b><span class="note">${f(l.length)} Arten · ${f(fl.length)} ${un||'Festungen'}</span></summary><div class="rb">${spl}${lootList(l)}</div></details>`};
 const lootList=l=>l.length?`<ul class="ll">${l.map(x=>`<li${x.unk?` class="unk" data-item="${x.id}" title="Noch nicht benannt. Klicken zum Benennen."`:''}>${mi(x)}<b>${f(x.qty)}×</b> ${esc(x.name)}${x.total!=null&&x.total!==x.qty?` <span class="note">= ${f(x.total)}${SUF[x.kind]||''}</span>`:''}${x.unk?' <b class="qm">?</b><small>noch nicht benannt</small>':''}</li>`).join('')}</ul>`:'<p class="note">Keine Beute in diesem Bericht.</p>';
 const facts=a=>`<dl class="fa">${a.map(([k,v,c])=>`<div><dt>${k}</dt><dd class="${c||''}">${v}</dd></div>`).join('')}</dl>`;
 const rep=(k,head,body)=>`<details class="rep" data-k="${k}"${openRep.has(k)?' open':''}><summary>${head}</summary><div class="rb">${body}</div></details>`;
@@ -1824,6 +1826,7 @@ const EN=[
 [`Datei unvollständig`,`File incomplete`],
 [`Alle Einträge dieser Seite löschen und auf den Anfangszustand zurücksetzen?`,`Delete all entries on this page and reset to the initial state?`],[`Items insgesamt`,`Total items`],
 [`Arten`,`types`],
+[`Speedups:`,`Speedups:`],[`Heilung`,`Healing`],
 ];
 const ENM=new Map(EN.map(([a,b])=>[a,b]));
 const ENRE=new RegExp('(?<![\\p{L}\\p{N}])(?:'+EN.map(x=>x[0]).sort((a,b)=>b.length-a.length).map(s=>s.replace(/[.*+?^${}()|[\]\\]/g,'\\$&')).join('|')+')(?![\\p{L}\\p{N}])','giu');
