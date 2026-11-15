@@ -2,7 +2,7 @@
 """Starter fuer den RoK-Tracker: beendet eine schon laufende Version, holt die neueste rok_barbs.py und startet sie.
 Doppelklick genuegt, es oeffnet sich kein Konsolenfenster. Laeuft das Programm schon, wird es neu gestartet.
 Ohne Internet startet einfach die vorhandene Version. Lege diese Datei in denselben Ordner wie rok_barbs.py."""
-import hashlib, json, os, runpy, subprocess, sys, time, urllib.request
+import hashlib, json, os, runpy, subprocess, sys, threading, time, urllib.request
 
 # Ordner-URL, unter der die aktuelle Datei liegt (mit / am Ende)
 UPDATE_URL = "https://raw.githubusercontent.com/JSON2207/rok-tracker/main/"
@@ -94,9 +94,85 @@ def aktualisieren():
         except Exception as e:
             log("Update %s uebersprungen: %s" % (name, e))
 
+APP = os.path.join(HIER, "rok_barbs.py")
+
+def app_starten(fehler):
+    try:
+        sys.argv = [APP] + [x for x in sys.argv[1:]]
+        sys.path.insert(0, HIER)
+        runpy.run_path(APP, run_name="__main__")
+    except SystemExit:
+        pass
+    except BaseException as e:
+        fehler.append("%s: %s" % (type(e).__name__, e))
+        log("Start fehlgeschlagen: %s: %s" % (type(e).__name__, e))
+
+def mit_fenster(tk, ttk, messagebox):
+    """Kleines Fenster, das zeigt, was gerade passiert, und schliesst, sobald das Dashboard bereit ist."""
+    root = tk.Tk()
+    root.title("RoK-Tracker")
+    root.resizable(False, False)
+    w, h = 340, 100
+    root.geometry("%dx%d+%d+%d" % (w, h, (root.winfo_screenwidth() - w) // 2, (root.winfo_screenheight() - h) // 3))
+    try:
+        root.attributes("-topmost", True)
+    except Exception:
+        pass
+    text = tk.StringVar(value="Starte ...")
+    tk.Label(root, textvariable=text, font=("Segoe UI", 11)).pack(pady=(18, 10))
+    bar = ttk.Progressbar(root, mode="indeterminate", length=280)
+    bar.pack()
+    bar.start(12)
+    st, fehler, app = {"msg": "Starte ...", "fertig": False}, [], [None]
+
+    def arbeit():
+        try:
+            st["msg"] = "Beende laufende Version ..."
+            beenden()
+            st["msg"] = "Suche nach Updates ..."
+            aktualisieren()
+            st["msg"] = "Starte Programm ..."
+            t = threading.Thread(target=app_starten, args=(fehler,))
+            app[0] = t
+            t.start()
+            ende = time.time() + 90
+            while time.time() < ende and t.is_alive() and not laeuft():
+                time.sleep(0.3)
+            if laeuft():
+                st["msg"] = "Fertig. Das Dashboard oeffnet sich ..."
+                time.sleep(1.2)
+        except Exception as e:
+            fehler.append(repr(e))
+        st["fertig"] = True
+
+    def tick():
+        text.set(st["msg"])
+        if st["fertig"]:
+            root.destroy()
+        else:
+            root.after(150, tick)
+
+    threading.Thread(target=arbeit, daemon=True).start()
+    tick()
+    root.mainloop()
+    if fehler:
+        r = tk.Tk()
+        r.withdraw()
+        messagebox.showerror("RoK-Tracker", "Der Start ist fehlgeschlagen:\n\n" + "\n".join(fehler) +
+                             "\n\nWeitere Hinweise stehen in " + LOG)
+        r.destroy()
+    if app[0]:
+        app[0].join()
+
 if __name__ == "__main__":
-    beenden()
-    aktualisieren()
-    sys.argv = [os.path.join(HIER, "rok_barbs.py")] + sys.argv[1:]
-    sys.path.insert(0, HIER)
-    runpy.run_path(sys.argv[0], run_name="__main__")
+    try:
+        import tkinter as tk
+        from tkinter import ttk, messagebox
+    except Exception:
+        tk = None
+    if tk is None:                       # ohne tkinter: wie bisher, nur ohne Fenster
+        beenden()
+        aktualisieren()
+        app_starten([])
+    else:
+        mit_fenster(tk, ttk, messagebox)
