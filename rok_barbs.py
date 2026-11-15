@@ -760,7 +760,13 @@ class DB:
         rare.sort(key=lambda x: (x["last"], x["qty"]), reverse=True)
         me = self.q("SELECT name FROM profile WHERE 1=1" + ac + " ORDER BY day DESC LIMIT 1", aa)
         last = self.q("SELECT MAX(ts) t FROM reports WHERE 1=1" + ac, aa)
-        return dict(days=[per[d] for d in days], feed=feed[:14], rare=rare[:10], me=me[0]["name"] if me else "",
+        cs = self.chains(account)
+        def agg(f):
+            l = [c for c in cs if f(c["day"])]
+            sr = {c["sid"] for c in l}
+            return dict(chains=len(l), barbs=sum(c["n"] for c in l), series=len(sr), ap=sum(c["ap"] for c in l))
+        chain = dict(today=agg(lambda d: d == days[-1]), week=agg(lambda d: d >= days[-7]), all=agg(lambda d: True))
+        return dict(days=[per[d] for d in days], chain=chain, feed=feed[:14], rare=rare[:10], me=me[0]["name"] if me else "",
                     last=fmt(last[0]["t"]) if last and last[0]["t"] else "", today=days[-1])
 
     def alliance_ui(self):
@@ -1017,13 +1023,14 @@ body{transition:padding-left .18s ease,padding-right .18s ease}
 <div class="qch" id="qch" hidden></div><div class="qwl" id="qwl"></div></aside>
 <script>(function(){
 let LG='de';try{LG=localStorage.getItem('roklang')==='en'?'en':'de'}catch(e){}
-const TT={'Schnellzugriff':'Quick access','Widgets auswählen':'Choose widgets','Schließen':'Close','Live-Feed':'Live feed','Heute gegen gestern':'Today vs yesterday','Verlauf':'Trend','Seltene Drops':'Rare drops','Allianz':'Alliance','Letzte 7 Tage':'Last 7 days','Status':'Status','Festung':'Fort','Barbaren':'Barbarians','Speedups':'Speedups','Gems':'Gems','Tomes-XP':'Tome XP','Festungen':'Forts','heute':'today','gestern':'yesterday','Noch nichts da':'Nothing yet','Dein Ø Rang':'Your avg rank','Top 5 (Ø Rang)':'Top 5 (avg rank)','Rang':'Rank','von':'of','Dateien überwacht':'files watched','Letzter Bericht':'Last report','Vorwoche':'prev. week','7 Tage':'7 days','14 Tage':'14 days','Min':'min','Rally':'Rally','Solo':'Solo','Du bist in der Allianz-Liste nicht gefunden. Profil-Daten einlesen, damit dein Name bekannt ist.':'You were not found in the alliance list. Import profile data so your name is known.','Noch keine Allianz-Daten':'No alliance data yet'};
+const TT={'Schnellzugriff':'Quick access','Widgets auswählen':'Choose widgets','Schließen':'Close','Live-Feed':'Live feed','Chain-Länge':'Chain length','Ø Barbaren pro Chain':'Avg barbarians per chain','Chains/Serie':'chains/series','Gesamt':'Total','Heute gegen gestern':'Today vs yesterday','Verlauf':'Trend','Seltene Drops':'Rare drops','Allianz':'Alliance','Letzte 7 Tage':'Last 7 days','Status':'Status','Festung':'Fort','Barbaren':'Barbarians','Speedups':'Speedups','Gems':'Gems','Tomes-XP':'Tome XP','Festungen':'Forts','heute':'today','gestern':'yesterday','Noch nichts da':'Nothing yet','Dein Ø Rang':'Your avg rank','Top 5 (Ø Rang)':'Top 5 (avg rank)','Rang':'Rank','von':'of','Dateien überwacht':'files watched','Letzter Bericht':'Last report','Vorwoche':'prev. week','7 Tage':'7 days','14 Tage':'14 days','Min':'min','Rally':'Rally','Solo':'Solo','Du bist in der Allianz-Liste nicht gefunden. Profil-Daten einlesen, damit dein Name bekannt ist.':'You were not found in the alliance list. Import profile data so your name is known.','Noch keine Allianz-Daten':'No alliance data yet'};
 const t=s=>LG==='en'?(TT[s]||s):s,LOC=LG==='en'?'en-US':'de-DE',f=n=>Number(n||0).toLocaleString(LOC);
 const esc=s=>String(s==null?'':s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
 const $=id=>document.getElementById(id),B=document.body;
-const W=[['feed','Live-Feed'],['vs','Heute gegen gestern'],['trend','Verlauf'],['rare','Seltene Drops'],['ali','Allianz'],['week','Letzte 7 Tage'],['stat','Status']];
+const W=[['chain','Chain-Länge'],['feed','Live-Feed'],['vs','Heute gegen gestern'],['trend','Verlauf'],['rare','Seltene Drops'],['ali','Allianz'],['week','Letzte 7 Tage'],['stat','Status']];
 let S={on:W.map(w=>w[0]),open:window.innerWidth>=1500,m:'forts',n:14};
 try{const j=JSON.parse(localStorage.getItem('rokqp')||'null');if(j)S=Object.assign(S,j)}catch(e){}
+S.seen=S.seen||['feed','vs','trend','rare','ali','week','stat'];W.forEach(w=>{if(!S.seen.includes(w[0])){S.seen.push(w[0]);S.on.unshift(w[0])}});
 const save=()=>{try{localStorage.setItem('rokqp',JSON.stringify(S))}catch(e){}};
 let Q=null,AL=null,ST=null;
 const short=n=>{n=Number(n||0);return n>=1e6?(n/1e6).toFixed(2).replace(/\.?0+$/,'')+' M':n>=1e4?(n/1e3).toFixed(1).replace(/\.0$/,'')+' K':f(n)};
@@ -1043,7 +1050,10 @@ function wAli(){if(!AL||!AL.members||!AL.members.length)return`<div class="q0">$
  let h='';if(me){h+=`<div class="q0">${t('Dein Ø Rang')}</div><div class="qbig">${me.avg.toFixed(1)} <small class="q0">#${i+1} ${t('von')} ${ms.length}</small></div><div class="qa" style="margin:8px 0">${cats.map(c=>{const x=me.m.c[c.key];return`<span>${esc(c.label)}</span><b>${x&&x.r!=null?'#'+x.r:'–'}</b>`}).join('')}</div>`}else if(nm)h+=`<div class="q0" style="margin-bottom:8px">${t('Du bist in der Allianz-Liste nicht gefunden. Profil-Daten einlesen, damit dein Name bekannt ist.')}</div>`;
  h+=`<div class="q0" style="margin-bottom:4px">${t('Top 5 (Ø Rang)')}</div><div class="qa">${ms.slice(0,5).map((x,j)=>`<span>${j+1}. ${esc(x.m.name)}</span><b>${x.avg.toFixed(1)}</b>`).join('')}</div>`;return h}
 function wStat(){const s=ST||{};return`<div class="ql"><div><span>${t('Dateien überwacht')}</span><span>${f(s.files)}</span></div><div><span>${t('Letzter Bericht')}</span><span>${esc(Q.last||'–')}</span></div></div>`}
-const FN={feed:wFeed,vs:wVs,trend:wTrend,rare:wRare,ali:wAli,week:wWeek,stat:wStat};
+function wChain(){const c=Q.chain,r=x=>(Math.round(x*10)/10).toLocaleString(LOC),av=a=>a.chains?r(a.barbs/a.chains):'–',sr=a=>a.series?r(a.chains/a.series):'–';
+ const row=(l,a)=>`<span>${t(l)}</span><b>${av(a)} <small class="q0">${sr(a)} ${t('Chains/Serie')}</small></b>`;
+ return`<div class="q0">${t('Ø Barbaren pro Chain')}</div><div class="qbig">${av(c.week)} <small class="q0">${t('7 Tage')}</small></div><div class="qa" style="margin-top:8px">${row('heute',c.today)}${row('7 Tage',c.week)}${row('Gesamt',c.all)}</div>`}
+const FN={chain:wChain,feed:wFeed,vs:wVs,trend:wTrend,rare:wRare,ali:wAli,week:wWeek,stat:wStat};
 function draw(){if(!Q)return;$('qwl').innerHTML=W.filter(w=>S.on.includes(w[0])).map(w=>`<section class="qw" data-w="${w[0]}"><h4>${t(w[1])}</h4>${FN[w[0]]()}</section>`).join('')||`<div class="q0">${t('Widgets auswählen')} ⚙</div>`}
 function chips(){$('qch').innerHTML=W.map(w=>`<button type="button" data-w="${w[0]}" aria-pressed="${S.on.includes(w[0])}">${t(w[1])}</button>`).join('')}
 async function pull(){if(document.hidden)return;try{const need=S.on.includes('ali'),p=[fetch('/api/quick?account=main').then(r=>r.json()),need?fetch('/api/alliance').then(r=>r.json()):null,S.on.includes('stat')?fetch('/api/status').then(r=>r.json()):null];const r=await Promise.all(p);Q=r[0];AL=r[1]||AL;ST=r[2]||ST;draw()}catch(e){}}
