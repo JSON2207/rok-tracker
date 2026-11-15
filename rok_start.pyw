@@ -2,7 +2,7 @@
 """Starter fuer den RoK-Tracker: beendet eine schon laufende Version, holt die neueste rok_barbs.py und startet sie.
 Doppelklick genuegt, es oeffnet sich kein Konsolenfenster. Laeuft das Programm schon, wird es neu gestartet.
 Ohne Internet startet einfach die vorhandene Version. Lege diese Datei in denselben Ordner wie rok_barbs.py."""
-import hashlib, json, os, runpy, subprocess, sys, threading, time, urllib.request
+import hashlib, json, os, re, runpy, subprocess, sys, threading, time, urllib.request
 
 # Ordner-URL, unter der die aktuelle Datei liegt (mit / am Ende)
 UPDATE_URL = "https://raw.githubusercontent.com/JSON2207/rok-tracker/main/"
@@ -64,18 +64,37 @@ def beenden():
             log("Beenden ueber Port fehlgeschlagen: %s" % e)
         warten(4)
 
-def holen(name):
-    url = UPDATE_URL.rstrip("/") + "/" + name + "?t=" + str(int(time.time()))     # Zeitstempel gegen Zwischenspeicher
+def neueste_version():
+    """Fragt GitHub nach dem neuesten Stand (Commit). Diese Abfrage wird nicht zwischengespeichert, die Rohdateien schon (bis ca. 5 Min)."""
+    m = re.match(r"https://raw\.githubusercontent\.com/([^/]+)/([^/]+)/([^/]+)/?", UPDATE_URL)
+    if not m:
+        return None, None
+    try:
+        req = urllib.request.Request("https://api.github.com/repos/%s/%s/commits/%s" % m.groups(),
+                                     headers={"User-Agent": "rok-tracker-launcher", "Accept": "application/vnd.github.sha"})
+        with urllib.request.urlopen(req, timeout=6) as r:
+            sha = r.read().decode().strip()
+        if re.fullmatch(r"[0-9a-f]{40}", sha):
+            return sha, "https://raw.githubusercontent.com/%s/%s/%s/" % (m.group(1), m.group(2), sha)
+    except Exception as e:
+        log("Versionsabfrage fehlgeschlagen: %s" % e)
+    return None, None
+
+def holen(name, basis=None):
+    url = (basis or UPDATE_URL).rstrip("/") + "/" + name + "?t=" + str(int(time.time()))     # Zeitstempel gegen Zwischenspeicher
     req = urllib.request.Request(url, headers={"User-Agent": "rok-tracker-launcher", "Cache-Control": "no-cache"})
     with urllib.request.urlopen(req, timeout=6) as r:
         return r.read()
 
 def aktualisieren():
+    """Gibt einen kurzen Text zum Ergebnis zurueck (wird im Fenster angezeigt)."""
     if not UPDATE_URL:
-        return
+        return "Kein Update-Server eingetragen"
+    sha, basis = neueste_version()
+    geaendert = False
     for name in DATEIEN:
         try:
-            neu = holen(name)
+            neu = holen(name, basis)
             if len(neu) < 2000:
                 raise ValueError("Antwort zu kurz")
             compile(neu, name, "exec")                       # nur pruefen, nichts ausfuehren
@@ -90,9 +109,13 @@ def aktualisieren():
             with open(tmp, "wb") as f:
                 f.write(neu)
             os.replace(tmp, pfad)
-            log("aktualisiert: " + name)
+            log("aktualisiert: %s (%s)" % (name, sha[:7] if sha else "Zwischenspeicher"))
+            geaendert = True
         except Exception as e:
             log("Update %s uebersprungen: %s" % (name, e))
+    if sha is None:
+        return "GitHub nicht erreichbar, es kann noch die alte Version sein"
+    return ("Neue Version geladen (%s)" if geaendert else "Bereits aktuell (%s)") % sha[:7]
 
 APP = os.path.join(HIER, "rok_barbs.py")
 
@@ -130,7 +153,8 @@ def mit_fenster(tk, ttk, messagebox):
             st["msg"] = "Beende laufende Version ..."
             beenden()
             st["msg"] = "Suche nach Updates ..."
-            aktualisieren()
+            st["msg"] = aktualisieren()
+            time.sleep(1.5)
             st["msg"] = "Starte Programm ..."
             t = threading.Thread(target=app_starten, args=(fehler,))
             app[0] = t
