@@ -611,7 +611,8 @@ class DB:
 
     def add_alliance(self, snaps):
         """Allianz-Ranglisten (aus Screenshots abgelesen). Format: {"date": "...", "categories": {"power": [{"rank", "name", "value"}]}}.
-        Mehrere Dateien pro Tag werden zusammengefuehrt; derselbe Name am selben Tag wird ueberschrieben."""
+        Mehrere Dateien pro Tag werden zusammengefuehrt; derselbe Name am selben Tag wird ueberschrieben.
+        Mit "replace": true ersetzt die Datei die Liste dieses Tages je Kategorie komplett."""
         if isinstance(snaps, dict):
             snaps = snaps.get("snapshots", [snaps])
         valid = {k for k, _ in ALLIANCE_CATS}
@@ -623,6 +624,8 @@ class DB:
                 for cat, rows in (s.get("categories") or {}).items():
                     if cat not in valid:
                         raise ValueError("Unbekannte Kategorie: %s" % cat)
+                    if s.get("replace"):                        # vollstaendige Liste: Eintraege dieses Tages ersetzen
+                        self.c.execute("DELETE FROM alliance WHERE day=? AND cat=?", (day, cat))
                     for r in rows:
                         name = str(r["name"]).strip()
                         if not name:
