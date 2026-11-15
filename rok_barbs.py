@@ -238,6 +238,8 @@ class DB:
         CREATE TABLE IF NOT EXISTS samples(k TEXT PRIMARY KEY, js TEXT);
         CREATE TABLE IF NOT EXISTS settings(k TEXT PRIMARY KEY, v TEXT);
         CREATE TABLE IF NOT EXISTS profile(account TEXT, day TEXT, name TEXT, data TEXT, PRIMARY KEY(account, day));
+        CREATE TABLE IF NOT EXISTS profile_log(account TEXT, day TEXT, time TEXT, name TEXT, data TEXT, PRIMARY KEY(account, day, time));
+        INSERT OR IGNORE INTO profile_log SELECT account, day, '00:00', name, data FROM profile WHERE NOT EXISTS (SELECT 1 FROM profile_log l WHERE l.account=profile.account AND l.day=profile.day);
         CREATE TABLE IF NOT EXISTS alliance(day TEXT, cat TEXT, name TEXT, rank INT, value INT, PRIMARY KEY(day, cat, name));
         CREATE INDEX IF NOT EXISTS ix_b ON battles(day, account);
         CREATE INDEX IF NOT EXISTS ix_f ON forts(day, account);
@@ -608,19 +610,26 @@ class DB:
             self.c.commit()
 
     def add_profile(self, snaps):
-        """Profil-Momentaufnahmen (aus Screenshots abgelesen) speichern; mehrere Dateien pro Tag werden zusammengeführt."""
+        """Profil-Momentaufnahmen (aus Screenshots abgelesen). Jeder geaenderte Stand wird mit Uhrzeit protokolliert
+        (optionales Feld "time": "HH:MM", sonst jetzt); die Tabelle profile haelt den letzten Stand je Tag."""
         n = 0
         with self.lock:
             for s in snaps:
                 acc, day = str(s["account"]), str(s["date"])[:10]
                 datetime.strptime(day, "%Y-%m-%d")
-                data = {k: v for k, v in s.items() if k not in ("account", "date", "name")
+                tm = str(s.get("time") or datetime.now().strftime("%H:%M"))[:5]
+                datetime.strptime(tm, "%H:%M")
+                data = {k: v for k, v in s.items() if k not in ("account", "date", "name", "time")
                         and isinstance(v, (int, float)) and not isinstance(v, bool)}
-                old = self.c.execute("SELECT data, name FROM profile WHERE account=? AND day=?", (acc, day)).fetchone()
-                if old:
-                    merged = json.loads(old[0]); merged.update(data); data = merged
-                self.c.execute("INSERT OR REPLACE INTO profile VALUES(?,?,?,?)",
-                               (acc, day, str(s.get("name") or (old[1] if old else "")), json.dumps(data)))
+                base = self.c.execute("SELECT data FROM profile_log WHERE account=? AND day=? AND time<=? ORDER BY time DESC LIMIT 1",
+                                      (acc, day, tm)).fetchone()
+                if base:
+                    merged = json.loads(base[0]); merged.update(data); data = merged
+                old = self.c.execute("SELECT name FROM profile WHERE account=? AND day=?", (acc, day)).fetchone()
+                nm = str(s.get("name") or (old[0] if old else ""))
+                self.c.execute("INSERT OR REPLACE INTO profile_log VALUES(?,?,?,?,?)", (acc, day, tm, nm, json.dumps(data)))
+                lastd = self.c.execute("SELECT data, name FROM profile_log WHERE account=? AND day=? ORDER BY time DESC LIMIT 1", (acc, day)).fetchone()
+                self.c.execute("INSERT OR REPLACE INTO profile VALUES(?,?,?,?)", (acc, day, lastd[1], lastd[0]))
                 n += 1
             self.c.commit()
         return n
@@ -968,7 +977,7 @@ class DB:
         accs = [r["account"] for r in self.q("SELECT DISTINCT account FROM profile" + (" WHERE account=?" if account else ""),
                                               (account,) if account else ())]
         for acc in accs:
-            rows = self.q("SELECT day, name, data FROM profile WHERE account=? ORDER BY day", (acc,))
+            rows = self.q("SELECT day, time, name, data FROM profile_log WHERE account=? ORDER BY day, time", (acc,))
             for r in rows:
                 r["data"] = json.loads(r["data"])
             inr = [r for r in rows if d_from <= r["day"] <= d_to]
@@ -978,8 +987,12 @@ class DB:
             base = before[-1] if before else inr[0]
             last = inr[-1]
             delta = {k: last["data"][k] - base["data"][k] for k in last["data"] if k in base["data"]} if base is not last else {}
-            out.append(dict(account=acc, name=rows[-1]["name"], base_day=base["day"], last_day=last["day"], delta=delta,
-                            last=last["data"], rows=[dict(r["data"], day=r["day"]) for r in reversed(inr)]))
+            li = rows.index(last)
+            prev = rows[li - 1] if li > 0 else None
+            dprev = {k: last["data"][k] - prev["data"][k] for k in last["data"] if k in prev["data"]} if prev else {}
+            out.append(dict(account=acc, name=rows[-1]["name"], base_day=base["day"], last_day=last["day"], last_time=last["time"], delta=delta,
+                            prev_day=prev["day"] if prev else "", prev_time=prev["time"] if prev else "", dprev=dprev,
+                            last=last["data"], rows=[dict(r["data"], day=r["day"], time=r["time"]) for r in reversed(inr)]))
         return out
 
     def stats(self, d_from, d_to, account=""):
@@ -1252,6 +1265,7 @@ button:focus-visible,select:focus-visible,input:focus-visible,summary:focus-visi
 .chip b{display:block;font-size:1.15rem;font-variant-numeric:tabular-nums}.chip span{color:var(--mute);font-size:.82rem}.chip em{font-style:normal;font-weight:600;margin-left:4px}
 .chbox{margin-bottom:14px}.chin{display:flex;flex-wrap:wrap;gap:10px;margin:8px 0}.chin label{display:flex;flex-direction:column;gap:3px;font-size:.82rem;color:var(--mute)}.chin input{width:92px}.chr{cursor:pointer}.chin small{font-size:.72rem}
 .grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(214px,1fr));gap:12px;margin:12px 0}
+.pgbox{border:1px solid var(--line);border-radius:14px;padding:12px 14px;margin:10px 0;background:var(--card)}.pgh{display:flex;gap:10px;align-items:center;justify-content:space-between;margin-bottom:6px}.pgs{font:inherit;color:var(--ink);background:var(--soft);border:1px solid var(--line);border-radius:10px;padding:6px 10px;max-width:60%}.pgc svg{display:block;max-width:100%;height:auto}td small.good,td small.bad{font-size:.75rem}
 .k{border:1px dashed var(--dash);border-radius:14px;padding:12px 16px;background:rgba(127,127,127,.04)}
 .k b{display:block;font-size:1.55rem;line-height:1.2;font-variant-numeric:tabular-nums}.k span{display:block;color:var(--mute);font-size:.84rem}.k span.good{color:var(--good)}.k span.bad{color:var(--bad)}
 .kc{display:grid;grid-template-columns:auto 1fr;column-gap:12px;align-items:center}
@@ -1372,6 +1386,23 @@ const openRep=new Set();
 document.addEventListener('toggle',e=>{const d=e.target;if(d instanceof HTMLDetailsElement&&d.dataset.k)d.open?openRep.add(d.dataset.k):openRep.delete(d.dataset.k)},true);
 // Reiter
 let tab='loot';try{tab=localStorage.getItem('roktab')||'loot'}catch(e){}
+const tl=r=>dm(r.day)+(r.time&&r.time!=='00:00'?' '+r.time:'');
+const dcl=(k,d)=>d===0?'note':((d>0)!==(k==='dead'||k==='defeat'))?'good':'bad',dd=v=>(v>0?'+':'')+f(v);
+let PGK='power';try{PGK=localStorage.getItem('rokpgk')||'power'}catch(e){}
+function drawPg(){document.querySelectorAll('.pgc').forEach(el=>{const p=(window.PROF||[]).find(x=>x.account===el.dataset.a);if(!p)return;
+ const sel=el.parentNode.querySelector('.pgs');let k=sel.value;if(!sel.querySelector('option[value="'+k+'"]'))k=sel.value=sel.options[0].value;
+ const r=p.rows.filter(x=>x[k]!=null).slice().reverse(),en=LANG==='en';
+ if(r.length<2){el.innerHTML='<div class="note">'+(en?'At least two profile snapshots are needed for a chart.':'Für ein Diagramm braucht es mindestens zwei Profil-Stände.')+'</div>';return}
+ const W=720,H=260,L=64,R=16,T=16,B=34,v=r.map(x=>x[k]),lo0=Math.min(...v),hi0=Math.max(...v),pad=(hi0-lo0)*.12||Math.max(1,Math.abs(hi0)*.02),lo=lo0-pad,hi=hi0+pad,
+  t=r.map(x=>Date.parse(x.day+'T'+((x.time&&x.time!=='00:00')?x.time:'12:00'))),t0=t[0],t1=t[t.length-1],X=i=>L+(t1===t0?.5:(t[i]-t0)/(t1-t0))*(W-L-R),Y=y=>T+(1-(y-lo)/(hi-lo))*(H-T-B),
+  pts=r.map((x,i)=>X(i).toFixed(1)+','+Y(x[k]).toFixed(1)),sh=n=>Math.abs(n)>=1e9?(n/1e9).toFixed(2)+(en?' B':' Mrd'):Math.abs(n)>=1e6?(n/1e6).toFixed(2)+(en?' M':' Mio'):Math.abs(n)>=1e4?(n/1e3).toFixed(1)+(en?' K':' Tsd'):f(Math.round(n));
+ const grid=[0,1,2,3].map(i=>{const y=lo+(hi-lo)*i/3;return `<line x1="${L}" x2="${W-R}" y1="${Y(y).toFixed(1)}" y2="${Y(y).toFixed(1)}" stroke="var(--line)"/><text x="${L-8}" y="${(Y(y)+4).toFixed(1)}" text-anchor="end" font-size="11" fill="var(--mute)">${sh(y)}</text>`}).join('');
+ const seg=r.map((x,i)=>{if(!i)return'';const d=x[k]-r[i-1][k];return `<line x1="${X(i-1).toFixed(1)}" y1="${Y(r[i-1][k]).toFixed(1)}" x2="${X(i).toFixed(1)}" y2="${Y(x[k]).toFixed(1)}" stroke="var(${d===0?'--mute':dcl(k,d)==='good'?'--good':'--bad'},var(--acc))" stroke-width="3" stroke-linecap="round"/>`}).join('');
+ const dots=r.map((x,i)=>`<circle cx="${X(i).toFixed(1)}" cy="${Y(x[k]).toFixed(1)}" r="4.5" fill="var(--card)" stroke="var(--acc)" stroke-width="2.5"><title>${tl(x)}: ${f(x[k])}${i?' ('+dd(x[k]-r[i-1][k])+')':''}</title></circle>`).join('');
+ const xl=[0,r.length-1].map(i=>`<text x="${X(i).toFixed(1)}" y="${H-10}" text-anchor="${i?'end':'start'}" font-size="11" fill="var(--mute)">${tl(r[i])}</text>`).join('');
+ const last=r.length-1,tot=v[last]-v[0];
+ el.innerHTML=`<svg viewBox="0 0 ${W} ${H}" width="100%" role="img" aria-label="${esc(sel.selectedOptions[0].textContent)}">${grid}${seg}${dots}${xl}<text x="${X(last).toFixed(1)}" y="${(Y(v[last])-10).toFixed(1)}" text-anchor="end" font-size="12" font-weight="600" fill="var(--ink)">${f(v[last])}</text></svg><div class="note">${en?'Change since':'Veränderung seit'} ${tl(r[0])}: <b class="${dcl(k,tot)}">${dd(tot)}</b> · ${r.length} ${en?'snapshots':'Stände'}</div>`})}
+document.addEventListener('change',e=>{const b=e.target.closest&&e.target.closest('.pgs');if(!b)return;PGK=b.value;try{localStorage.setItem('rokpgk',PGK)}catch(x){}document.querySelectorAll('.pgs').forEach(o=>{if(o!==b)o.value=PGK});drawPg()});
 const HASHTAB={profil:'pf',loot:'loot',beute:'loot',forts:'ft',festungen:'ft',barbaren:'bt',pvp:'pv',aoo:'ao',tag:'dt',namen:'nm'};
 if(location.hash.toLowerCase()==='#namen')location.replace('/settings#namen');
 if(location.hash.length>1&&HASHTAB[location.hash.slice(1).toLowerCase()])tab=HASHTAB[location.hash.slice(1).toLowerCase()];
@@ -1553,14 +1584,16 @@ const pvList=l=>l.map(x=>{const so=x.role==='solo',t=x.totals;
  $('aosec').hidden=!s.aoo.length;$('c_ao').textContent=s.aoo.length||'';
  $('aokpi').innerHTML=po.n?kpi('Kämpfe',f(po.n))+kpi('Kill Points',f(po.kp_gained))+kpi('Kill Count (Gegner schwer verwundet)',f(po.enemy_severe))+kpi('Eigene schwer verwundet',f(po.own_severe),'bad')+kpi('Trade (schwer verwundet)',tr(po.enemy_severe,po.own_severe),trc(po.enemy_severe,po.own_severe)):'';
  $('ao').innerHTML=pvList(s.aoo);
- const PF=Object.fromEntries(s.profile_fields),dd=v=>(v>0?'+':'')+f(v);
+ const PF=Object.fromEntries(s.profile_fields);window.PROF=s.profile;
  const spark=(rows,k)=>{const r=rows.filter(x=>x[k]!=null).reverse();if(r.length<2)return'';const v=r.map(x=>x[k]),lo=Math.min(...v),hi=Math.max(...v),W=260,H=48,
    pts=r.map((x,i)=>(i/(r.length-1)*(W-8)+4).toFixed(1)+','+(H-6-(hi===lo?.5:(x[k]-lo)/(hi-lo))*(H-12)).toFixed(1)).join(' ');
    return `<svg viewBox="0 0 ${W} ${H}" width="100%" height="${H}" role="img" aria-label="Verlauf ${PF[k]||k}"><polygon points="4,${H} ${pts} ${W-4},${H}" fill="var(--accsoft)"/><polyline points="${pts}" fill="none" stroke="var(--acc)" stroke-width="2" stroke-linejoin="round"/></svg>`};
  $('pf').innerHTML=s.profile.map(p=>{const ks=s.profile_fields.map(x=>x[0]).filter(k=>p.last[k]!=null).concat(Object.keys(p.last).filter(k=>!PF[k]));
-   return `<h3>${esc(p.name||p.account)} <span class="note">ID ${p.account} · Stand ${dm(p.last_day)}${p.base_day!==p.last_day?' · Veränderung seit '+dm(p.base_day):''}</span></h3>
-   <div class="grid">${ks.map(k=>`<div class="k"><b>${f(p.last[k])}</b><span>${esc(PF[k]||k)}</span>${p.delta[k]!=null?`<span class="${p.delta[k]>=0?'good':'bad'}">${dd(p.delta[k])}</span>`:''}${spark(p.rows,k)}</div>`).join('')}</div>
-   <div class="wrap"><table><tr><th>Tag</th>${ks.map(k=>`<th>${esc(PF[k]||k)}</th>`).join('')}</tr>${p.rows.map(r=>`<tr><td>${dm(r.day)}</td>${ks.map(k=>`<td>${r[k]==null?'–':f(r[k])}</td>`).join('')}</tr>`).join('')}</table></div>`}).join('')||none('Noch keine Profil-Daten im gewählten Zeitraum. Schick mir einen Profil-Screenshot, ich erstelle dir die Datei zum Einfügen.');
+   return `<h3>${esc(p.name||p.account)} <span class="note">ID ${p.account} · Stand ${dm(p.last_day)}${p.last_time&&p.last_time!=='00:00'?' '+p.last_time:''}${p.prev_day?' · Veränderung seit '+dm(p.prev_day)+(p.prev_time&&p.prev_time!=='00:00'?' '+p.prev_time:''):''}</span></h3>
+   <div class="pgbox"><div class="pgh"><b>Verlauf</b><select class="pgs" data-a="${esc(p.account)}" aria-label="Verlauf">${ks.map(k=>`<option value="${k}"${k===PGK?' selected':''}>${esc(PF[k]||k)}</option>`).join('')}</select></div><div class="pgc" data-a="${esc(p.account)}"></div></div>
+   <div class="grid">${ks.map(k=>`<div class="k"><b>${f(p.last[k])}</b><span>${esc(PF[k]||k)}</span>${p.dprev&&p.dprev[k]!=null?`<span class="${dcl(k,p.dprev[k])}">${dd(p.dprev[k])}</span>`:''}${spark(p.rows,k)}</div>`).join('')}</div>
+   <div class="wrap"><table><tr><th>Tag</th>${ks.map(k=>`<th>${esc(PF[k]||k)}</th>`).join('')}</tr>${p.rows.map((r,i)=>{const o=p.rows[i+1];return `<tr><td>${tl(r)}</td>${ks.map(k=>{const d=o&&r[k]!=null&&o[k]!=null?r[k]-o[k]:null;return `<td>${r[k]==null?'–':f(r[k])}${d?` <small class="${dcl(k,d)}">${dd(d)}</small>`:''}</td>`}).join('')}</tr>`}).join('')}</table></div>`}).join('')||none('Noch keine Profil-Daten im gewählten Zeitraum. Schick mir einen Profil-Screenshot, ich erstelle dir die Datei zum Einfügen.');
+ drawPg();
  const compact=n=>n>=1e9?(n/1e9).toFixed(2)+(LANG==='en'?' B':' Mrd'):n>=1e6?(n/1e6).toFixed(2)+(LANG==='en'?' M':' Mio'):n>=1e4?(n/1e3).toFixed(1)+(LANG==='en'?' K':' Tsd'):f(n);
  const accSel=$('acc').value,pa=accSel?s.accounts.find(x=>x.account===accSel):(s.accounts.length===1?s.accounts[0]:null);
  const nm=pa?(pa.acc_name||pa.account):(s.accounts.length>1?'Alle Accounts':'Barbaren-Tracker');
@@ -1570,7 +1603,7 @@ const pvList=l=>l.map(x=>{const so=x.role==='solo',t=x.totals;
  else{$('hav').dataset.v='';$('hav').textContent=nm.normalize('NFKD').replace(/[^A-Za-z0-9]/g,'').slice(0,2).toUpperCase()||'⚔'}
  const pr=s.profile.find(x=>pa&&x.account===pa.account)||(s.profile.length===1&&!(s.accounts.length>1&&!pa)?s.profile[0]:null);
  $('hchips').innerHTML=pr?[['power','⚡','Macht'],['kill_points','⚔️','Kill Points'],['dead','💀','Tote'],['helps','🤝','Hilfen'],['gathered','🧺','Gesammelt']].filter(x=>pr.last[x[0]]!=null)
-   .map(x=>`<div class="chip"><b>${x[1]} ${compact(pr.last[x[0]])}</b><span>${x[2]}${pr.delta[x[0]]?`<em class="${pr.delta[x[0]]>=0?'good':'bad'}">${dd(pr.delta[x[0]])}</em>`:''}</span></div>`).join(''):'';
+   .map(x=>`<div class="chip"><b>${x[1]} ${compact(pr.last[x[0]])}</b><span>${x[2]}${pr.dprev&&pr.dprev[x[0]]?`<em class="${dcl(x[0],pr.dprev[x[0]])}">${dd(pr.dprev[x[0]])}</em>`:''}</span></div>`).join(''):'';
  showTab(tab);
  $('dt').innerHTML='<tr><th>Tag</th><th>Solo-Berichte</th><th>Rallys</th><th>Festungen</th><th>Barbaren (solo)</th><th>Größter Gegner</th><th>XP</th><th>Verwundet (solo)</th><th>Spielerkampf-Berichte</th></tr>'+
   s.days.filter(d=>d.day>=a&&d.day<=b).map(d=>`<tr><td>${dm(d.day)}</td><td>${f(d.solo)}</td><td>${f(d.rallies)}</td><td>${f(d.forts)}</td><td>${f(d.foes)}</td><td>${f(d.maxfoe)}</td><td>${f(d.xp)}</td><td>${f(d.hurt)}</td><td>${f(d.pvp)}</td></tr>`).join('')}
