@@ -1826,12 +1826,16 @@ ALLIANCE_PAGE = r"""<!doctype html><html lang="de"><head><meta charset="utf-8">
 .ah h1{margin:0}.ah .sub{color:var(--mute);font-size:.9rem;margin-top:2px}
 a.btn{font:inherit;color:var(--ink);background:var(--soft);border:1px solid var(--line);border-radius:10px;padding:7px 12px;text-decoration:none}a.btn:hover{border-color:var(--acc)}
 #achips{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:12px}.chip{font:inherit;font-size:.85rem;color:var(--ink);background:var(--soft);border:1px solid var(--line);border-radius:999px;padding:5px 12px;cursor:pointer}.chip[aria-pressed="false"]{color:var(--mute);text-decoration:line-through;background:transparent}.chip[aria-pressed="true"]{border-color:var(--acc)}
+.inact{border:1px solid var(--line);border-radius:16px;background:var(--card);padding:14px 16px;margin-bottom:14px}.inact h2{margin:0;font-size:1.05rem}.ih{display:flex;flex-wrap:wrap;gap:10px;justify-content:space-between;align-items:center}.ib{display:flex;gap:8px}.ilist{display:flex;flex-wrap:wrap;gap:8px;margin-top:10px}.ip{display:flex;gap:8px;align-items:center;border:1px solid var(--line);background:var(--soft);border-radius:12px;padding:6px 10px}.ip b{font-weight:600}.ip span{color:var(--mute);font-size:.85rem}.ip .x{font:inherit;border:0;background:transparent;color:var(--mute);cursor:pointer;padding:0 2px}.ip.hot span{color:#e5645a}#iform{display:flex;gap:8px;flex-wrap:wrap;margin-top:10px}#iform input{font:inherit;color:var(--ink);background:var(--soft);border:1px solid var(--line);border-radius:10px;padding:6px 10px}#idy{width:5.5em}
 #al th,#al td{padding:9px 12px}#al td.r{color:var(--mute);width:2.5em;text-align:right}#al td.n{text-align:left}
 </style></head><body><main>
 <button type="button" id="mbtn" class="mbtn" aria-label="Menü" aria-expanded="true" title="Menü">☰</button><aside id="sb" class="sb" aria-label="Menü"><div class="sbh"><span class="sbt">RoK&nbsp;Tracker</span><button type="button" id="sbx" class="mbtn" aria-label="Menü schließen" title="Menü schließen">⇤</button></div><nav class="sbn"><div class="sbl">Seiten</div><a href="/" data-p="/" data-k="loot"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l8 4v5c0 4.5-3.2 7.8-8 9-4.8-1.2-8-4.5-8-9V7z"/><path d="M9 12l2 2 4-4"/></svg><span>Loot-Tracker</span></a><a href="/allianz" data-p="/allianz" data-k="ali"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20V10M10 20V4M16 20v-8M22 20H2"/></svg><span>Allianz-Ranking</span></a><a href="/kvk1" data-p="/kvk1" data-k="kvk"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M14.5 17.5L3 6V3h3l11.5 11.5M13 19l6-6M16 16l4 4M19 21l2-2M14.5 6.5L18 3h3v3l-3.5 3.5M5 14l4 4M7 17l-3 3M3 19l2 2"/></svg><span>KVK1</span></a><a href="/kvk2" data-p="/kvk2" data-k="kvk2"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3a14 14 0 0 1 0 18M12 3a14 14 0 0 0 0 18"/></svg><span>KVK2</span></a><a href="/woche" data-p="/woche" data-k="wb"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="17" rx="2"/><path d="M3 9h18M8 2v4M16 2v4M8 14h3M13 14h3M8 17h3"/></svg><span>Wochenbericht</span></a><a href="/kalender" data-p="/kalender" data-k="kal"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg><span>Event-Kalender</span></a><a href="/settings" data-p="/settings" data-k="set"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.9l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.9-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1-1.5 1.7 1.7 0 0 0-1.9.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.9 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1 1.7 1.7 0 0 0-.3-1.9l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.9.3h0a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5h0a1.7 1.7 0 0 0 1.9-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.9v0a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg><span>Einstellungen</span><b class="sbb" id="sbbadge" hidden></b></a><div class="sbdiv" data-k="d1"></div><div class="sbdiv" data-k="d2"></div><div class="sbstat" data-k="prof"><div class="sbgh0">Profil</div><a href="/#profil"><span>Profil</span></a><a href="/#tag"><span>Pro Tag</span></a></div></nav></aside><div id="sbov" class="sbov"></div><script>try{var th=localStorage.getItem("roktheme");if(th)document.documentElement.dataset.theme=th}catch(e){}window.sbOrd=function(){var A=["loot","ali","kvk","kvk2","wb","kal"],o=A.slice();try{var v=JSON.parse(localStorage.getItem("roksbo")||"null");if(v&&v.length){v=v.filter(function(x){return A.indexOf(x)>=0});o=v.concat(A.filter(function(x){return v.indexOf(x)<0}))}}catch(e){}var m={d1:6,prof:7,d2:8,set:9};o.forEach(function(k,i){m[k]=i});document.querySelectorAll("#sb [data-k]").forEach(function(e){e.style.order=m[e.dataset.k]})};sbOrd();window.sbUnk=function(){fetch("/api/unk").then(r=>r.json()).then(u=>{var b=document.getElementById("sbbadge");b.textContent=u.n;b.hidden=!u.n;try{var R=JSON.parse(localStorage.getItem("rokrem")||"{}"),el=document.getElementById("sbrem"),hr=(u.now-u.last)/3600;if(R.on&&u.last&&hr>=(R.h||12)&&localStorage.getItem("rokremx")!=String(u.last)){if(!el){el=document.createElement("div");el.id="sbrem";el.style.cssText="position:fixed;top:12px;left:50%;transform:translateX(-50%);z-index:80;padding:9px 14px;border-radius:12px;background:var(--card);color:var(--ink);border:1px solid var(--warn);box-shadow:0 6px 24px rgba(0,0,0,.25);font-size:.9rem;display:flex;gap:10px;align-items:center";document.body.appendChild(el)}el.innerHTML="<span>⏰ Seit "+(hr<48?Math.floor(hr)+" Std":Math.floor(hr/24)+" Tagen")+" keine neuen Berichte.</span>";var x=document.createElement("button");x.textContent="Ausblenden";x.onclick=function(){try{localStorage.setItem("rokremx",String(u.last))}catch(e){}el.remove()};el.appendChild(x)}else if(el)el.remove()}catch(e){}}).catch(function(){})};sbUnk();setInterval(sbUnk,30000)</script><script>(function(){const b=document.getElementById("mbtn"),x=document.getElementById("sbx"),ov=document.getElementById("sbov"),n=document.getElementById("sb"),R=document.documentElement,B=document.body;n.querySelectorAll("a[data-p]").forEach(a=>{if(a.dataset.p===(location.pathname.replace(/\/+$/,"")||"/"))a.className="cur"});let V={w:"1600",a:"c"},O=window.innerWidth>=1100;try{V=Object.assign(V,JSON.parse(localStorage.getItem("rokview")||"{}"));const o=localStorage.getItem("roksb");if(o!==null)O=o==="1"}catch(e){}const ap=()=>{R.style.setProperty("--mw",V.w==="100%"?"100%":V.w+"px");R.style.setProperty("--ml",V.a==="l"?"0":"auto");R.style.setProperty("--mr",V.a==="r"?"0":"auto");document.querySelectorAll("#mw button").forEach(y=>y.classList.toggle("on",y.dataset.v===V.w));document.querySelectorAll("#ma button").forEach(y=>y.classList.toggle("on",y.dataset.v===V.a))};const so=v=>{O=v;B.classList.toggle("sbopen",O);b.setAttribute("aria-expanded",O);try{localStorage.setItem("roksb",O?"1":"0")}catch(e){}};document.addEventListener("DOMContentLoaded",ap);
 document.addEventListener("click",e=>{const y=e.target.closest(".seg button");if(!y||!y.parentNode.id.match(/^m[wa]$/))return;if(y.parentNode.id==="mw")V.w=y.dataset.v;else V.a=y.dataset.v;try{localStorage.setItem("rokview",JSON.stringify(V))}catch(e){}ap()});ap();B.classList.toggle("sbopen",O);b.onclick=()=>so(!O);x.onclick=()=>so(false);ov.onclick=()=>so(false);document.addEventListener("keydown",e=>{if(e.key==="Escape"&&window.innerWidth<1100)so(false)})})()</script>@@QP@@
 <section class="ah"><div><h1>Allianz-Tracker</h1><div class="sub" id="asub">Member-Rangliste</div></div>
 <div class="bar"><a class="btn" id="aexp" href="/allianz/export?lang=de" title="Speichert die Rangliste als eigenständige Datei, die du weitergeben kannst">Als HTML exportieren</a><button id="abtn">Allianz-Daten einfügen …</button><input type="file" id="afile" accept=".json" multiple hidden></div></section>
+<section class="inact" id="inact"><div class="ih"><div><h2 id="ihT"></h2><div class="note" id="ihS"></div></div><div class="ib"><button type="button" id="iadd"></button><button type="button" id="iclr"></button></div></div>
+<form id="iform" hidden><input id="inm" maxlength="40" required><input id="idy" type="number" min="3" max="999" value="4"><button type="submit" id="iok"></button></form>
+<div id="ilist" class="ilist"></div></section>
 <div class="pane" style="margin-top:0"><div class="chips" id="achips" role="group" aria-label="Kategorien im Durchschnitt"></div><div class="nmbar"><input id="asearch" type="search" placeholder="Mitglied suchen …"> <span class="note" id="ainfo"></span> <span class="note" id="amsg"></span></div>
 <div class="wrap"><table id="al"></table></div>
 <p class="note">Klick auf eine Spaltenüberschrift sortiert die Liste. Grün und rot zeigen die Veränderung seit dem vorherigen Stand. Ranglisten ohne Resource Assistance und Armory Contributions.</p>
@@ -1843,8 +1847,19 @@ const esc=s=>String(s==null?'':s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;',
 const MON=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
 const dm=d=>LANG==='en'?(p=>p.length===3?+p[2]+' '+MON[+p[1]-1]+' '+p[0]:d)(d.split('-')):d.split('-').reverse().join('.');
 function saveUi(){if(!lastAl)return;fetch('/api/alliance_ui',{method:'POST',body:JSON.stringify({order:lastAl.cats.map(c=>c.key),off:lastAl.cats.map(c=>c.key).filter(k=>!alOn.has(k)),sort:alSort,dir:alDir})}).catch(()=>{})}
+const LL=(d,e)=>LANG==='en'?e:d;let INA={asof:'',members:[]};
+function inRender(){const m=INA.members,n=(lastAl&&lastAl.members||[]).length;$('ihT').textContent=LL('Inaktivitätsbericht','Inactivity Report');
+ $('ihS').textContent=(INA.asof?(LL('Stand ','As of ')+INA.asof+' · '):'')+LL('Mitglieder, die seit mehr als drei Tagen nicht online waren','Members who have not logged in for more than three days')+' · '+m.length+(n?' / '+n+' ('+Math.round(m.length*100/n)+' %)':'');
+ $('iadd').textContent=LL('Hinzufügen','Add');$('iclr').textContent=LL('Leeren','Clear');$('iok').textContent=LL('Speichern','Save');$('inm').placeholder=LL('Name','Name');$('idy').title=LL('Tage offline','Days offline');
+ $('ilist').innerHTML=m.length?m.slice().sort((a,b)=>b.days-a.days).map((x,i)=>'<div class="ip'+(x.days>=7?' hot':'')+'"><b>'+esc(x.name)+'</b><span>'+(LANG==='en'?x.days+' days ago':'vor '+x.days+' Tagen')+'</span><button type="button" class="x" data-n="'+esc(x.name)+'" title="'+LL('Entfernen','Remove')+'">×</button></div>').join(''):'<span class="note">'+LL('Niemand inaktiv.','Nobody inactive.')+'</span>'}
+function inSave(){INA.asof=new Date().toLocaleString('sv').slice(0,16).replace('T',' ');return fetch('/api/inactive',{method:'POST',body:JSON.stringify(INA)}).then(r=>r.json()).then(r=>{if(r.ok)INA=r.data;inRender()}).catch(()=>{})}
+$('iadd').onclick=()=>{const f=$('iform');f.hidden=!f.hidden;if(!f.hidden)$('inm').focus()};
+$('iclr').onclick=()=>{INA.members=[];inSave()};
+$('iform').onsubmit=e=>{e.preventDefault();const n=$('inm').value.trim(),d=Math.max(3,+$('idy').value||4);if(!n)return;INA.members=INA.members.filter(x=>x.name!==n).concat([{name:n,days:d}]);$('inm').value='';inSave()};
+$('ilist').onclick=e=>{const b=e.target.closest('.x');if(!b)return;INA.members=INA.members.filter(x=>x.name!==b.dataset.n);inSave()};
+fetch('/api/inactive').then(r=>r.json()).then(d=>{INA=d;inRender()}).catch(()=>{});
 let lastAl=null,lastSig='',alSort='power',alDir=-1,alQ='',alOn=null;const alOpen=new Set();
-function renderAlliance(a){lastAl=a;if(!a)return;const cats=a.cats,ms=a.members;
+function renderAlliance(a){lastAl=a;if(!a)return;try{inRender()}catch(e){}const cats=a.cats,ms=a.members;
  const newest=Object.values(a.latest||{}).sort().pop();
  $('asub').textContent=newest?'Member-Rangliste · Stand '+dm(newest):'Member-Rangliste';
  const AV=[['avg_all','Ø Rang',[]]];
@@ -2342,6 +2357,30 @@ def kvk2_clean(d):
             "teams": {"n": n, "assign": assign}}
 
 
+INACT_DEFAULT = {"asof": "2026-11-15 17:21", "members": [{"name": "\u02e2\u02b0Nikemo", "days": 4}]}
+
+
+def inact_clean(d):
+    out = []
+    for m in (d.get("members") if isinstance(d, dict) else None) or []:
+        try:
+            nm = str(m.get("name", "")).strip()[:40]
+            dy = max(3, min(999, int(m.get("days", 4))))
+        except Exception:
+            continue
+        if nm:
+            out.append({"name": nm, "days": dy})
+    return {"asof": str((d or {}).get("asof", ""))[:20], "members": out}
+
+
+def inact_load(db):
+    try:
+        raw = db.get_setting("inactive", "")
+        return inact_clean(json.loads(raw)) if raw else INACT_DEFAULT
+    except Exception:
+        return INACT_DEFAULT
+
+
 def kvk2_load(db):
     """Gespeicherte Daten; leere Eintraege der vorbelegten Kingdoms werden aus dem Screenshot-Stand gefuellt."""
     try:
@@ -2502,6 +2541,8 @@ def make_handler(db, watcher):
                 self.send(CAL_PAGE, "text/html")
             elif u.path in ("/kvk2", "/kvk2/"):
                 self.send(KVK2_PAGE, "text/html")
+            elif u.path == "/api/inactive":
+                self.send(json.dumps(inact_load(db)), "application/json")
             elif u.path == "/api/kvk2":
                 self.send(json.dumps(kvk2_load(db)), "application/json")
             elif u.path in ("/kvk1", "/kvk1/"):
@@ -2637,6 +2678,15 @@ def make_handler(db, watcher):
                         raise ValueError("Datei zu gross")
                     db.restore_bytes(self.rfile.read(n))
                     self.send(json.dumps({"ok": True}), "application/json")
+                except Exception as e:
+                    self.send(json.dumps({"ok": False, "error": str(e)}), "application/json")
+                return
+            if path == "/api/inactive":
+                try:
+                    n = int(self.headers.get("Content-Length", 0))
+                    d = inact_clean(json.loads(self.rfile.read(min(n, 50000))))
+                    db.set_setting("inactive", json.dumps(d))
+                    self.send(json.dumps({"ok": True, "data": d}), "application/json")
                 except Exception as e:
                     self.send(json.dumps({"ok": False, "error": str(e)}), "application/json")
                 return
