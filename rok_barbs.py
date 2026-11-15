@@ -1141,6 +1141,8 @@ const EN=[
 [`Dieser Monat`,`This month`],[`Alles`,`All time`],[`Zeitraum wählen`,`Custom range`],[`von`,`from`],[`bis`,`to`],[`und`,`and`],
 [`Allianz-Tracker`,`Alliance Tracker`],[`Zum Loot-Tracker`,`Back to loot tracker`],[`Member-Rangliste`,`Member ranking`],[`Mitglieder`,`members`],
 [`Klick auf eine Spaltenüberschrift sortiert die Liste. Grün und rot zeigen die Veränderung seit dem vorherigen Stand. Ranglisten ohne Resource Assistance und Armory Contributions.`,`Click a column header to sort the list. Green and red show the change since the previous snapshot. Rankings without Resource Assistance and Armory Contributions.`],
+[`Ø Rang`,`Avg rank`],[`Ø ohne Builder`,`Avg w/o Builder`],[`Ø ohne Builder + Scientist`,`Avg w/o Builder + Scientist`],[`Durchschnitt aller Plätze, niedriger ist besser`,`Average of all ranks, lower is better`],[`Durchschnitt ohne Master Builder, niedriger ist besser`,`Average without Master Builder, lower is better`],[`Durchschnitt ohne Master Builder und Mad Scientist, niedriger ist besser`,`Average without Master Builder and Mad Scientist, lower is better`],
+[`Ø Rang ist der Durchschnitt der Plätze in den Kategorien. Ø ohne Builder lässt Master Builder weg, Ø ohne Builder + Scientist lässt zusätzlich Mad Scientist weg. Niedriger ist besser. Die Zahl dahinter ist der Platz in dieser Durchschnittswertung.`,`Avg rank is the average of the ranks across the categories. Avg w/o Builder leaves out Master Builder, Avg w/o Builder + Scientist also leaves out Mad Scientist. Lower is better. The number after it is the position in that average ranking.`],
 [`Allianz-Daten einfügen …`,`Import alliance data …`],[`Mitglied suchen …`,`Search member …`],[`Allianz`,`Alliance`],
 [`Ranglisten deiner Allianz aus Screenshots (ohne Resource Assistance und Armory Contributions). Die Datei, die ich dir schicke, fügst du hier ein. Frühere Stände bleiben gespeichert, so siehst du, wer wie viel dazugewonnen hat.`,`Rankings of your alliance from screenshots (without Resource Assistance and Armory Contributions). Import the file I send you here. Earlier snapshots are kept, so you can see who gained how much.`],
 [`Noch keine Allianz-Daten. Schick mir Screenshots der Ranglisten, ich erstelle dir die Datei zum Einfügen.`,`No alliance data yet. Send me screenshots of the rankings and I will create the file to import.`],
@@ -1215,7 +1217,7 @@ function enCase(m){let e=ENM.get(m);if(e!=null)return e;const a=m[0],up=a===a.to
 function enText(s){if(!/[A-Za-zÄÖÜäöüß]|\d\.\d{2}\./.test(s))return s;for(const [r,v] of DYN)s=s.replace(r,v);return s.replace(ENRE,enCase)}
 const ENATTR=['title','placeholder','data-tip','aria-label'];
 function enNode(n){
- if(n.nodeType===3){const v=enText(n.nodeValue);if(v!==n.nodeValue)n.nodeValue=v;return}
+ if(n.nodeType===3){if(n.parentNode&&n.parentNode.closest&&n.parentNode.closest('.nm'))return;const v=enText(n.nodeValue);if(v!==n.nodeValue)n.nodeValue=v;return}
  if(n.nodeType!==1||n.tagName==='SCRIPT'||n.tagName==='STYLE')return;
  if(n.tagName==='INPUT'&&n.classList.contains('n')&&!n.dataset.en){n.dataset.en=1;n.value=enText(n.value)}
  for(const a of ENATTR){const v=n.getAttribute(a);if(v){const w=enText(v);if(w!==v)n.setAttribute(a,w)}}
@@ -1247,7 +1249,8 @@ a.btn{font:inherit;color:var(--ink);background:var(--soft);border:1px solid var(
 <div class="bar"><a class="btn" href="/">Zum Loot-Tracker</a><button id="abtn">Allianz-Daten einfügen …</button><input type="file" id="afile" accept=".json" multiple hidden></div></section>
 <div class="pane" style="margin-top:0"><div class="nmbar"><input id="asearch" type="search" placeholder="Mitglied suchen …"> <span class="note" id="ainfo"></span> <span class="note" id="amsg"></span></div>
 <div class="wrap"><table id="al"></table></div>
-<p class="note">Klick auf eine Spaltenüberschrift sortiert die Liste. Grün und rot zeigen die Veränderung seit dem vorherigen Stand. Ranglisten ohne Resource Assistance und Armory Contributions.</p></div>
+<p class="note">Klick auf eine Spaltenüberschrift sortiert die Liste. Grün und rot zeigen die Veränderung seit dem vorherigen Stand. Ranglisten ohne Resource Assistance und Armory Contributions.</p>
+<p class="note">Ø Rang ist der Durchschnitt der Plätze in den Kategorien. Ø ohne Builder lässt Master Builder weg, Ø ohne Builder + Scientist lässt zusätzlich Mad Scientist weg. Niedriger ist besser. Die Zahl dahinter ist der Platz in dieser Durchschnittswertung.</p></div>
 </main><script>
 let LANG='de';try{LANG=localStorage.getItem('roklang')==='en'?'en':'de'}catch(e){}
 const LOC=LANG==='en'?'en-US':'de-DE',$=id=>document.getElementById(id),f=n=>Number(n).toLocaleString(LOC);
@@ -1258,20 +1261,25 @@ let lastAl=null,lastSig='',alSort='power',alDir=-1,alQ='';const alOpen=new Set()
 function renderAlliance(a){lastAl=a;if(!a)return;const cats=a.cats,ms=a.members;
  const newest=Object.values(a.latest||{}).sort().pop();
  $('asub').textContent=newest?'Member-Rangliste · Stand '+dm(newest):'Member-Rangliste';
- const q=alQ.trim().toLowerCase(),val=(m,k)=>{const x=m.c[k];return x&&x.v!=null?x.v:null};
+ const AV=[['avg_all','Ø Rang',[]],['avg_nb','Ø ohne Builder',['build']],['avg_nbt','Ø ohne Builder + Scientist',['build','tech']]];
+  const avg=(m,ex)=>{const r=cats.filter(c=>!ex.includes(c.key)).map(c=>m.c[c.key]&&m.c[c.key].r).filter(v=>v!=null);return r.length?r.reduce((x,y)=>x+y,0)/r.length:null};
+  ms.forEach(m=>{m.a={};AV.forEach(([k,,ex])=>m.a[k]=avg(m,ex))});
+  ms.forEach(m=>m.ap={});AV.forEach(([k])=>{const o=ms.filter(m=>m.a[k]!=null).map(m=>m.a[k]).sort((x,y)=>x-y);ms.forEach(m=>{m.ap[k]=m.a[k]==null?null:o.indexOf(m.a[k])+1})});
+  const q=alQ.trim().toLowerCase(),val=(m,k)=>{if(k.startsWith('avg_'))return m.a[k];const x=m.c[k];return x&&x.v!=null?x.v:null};
+  const acell=(m,k)=>m.a[k]==null?'<td>–</td>':`<td>${m.a[k].toFixed(1).replace('.',LANG==='en'?'.':',')}<span class="rk">#${m.ap[k]}</span></td>`;
  const rows=ms.filter(m=>!q||m.name.toLowerCase().includes(q));
  rows.sort((x,y)=>{const a1=val(x,alSort),b1=val(y,alSort);if(a1==null&&b1==null)return x.name.localeCompare(y.name);if(a1==null)return 1;if(b1==null)return -1;return (a1-b1)*alDir||x.name.localeCompare(y.name)});
  const dl=x=>x&&x.d!=null&&x.d!==0?`<span class="dl ${x.d>0?'good':'bad'}">${(x.d>0?'+':'')+f(x.d)}</span>`:'';
  const cell=(m,k)=>{const x=m.c[k];if(!x)return '<td>–</td>';if(x.v==null&&x.seen)return `<td class="note" title="Nicht mehr in der Liste, zuletzt gesehen ${dm(x.seen)}">–</td>`;
   return `<td>${x.v==null?'–':f(x.v)}${x.r!=null?`<span class="rk">#${x.r}</span>`:''}${dl(x)}</td>`};
- const hist=m=>`<tr class="det"><td colspan="${cats.length+2}"><div class="hist">${cats.filter(c=>m.h[c.key]).map(c=>{const h=m.h[c.key].slice().reverse();
+ const hist=m=>`<tr class="det"><td colspan="${cats.length+5}"><div class="hist">${cats.filter(c=>m.h[c.key]).map(c=>{const h=m.h[c.key].slice().reverse();
    return `<div><h3>${c.label}</h3><table><tr><th>Tag</th><th>Wert</th><th>Rang</th><th>Veränderung</th></tr>${h.map((r,i)=>{const p=h[i+1],d=p&&p[1]!=null&&r[1]!=null?r[1]-p[1]:null;
      return `<tr><td>${dm(r[0])}</td><td>${r[1]==null?'–':f(r[1])}</td><td>${r[2]==null?'–':'#'+r[2]}</td><td class="${d>0?'good':d<0?'bad':''}">${d==null?'–':(d>0?'+':'')+f(d)}</td></tr>`}).join('')}</table></div>`}).join('')}</div></td></tr>`;
- $('al').innerHTML=ms.length?`<tr><th class="t">#</th><th class="t">Name</th>${cats.map(c=>`<th data-k="${c.key}" class="${alSort===c.key?'on':''}">${c.label}${alSort===c.key?(alDir<0?' ▼':' ▲'):''}</th>`).join('')}</tr>`+
-  rows.map((m,i)=>`<tr class="m" data-n="${esc(m.name)}"><td class="r">${i+1}</td><td class="n">${alOpen.has(m.name)?'▾':'▸'} ${esc(m.name)}</td>${cats.map(c=>cell(m,c.key)).join('')}</tr>${alOpen.has(m.name)?hist(m):''}`).join(''):
+ $('al').innerHTML=ms.length?`<tr><th class="t">#</th><th class="t">Name</th>${cats.map(c=>`<th data-k="${c.key}" class="${alSort===c.key?'on':''}">${c.label}${alSort===c.key?(alDir<0?' ▼':' ▲'):''}</th>`).join('')}${AV.map(([k,l])=>`<th data-k="${k}" class="${alSort===k?'on':''}" title="${k==='avg_all'?'Durchschnitt aller Plätze':k==='avg_nb'?'Durchschnitt ohne Master Builder':'Durchschnitt ohne Master Builder und Mad Scientist'}, niedriger ist besser">${l}${alSort===k?(alDir<0?' ▼':' ▲'):''}</th>`).join('')}</tr>`+
+  rows.map((m,i)=>`<tr class="m" data-n="${esc(m.name)}"><td class="r">${i+1}</td><td class="n nm">${alOpen.has(m.name)?'▾':'▸'} ${esc(m.name)}</td>${cats.map(c=>cell(m,c.key)).join('')}${AV.map(([k])=>acell(m,k)).join('')}</tr>${alOpen.has(m.name)?hist(m):''}`).join(''):
   '<tr><td class="note">Noch keine Allianz-Daten. Schick mir Screenshots der Ranglisten, ich erstelle dir die Datei zum Einfügen.</td></tr>';
  $('ainfo').textContent=ms.length?`${rows.length} / ${ms.length} Mitglieder`:''}
-$('al').addEventListener('click',e=>{const th=e.target.closest('th[data-k]');if(th){if(alSort===th.dataset.k)alDir=-alDir;else{alSort=th.dataset.k;alDir=-1}return renderAlliance(lastAl)}
+$('al').addEventListener('click',e=>{const th=e.target.closest('th[data-k]');if(th){if(alSort===th.dataset.k)alDir=-alDir;else{alSort=th.dataset.k;alDir=alSort.startsWith('avg_')?1:-1}return renderAlliance(lastAl)}
  const tr=e.target.closest('tr.m');if(tr){const n=tr.dataset.n;alOpen.has(n)?alOpen.delete(n):alOpen.add(n);renderAlliance(lastAl)}});
 $('asearch').oninput=()=>{alQ=$('asearch').value;renderAlliance(lastAl)};
 $('abtn').onclick=()=>$('afile').click();
