@@ -195,10 +195,13 @@ def aktualisieren(melden=lambda t: None):
 
 def launcher_neu_starten():
     """Startet den (soeben aktualisierten) Launcher neu und beendet diesen."""
-    if os.environ.get("ROK_RELAUNCHED"):
-        return False
+    try:                                                     # Schutz gegen Endlosschleife: nur kurz nach einem Neustart
+        if time.time() - float(os.environ.get("ROK_RELAUNCHED", "0")) < 30:
+            return False
+    except ValueError:
+        pass
     try:
-        env = dict(os.environ, ROK_RELAUNCHED="1")
+        env = dict(os.environ, ROK_RELAUNCHED=str(time.time()))
         subprocess.Popen([python_exe(), os.path.abspath(__file__)] + ARGS, cwd=HIER, env=env, close_fds=True,
                          creationflags=(0x00000008 | 0x00000200) if os.name == "nt" else 0)
         return True
