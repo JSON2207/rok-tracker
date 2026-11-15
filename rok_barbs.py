@@ -1738,7 +1738,6 @@ const dm=d=>d;
 let K=null;
 function tr(v){return v==null?'<span class="tg2">–</span>':`<span class="tg2 ${v>=100?'g':v>=60?'w':'r'}">${v} %</span>`}
 function draw(){const d=K,s=d.season,p=d.player,r=d.rating,n=d.dna,t=d.tiles;
- const rows=g=>g.rows.map(x=>`<tr class="${x.name===p.name?'me':''}"><td>${x.rank}</td><td class="t"><b>${esc(x.name)}</b></td><td>${esc(x.power)} <small class="${String(x.pd).startsWith('-')?'bad':'good'}">${esc(x.pd)}</small><br><small class="note">Basis ${esc(x.base)}</small></td><td><b>${esc(x.dkp)}</b> <small class="note">/ ${esc(x.goal)}</small><div class="pbar"><i style="width:${Math.min(100,x.pct)}%"></i><span>${x.pct} % erreicht</span></div></td><td>${esc(x.t4)}</td><td>${esc(x.t5)}</td><td>${esc(x.kp)}</td><td>${esc(x.dead)}</td><td>${esc(x.kploss)}</td><td>${tr(x.trade)}</td><td>${esc(x.honor)}</td></tr>`).join('');
  const kmax=Math.max(...d.kills.tiers.map(x=>x[1])),kt=d.kills.tiers.map(x=>`<div><b>${x[0]}</b></div><div><div class="bar" style="width:${Math.max(1,x[1]/kmax*100)}%"></div></div><div>${f(x[1])} Kills</div><div class="note">${f(x[2])} KP</div>`).join('');
  const rw=d.rw,heal=Object.entries(rw.heal),hs=heal.reduce((a,x)=>a+x[1],0),EM={food:['🌽','Mais'],wood:['🪵','Holz'],stone:['🪨','Stein'],gold:['🪙','Gold']};
  $('kv').innerHTML=`<section class="kh"><div class="tt"><span class="tag">${esc(s.id)}</span><h1>${esc(s.name)}</h1><span class="note">${esc(s.kvk)}</span></div>
@@ -1749,10 +1748,10 @@ function draw(){const d=K,s=d.season,p=d.player,r=d.rating,n=d.dna,t=d.tiles;
  <div class="dl"><span><i class="dot" style="background:var(--bad)"></i>Aggression <b>${n.aggr} %</b></span><span><i class="dot" style="background:var(--warn)"></i>Widerstandskraft <b>${n.resist} %</b></span><span><i class="dot" style="background:var(--good)"></i>Unterstützung <b>${n.support} %</b></span></div>
  <div class="kg" style="margin-top:14px"><div class="k"><b>${esc(t.t4)}</b><span>T4-Kills</span></div><div class="k"><b>${esc(t.t5)}</b><span>T5-Kills</span></div><div class="k"><b>${esc(t.healed)}</b><span>Geheilt</span></div><div class="k"><b>${esc(t.trade)}</b><span>Tauschgeschäfte</span></div></div></section>
  ${d.history?`<section class="ks"><h2>Profil-Verlauf</h2><p class="note">Macht und Kill Points aus deinen Profil-Screenshots.</p><div class="wrap"><table><tr><th class="t">Datum</th><th>Macht</th><th>Δ Macht</th><th>Kill Points</th><th>Δ KP</th></tr>${d.history.map((h,i,a)=>{const q=a[i-1],dp=q?h.power-q.power:null,dk=q?h.kp-q.kp:null,sg=v=>v==null?'–':`<span class="${v<0?'bad':v>0?'good':''}">${v>0?'+':''}${f(v)}</span>`;return `<tr><td class="t">${esc(h.day)}</td><td>${f(h.power)}</td><td>${sg(dp)}</td><td>${f(h.kp)}</td><td>${sg(dk)}</td></tr>`}).join('')}</table></div></section>`:''}
- ${d.dkp.map(g=>`<section class="ks"><h2>DKP-Stand · ${esc(g.period)}</h2><p class="note">Formel: ${esc(g.formula)} · ${f(g.players)} Spieler im Königreich · Quelle: Statsmaster</p><div class="wrap"><table><tr><th>#</th><th class="t">Spieler</th><th>Macht</th><th>DKP</th><th>T4-Kills</th><th>T5-Kills</th><th>T4+T5 KP</th><th>Tote</th><th>KP-Verlust</th><th>Trades</th><th>Honor</th></tr>${rows(g)}</table></div></section>`).join('')}
+
  <section class="ks"><h2>Kill-Statistik</h2><p class="note">Aus dem Spielprofil: Kills und Kill Points je Truppenstufe.</p><div class="kt">${kt}</div><p style="margin:12px 0 0"><b>Gesamt: ${f(d.kills.total)} KP</b> <span class="note">· Fernkampfpunkte ${f(d.kills.ranged)}</span></p></section>
  ${d.lk?`<section class="ks"><h2>Lost Kingdom</h2><p class="note">Deine Bestwerte aus dem Profil (Daten ab 30.05.2023).</p><div class="kg"><div class="k"><b>${f(d.lk.killed)}</b><span>Meiste Einheiten getötet</span></div><div class="k"><b class="bad">${f(d.lk.lost)}</b><span>Meiste Einheiten verloren</span></div><div class="k"><b class="good">${f(d.lk.healed)}</b><span>Meiste Einheiten geheilt</span></div><div class="k"><b>${f(d.lk.joined)}</b><span>Teilnahmen</span></div><div class="k"><b>${f(d.lk.autarch)}</b><span>Mal Autarch</span></div></div></section>`:''}
- ${d.stats?`<section class="ks"><h2>Macht &amp; Kampfstatistik</h2><div class="kg">${Object.entries(d.stats.power).map(([k,v])=>`<div class="k"><b>${f(v)}</b><span>${esc(k)}-Macht</span></div>`).join('')}</div><div class="kg" style="margin-top:12px">${Object.entries(d.stats.battle).map(([k,v])=>`<div class="k"><b>${f(v)}</b><span>${esc(k)}</span></div>`).join('')}<div class="k"><b>${f(d.stats.gathered)}</b><span>Ressourcen gesammelt</span></div></div></section>`:''}
+
  <section class="ks"><h2>Relentless Warriors</h2><p class="note">Rückkehr gefallener Einheiten und die Kosten für die Heilung.</p>
  <div class="kg"><div class="k"><b class="good">${f(rw.returned)}</b><span>Einheiten zurück · ${rw.pct} %</span></div><div class="k"><b class="bad">${f(rw.deaths)}</b><span>Einheiten gestorben</span></div><div class="k"><b>${f(rw.extra)}</b><span>Extra zurück · ${rw.extra_pct} %</span></div><div class="k"><b>${f(hs)}</b><span>Ressourcen für Heilung</span></div></div>
  <div class="res">${heal.map(([k,v])=>`<div><b>${EM[k]?EM[k][0]:''} ${f(v)}</b><span>${EM[k]?EM[k][1]:esc(k)}</span></div>`).join('')}</div></section>`;
@@ -1775,16 +1774,10 @@ KVK1_DEFAULT = {
                "power": 16054227, "kp_profile": 42871980},
     "history": [{"day": "24.10.2026", "power": 15045414, "kp": 39575056}, {"day": "01.11.2026", "power": 15454955, "kp": 42871980}, {"day": "07.11.2026", "power": 16054227, "kp": 42871980}],
     "lk": {"autarch": 0, "joined": 1, "killed": 3321997, "lost": 399992, "healed": 4768465},
-    "stats": {"power": {"Gebäude": 8386521, "Technologie": 4378429, "Truppen": 2395223, "Kommandanten": 1154500}, "battle": {"Höchste Macht": 16315385, "Siege": 13035, "Niederlagen": 253, "Tote": 414958, "Späh-Aktionen": 3808}, "gathered": 1150298110},
     "kp": 42189371, "power_delta": 9386831, "losses": 399992,
     "rating": {"grade": "B", "text": "Solider Beitrag", "pct": 34, "of": 572},
     "dna": {"aggr": 28, "resist": 5, "support": 66},
     "tiles": {"t4": "2,3 Mio", "t5": "918,8 K", "healed": "4,9 Mio", "trade": "39,4 %"},
-    "dkp": [
-        {"period": "19.09. 06:00 – 18.10. 12:36 UTC", "formula": "Tote×15 + T4×5 + T5×10", "players": 1040, "rows": [
-            {"name": "ˢʰJSON", "rank": 172, "power": "15,5 Mio", "pd": "+7,2 Mio", "base": "8,3 Mio", "dkp": "6,5 Mio", "goal": "16,6 Mio", "pct": 39, "t4": "809,1 K", "t5": "181,2 K", "kp": "11,7 Mio", "dead": "45,0 K", "kploss": "2,1 Mio", "trade": 49, "honor": "–"}]},
-        {"period": "21.10. 02:16 – 24.10. 14:48 UTC", "formula": "Tote×30 + T4×10 + T5×20", "players": 1061, "rows": [
-            {"name": "ˢʰJSON", "rank": 129, "power": "15,0 Mio", "pd": "-512,2 K", "base": "15,6 Mio", "dkp": "36,6 Mio", "goal": "46,7 Mio", "pct": 78, "t4": "1,3 Mio", "t5": "683,9 K", "kp": "27,1 Mio", "dead": "316,8 K", "kploss": "2,8 Mio", "trade": 73, "honor": "80,3 K"}]}],
     "kills": {"tiers": [["T1", 80323, 16064], ["T2", 143179, 286358], ["T3", 55663, 222652], ["T4", 1351570, 13515700], ["T5", 421309, 8426180]], "total": 22466954, "ranged": 0},
     "rw": {"returned": 108552, "pct": 30, "deaths": 361830, "extra": 0, "extra_pct": 10,
            "heal": {"food": 505692450, "wood": 484035130, "stone": 33426072, "gold": 34331240}},
