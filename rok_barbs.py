@@ -637,6 +637,54 @@ class DB:
             self.c.commit()
         return n
 
+    def ap_costs(self):
+        """AP-Kosten je Kettenlaenge (1 Bericht = 1 Kette mit n Barbaren). Stehen nicht in den Berichten, werden eingetragen."""
+        try:
+            d = json.loads(self.get_setting("ap_costs", "{}"))
+        except ValueError:
+            d = {}
+        return {int(k): int(v) for k, v in d.items() if str(k).isdigit() and isinstance(v, (int, float)) and v > 0}
+
+    def set_ap_costs(self, d):
+        clean = {}
+        for k, v in (d or {}).items():
+            try:
+                k, v = int(k), int(v)
+            except (TypeError, ValueError):
+                continue
+            if 1 <= k <= 12 and 0 < v <= 5000:
+                clean[str(k)] = v
+        self.set_setting("ap_costs", json.dumps(clean))
+        return self.ap_costs()
+
+    def chain_stats(self, w, a):
+        """Barb-Chaining: Ketten je Laenge, daraus AP-Summe und Beute pro AP (nur Ketten mit bekannten Kosten)."""
+        costs = self.ap_costs()
+        lens = {r["n"]: r["c"] for r in self.q(
+            "SELECT n, COUNT(*) c FROM (SELECT mail_id, COUNT(*) n FROM battles WHERE " + w + " AND role='solo' GROUP BY mail_id) GROUP BY n", a)}
+        out = dict(costs=costs, lens=lens, chains=sum(lens.values()), barbs=sum(n * c for n, c in lens.items()),
+                   ap=0, kchains=0, kbarbs=0, speed=0, gems=0, xp=0)
+        for n, c in lens.items():
+            if n not in costs:
+                continue
+            out["ap"] += costs[n] * c
+            out["kchains"] += c
+            out["kbarbs"] += n * c
+            for r in self.q("SELECT item_id, SUM(qty) qty FROM loot WHERE src='b' AND src_id IN (SELECT id FROM battles WHERE " + w +
+                            " AND role='solo' AND mail_id IN (SELECT mail_id FROM battles WHERE " + w +
+                            " AND role='solo' GROUP BY mail_id HAVING COUNT(*)=?)) GROUP BY item_id", a + a + (n,)):
+                it = ITEMS.get(r["item_id"])
+                if not it:
+                    continue
+                v = r["qty"] * it["unit"]
+                if it["kind"].startswith("speed_"):
+                    out["speed"] += v
+                elif it["kind"] == "gems":
+                    out["gems"] += v
+                elif it["kind"] == "xp_books":
+                    out["xp"] += v
+        return out
+
     def quick(self, account=""):
         """Daten fuer die rechte Schnellzugriff-Spalte: Feed, 14-Tage-Verlauf, seltene Drops, Status."""
         if account == "main":
@@ -779,6 +827,9 @@ class DB:
             r["total"] = r["qty"] * it["unit"] if it else None
         L = self.loot_of
         battles = self.report_battles(wb, a, fmt)
+        chain = self.chain_stats(wb, a)
+        for b in battles:
+            b["ap"] = chain["costs"].get(b["n"]) if b["role"] == "solo" else None
         for f in forts:
             f["time"] = fmt(f["ts"])
             f["hero"] = HEROES.get(f["hero1"], "Kommandant #%d" % f["hero1"]) if f["hero1"] is not None else ""
@@ -801,7 +852,7 @@ class DB:
                 d.setdefault(key, 0)
         accounts = self.q("SELECT account, MAX(acc_name) acc_name FROM reports WHERE account!='' GROUP BY account ORDER BY MAX(ts) DESC")
         return dict(unknown=self.unknown(), totals=tot, pvp_totals=pv, aoo_totals=po, aoo=aoos, profile=self.profile_stats(d_from, d_to, account), main_account=self.get_setting("main_account"), avatars=self.avatars(),
-                    profile_fields=PROFILE_FIELDS, loot=loot, battles=battles, forts=forts, pvp=pvps,
+                    profile_fields=PROFILE_FIELDS, chain=chain, loot=loot, battles=battles, forts=forts, pvp=pvps,
                     accounts=accounts, days=sorted(days.values(), key=lambda d: d["day"], reverse=True)[:90])
 
 # ---------------------------------------------------------------- Ordner-Überwachung
@@ -1002,6 +1053,7 @@ button:focus-visible,select:focus-visible,input:focus-visible,summary:focus-visi
 .chips{display:flex;flex-wrap:wrap;gap:10px;margin-top:16px}
 .chip{border:1px dashed var(--dash);border-radius:12px;padding:8px 14px;min-width:132px;background:rgba(127,127,127,.04)}
 .chip b{display:block;font-size:1.15rem;font-variant-numeric:tabular-nums}.chip span{color:var(--mute);font-size:.82rem}.chip em{font-style:normal;font-weight:600;margin-left:4px}
+.chbox{margin-bottom:14px}.chin{display:flex;flex-wrap:wrap;gap:10px;margin:8px 0}.chin label{display:flex;flex-direction:column;gap:3px;font-size:.82rem;color:var(--mute)}.chin input{width:92px}.chin small{font-size:.72rem}
 .grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(214px,1fr));gap:12px;margin:12px 0}
 .k{border:1px dashed var(--dash);border-radius:14px;padding:12px 16px;background:rgba(127,127,127,.04)}
 .k b{display:block;font-size:1.55rem;line-height:1.2;font-variant-numeric:tabular-nums}.k span{display:block;color:var(--mute);font-size:.84rem}.k span.good{color:var(--good)}.k span.bad{color:var(--bad)}
@@ -1091,7 +1143,7 @@ tr.flash td,details.flash{animation:fl 2.6s ease-out}
 </nav>
 <div class="pane" id="p_loot"><div class="loot" id="loot"></div><p class="note" id="lootnote"></p></div>
 <div class="pane" id="p_ft"><div id="ft"></div></div>
-<div class="pane" id="p_bt"><div id="bt"></div></div>
+<div class="pane" id="p_bt"><div class="chbox" id="chbox"></div><div id="bt"></div></div>
 <div class="pane" id="p_pv"><p class="note">Zusammengehörende Berichte stehen in einer Zeile. Ark of Osiris steht getrennt im eigenen Reiter und ist hier nicht mitgezählt.</p><div id="pv"></div></div>
 <div class="pane" id="p_ao"><p class="note">Ark of Osiris, getrennt von den anderen Spielerkämpfen gezählt.</p><div class="grid" id="aokpi"></div><div id="ao"></div></div>
 <div class="pane" id="p_pf"><p class="note">Profilwerte aus deinen Screenshots. Die Datei, die ich dir schicke, fügst du hier ein. Der Verlauf wird gespeichert und nichts geht beim erneuten Einfügen doppelt verloren.</p>
@@ -1156,6 +1208,18 @@ const lootList=l=>l.length?`<ul class="ll">${l.map(x=>`<li${x.unk?` class="unk" 
 const facts=a=>`<dl class="fa">${a.map(([k,v,c])=>`<div><dt>${k}</dt><dd class="${c||''}">${v}</dd></div>`).join('')}</dl>`;
 const rep=(k,head,body)=>`<details class="rep" data-k="${k}"${openRep.has(k)?' open':''}><summary>${head}</summary><div class="rb">${body}</div></details>`;
 const tbl=(h,rows)=>`<div class="wrap"><table><tr>${h.map(x=>`<th>${x}</th>`).join('')}</tr>${rows.join('')}</table></div>`;
+let chEdit=false;
+function renderChain(c){const el=$('chbox');if(!c){el.innerHTML='';return}
+ if(el.contains(document.activeElement)&&document.activeElement.tagName==='INPUT')return;
+ const L=[1,2,3,4,5,6],r1=x=>(Math.round(x*10)/10).toLocaleString(LOC);
+ const unk=Object.entries(c.lens).filter(([n])=>!c.costs[n]).reduce((a,[n,k])=>a+k,0);
+ el.innerHTML=`<h3>Barb-Chaining: Effizienz</h3><p class="note">AP-Kosten stehen nicht in den Berichten. Trage ein, was eine Kette mit n Barbaren kostet (ein Bericht = eine Kette).</p>
+ <div class="chin">${L.map(n=>`<label>${n} Barbar${n>1?'en':''}<input type="number" min="0" step="1" data-n="${n}" value="${c.costs[n]||''}" placeholder="AP"><small>${c.lens[n]||0}× Kette</small></label>`).join('')}</div>
+ <div class="grid">${kpi('Ketten (solo)',f(c.chains))+kpi('Barbaren gekillt',f(c.barbs))+kpi('Ø Barbaren pro Kette',c.chains?r1(c.barbs/c.chains):'–')+
+ (c.ap?kpi('AP verbraucht',f(c.ap))+kpi('AP pro Barbar',r1(c.ap/c.kbarbs))+kpi('Barbaren pro 100 AP',r1(c.kbarbs/c.ap*100))+kpi('Speedup-Min pro 100 AP',r1(c.speed/c.ap*100))+kpi('Edelsteine pro 100 AP',r1(c.gems/c.ap*100))+kpi('Tome-XP pro 100 AP',r1(c.xp/c.ap*100)):'')}</div>
+ ${c.ap&&unk?`<p class="note">${f(unk)} Ketten mit noch unbekannten Kosten sind nicht eingerechnet.</p>`:''}`}
+$('chbox').addEventListener('change',async e=>{const i=e.target.closest('input[data-n]');if(!i)return;const costs={};$('chbox').querySelectorAll('input[data-n]').forEach(x=>{if(+x.value>0)costs[x.dataset.n]=+x.value});
+ await fetch('/api/apcost',{method:'POST',body:JSON.stringify(costs)});lastSig='';load()});
 const none=t=>`<p class="note">${t}</p>`;
 const empty=(n,t)=>`<tr><td colspan="${n}" class="note">${t}</td></tr>`;
 const KINDS=[['speed_training','Training-Speedup (Min)'],['speed_universal','Universal-Speedup (Min)'],['speed_healing','Heilungs-Speedup (Min)'],['wood','Holz'],['stone','Stein'],['gold','Gold'],['food','Mais'],['gems','Edelsteine'],['xp_books','XP-Buch'],['packs','Ressourcenpaket'],['ap','Aktionspunkte'],['other','Sonstiges']];
@@ -1227,9 +1291,10 @@ async function load(){const[a,b]=range();
    '<h3>Das hast du bekommen</h3>'+lootList(x.loot))).join('')||none('Keine Festungen im gewählten Zeitraum.');
  // Barbarenkämpfe (ein Bericht = eine Zeile, die Runden/Gegner stehen darin)
  $('c_bt').textContent=s.battles.length?(s.battles.length>=200?'letzte 200':s.battles.length):'';
+ renderChain(s.chain);
  $('bt').innerHTML=s.battles.map(x=>{const so=x.role==='solo',t=x.totals;
   return rep('b'+x.mail_id,
-   `<span class="tm">${x.time}</span>${role[x.role]}<b>${esc(x.title)}</b><span class="note">${esc(x.hero)}</span><span class="sm">${chipsH(x.loot)}</span>`,
+   `<span class="tm">${x.time}</span>${role[x.role]}<b>${esc(x.title)}</b><span class="note">${esc(x.hero)}</span>${x.ap?`<span class="tag">${x.ap} AP</span>`:''}<span class="sm">${chipsH(x.loot)}</span>`,
    facts(so?[['Gegner im Bericht',x.n],['Gegner-Truppen',f(t.foe_troops)],['Leicht verwundet',f(t.hurt)],['Schwer verwundet',f(t.severe),'bad'],['Kommandanten-XP',f(t.xp)]]
            :[['Teilnehmer',x.parts],['Gegner im Bericht',x.n],['Kommandanten-XP',f(t.xp)]])+
    (so?(x.n>1?'<h3>Die einzelnen Gegner</h3>'+tbl(['Gegner','Gegner-Truppen','Eigene Truppen','Leicht verwundet','Schwer verwundet','XP','Beute'],
@@ -1285,7 +1350,7 @@ $('pfile').onchange=async e=>{let n=0,err='';for(const fl of e.target.files){try
 const EN=[
 [`Barbaren-Tracker`,`Barbarian Tracker`],[`Heute`,`Today`],[`Gestern`,`Yesterday`],[`Letzte 7 Tage`,`Last 7 days`],[`Letzte 30 Tage`,`Last 30 days`],
 [`Dieser Monat`,`This month`],[`Alles`,`All time`],[`Zeitraum wählen`,`Custom range`],[`von`,`from`],[`bis`,`to`],[`und`,`and`],
-[`Allianz-Tracker`,`Alliance Tracker`],[`Zum Loot-Tracker`,`Back to loot tracker`],[`Loot-Tracker`,`Loot tracker`],[`Sprache`,`Language`],[`Seiten`,`Pages`],[`Ansicht`,`View`],[`Breite`,`Width`],[`Ausrichtung`,`Alignment`],[`Schmal`,`Narrow`],[`Breit`,`Wide`],[`Voll`,`Full`],[`Links`,`Left`],[`Mitte`,`Center`],[`Rechts`,`Right`],[`Allianz-Ranking`,`Alliance ranking`],[`Member-Rangliste`,`Member ranking`],[`Mitglieder`,`members`],
+[`Allianz-Tracker`,`Alliance Tracker`],[`Zum Loot-Tracker`,`Back to loot tracker`],[`Loot-Tracker`,`Loot tracker`],[`Barb-Chaining: Effizienz`,`Barb chaining: efficiency`],[`AP-Kosten stehen nicht in den Berichten. Trage ein, was eine Kette mit n Barbaren kostet (ein Bericht = eine Kette).`,`AP costs are not in the reports. Enter what a chain of n barbarians costs (one report = one chain).`],[`Ketten (solo)`,`Chains (solo)`],[`Barbaren gekillt`,`Barbarians killed`],[`Ø Barbaren pro Kette`,`Avg barbarians per chain`],[`AP verbraucht`,`AP used`],[`AP pro Barbar`,`AP per barbarian`],[`Barbaren pro 100 AP`,`Barbarians per 100 AP`],[`Speedup-Min pro 100 AP`,`Speedup min per 100 AP`],[`Edelsteine pro 100 AP`,`Gems per 100 AP`],[`Tome-XP pro 100 AP`,`Tome XP per 100 AP`],[`Sprache`,`Language`],[`Seiten`,`Pages`],[`Ansicht`,`View`],[`Breite`,`Width`],[`Ausrichtung`,`Alignment`],[`Schmal`,`Narrow`],[`Breit`,`Wide`],[`Voll`,`Full`],[`Links`,`Left`],[`Mitte`,`Center`],[`Rechts`,`Right`],[`Allianz-Ranking`,`Alliance ranking`],[`Member-Rangliste`,`Member ranking`],[`Mitglieder`,`members`],
 [`Klick auf eine Spaltenüberschrift sortiert die Liste. Grün und rot zeigen die Veränderung seit dem vorherigen Stand. Ranglisten ohne Resource Assistance und Armory Contributions.`,`Click a column header to sort the list. Green and red show the change since the previous snapshot. Rankings without Resource Assistance and Armory Contributions.`],
 [`Ø Rang`,`Avg rank`],[`Durchschnitt der Plätze in den eingeschalteten Kategorien, niedriger ist besser`,`Average of the ranks in the categories that are on, lower is better`],
 [`Klick auf eine Kategorie über der Tabelle schaltet sie aus, mit der Maus ziehen ändert die Reihenfolge der Spalten. Die Einstellungen werden gespeichert. Eine ausgeschaltete Kategorie wird ausgeblendet und zählt nicht zum Ø Rang. Ø Rang ist der Durchschnitt der Plätze in den eingeschalteten Kategorien, niedriger ist besser. Die Zahl dahinter ist der Platz in dieser Durchschnittswertung.`,`Click a category above the table to switch it off, drag it with the mouse to change the column order. The settings are saved. A switched-off category is hidden and does not count toward the avg rank. Avg rank is the average of the ranks in the categories that are on, lower is better. The number after it is the position in that average ranking.`],
@@ -1689,6 +1754,13 @@ def make_handler(db, watcher):
                         raise ValueError("ungültige Account-ID")
                     db.set_setting("main_account", acc)
                     self.send(json.dumps({"ok": True}), "application/json")
+                except Exception as e:
+                    self.send(json.dumps({"ok": False, "error": str(e)}), "application/json")
+                return
+            if path == "/api/apcost":
+                try:
+                    n = int(self.headers.get("Content-Length", 0))
+                    self.send(json.dumps({"ok": True, "costs": db.set_ap_costs(json.loads(self.rfile.read(min(n, 5000))))}), "application/json")
                 except Exception as e:
                     self.send(json.dumps({"ok": False, "error": str(e)}), "application/json")
                 return
