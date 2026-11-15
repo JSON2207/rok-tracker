@@ -2203,6 +2203,11 @@ KVK2_PAGE = r"""<!doctype html><html lang="de"><head><meta charset="utf-8">
 .tw tr.me td{background:var(--accsoft);font-weight:700}.tw td button{padding:3px 9px;cursor:pointer}
 .sb2{height:9px;border-radius:99px;background:var(--soft);min-width:90px;overflow:hidden}.sb2 i{display:block;height:100%;border-radius:99px;background:var(--acc)}
 .cf{display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:10px;align-items:end}.cf label{display:flex;flex-direction:column;gap:4px;font-size:.82rem;color:var(--mute)}.cf input{padding:7px 9px}
+
+.tmc{display:grid;grid-template-columns:repeat(auto-fit,minmax(250px,1fr));gap:12px;margin-top:12px}.tmc>div{border:1px solid var(--line);border-radius:16px;padding:12px 14px;background:var(--soft)}.tmc>div.me{border-color:var(--acc);box-shadow:0 0 0 2px var(--accsoft)}
+.tmc h3{margin:0 0 6px;font-size:1rem}.tmc .tt{display:flex;flex-wrap:wrap;gap:4px 14px;color:var(--mute);font-size:.82rem;margin-bottom:8px;font-variant-numeric:tabular-nums}.tmc .tt b{color:var(--ink)}
+.tmc .mb{display:flex;justify-content:space-between;align-items:center;gap:8px;padding:5px 0;border-top:1px solid var(--line);font-size:.88rem;font-variant-numeric:tabular-nums}.tmc .mb select{width:auto;padding:2px 4px}
+.tbar{display:flex;flex-wrap:wrap;gap:8px;align-items:center}.tbar select,.tbar button{padding:7px 12px}
 details.ks summary{cursor:pointer}details.ks textarea{width:100%;min-height:220px;margin-top:10px;font-family:ui-monospace,Consolas,monospace;font-size:.82rem}
 @media(max-width:700px){.ks{padding:14px}}
 </style></head><body><main>
@@ -2210,7 +2215,8 @@ details.ks summary{cursor:pointer}details.ks textarea{width:100%;min-height:220p
 <section class="wh"><div><h1 id="t1"></h1><div class="sub" id="s1"></div></div><div class="nav"><span class="note" id="msg"></span></div></section>
 <section class="ks"><div class="kg" id="sum"></div></section>
 <section class="ks"><h2 id="h2"></h2><p class="note" id="n2"></p><div class="tw" id="tb"></div></section>
-<section class="ks"><h2 id="h3"></h2><p class="note" id="n3"></p><form class="cf" id="f" autocomplete="off"><label id="l1"><input id="fi" required inputmode="numeric"></label><label id="l2"><input id="fp"></label><label id="l3"><input id="fk"></label><label id="l4"><input id="fd"></label><label id="l5"><input id="fn"></label><label id="l6"><input id="fg" maxlength="1"></label><label id="l7"><input id="fr" inputmode="numeric"></label><button type="submit" id="fa"></button></form></section>
+<section class="ks" id="tm"></section>
+<section class="ks"><h2 id="h3"></h2><p class="note" id="n3"></p><form class="cf" id="f" autocomplete="off"><label id="l1"><input id="fi" required inputmode="numeric"></label><label id="l2"><input id="fp"></label><label id="l3"><input id="fk"></label><label id="l4"><input id="fd"></label><label id="l6"><input id="fg" maxlength="1"></label><label id="l7"><input id="fr" inputmode="numeric"></label><button type="submit" id="fa"></button></form></section>
 <details class="ks" id="ed"><summary><b id="h4"></b></summary><p class="note" id="n4"></p><textarea id="kj" spellcheck="false"></textarea><p><button id="ks" type="button"></button> <button id="kr" type="button"></button></p></details>
 @@QP@@
 <script>
@@ -2218,39 +2224,53 @@ let LANG='de';try{LANG=localStorage.getItem('roklang')==='en'?'en':'de'}catch(e)
 const L=(d,e)=>LANG==='en'?e:d,LOC=LANG==='en'?'en-US':'de-DE',$=id=>document.getElementById(id),f=n=>Number(n||0).toLocaleString(LOC);
 const esc=s=>String(s==null?'':s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
 const MON=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
-let D=null,S={col:'str',dir:-1};try{S=Object.assign(S,JSON.parse(localStorage.getItem('rokk2')||'{}'))}catch(e){}
+let D=null,S={col:'rank',dir:1};try{S=Object.assign(S,JSON.parse(localStorage.getItem('rokk2')||'{}'))}catch(e){}
+if(!['rank','id','group','power','kp','deads'].includes(S.col)){S={col:'rank',dir:1}}
 const pn=s=>{s=String(s==null?'':s).trim().toLowerCase().replace(/\s/g,'');if(!s)return 0;let m=1;const u=s.slice(-1);if(u==='k'){m=1e3;s=s.slice(0,-1)}else if(u==='m'){m=1e6;s=s.slice(0,-1)}else if(u==='b'){m=1e9;s=s.slice(0,-1)}
  if(/^\d{1,3}(,\d{3})+$/.test(s)||/^\d{1,3}(\.\d{3})+$/.test(s))s=s.replace(/[.,]/g,'');else s=s.replace(',','.');const v=parseFloat(s);return isFinite(v)?Math.round(v*m):0};
 const short=n=>{n=+n||0;return n>=1e9?(n/1e9).toFixed(2).replace(/\.?0+$/,'')+' B':n>=1e6?(n/1e6).toFixed(2).replace(/\.?0+$/,'')+' M':n>=1e4?(n/1e3).toFixed(1).replace(/\.0$/,'')+' K':f(n)};
-function score(){const K=D.kingdoms,mx=k=>Math.max(0,...K.map(x=>+x[k]||0));const m={power:mx('power'),kp:mx('kp'),deads:mx('deads')};
- return K.map(x=>{const p=['power','kp','deads'].filter(k=>m[k]>0&&(+x[k]||0)>0).map(k=>(+x[k])/m[k]);const s=p.length?p.reduce((a,b)=>a+b,0)/3*100:0;return Object.assign({},x,{str:s})})}
+function score(){const K=D.kingdoms.slice().sort((a,b)=>(a.rank||1e9)-(b.rank||1e9)||a.id-b.id);return K.map((x,i)=>Object.assign({},x,{lr:i+1}))}
+const TN=i=>String.fromCharCode(65+i);
+const comp=(x,m)=>['power','kp','deads'].filter(k=>m[k]>0&&(+x[k]||0)>0).map(k=>(+x[k])/m[k]).reduce((a,b)=>a+b,0)/3;
+function autoTeams(){const K=D.kingdoms,n=D.teams.n,m={power:Math.max(0,...K.map(x=>+x.power||0)),kp:Math.max(0,...K.map(x=>+x.kp||0)),deads:Math.max(0,...K.map(x=>+x.deads||0))},cap=Math.ceil(K.length/n),T=Array.from({length:n},()=>({s:0,c:0})),A={};
+ K.slice().sort((a,b)=>comp(b,m)-comp(a,m)||a.id-b.id).forEach(x=>{let b=-1;T.forEach((t,i)=>{if(t.c<cap&&(b<0||t.s<T[b].s))b=i});T[b].s+=comp(x,m);T[b].c++;A[x.id]=b});D.teams.assign=A}
+function teams(){const n=D.teams.n,A=D.teams.assign||{},K=D.kingdoms,m={power:Math.max(0,...K.map(x=>+x.power||0)),kp:Math.max(0,...K.map(x=>+x.kp||0)),deads:Math.max(0,...K.map(x=>+x.deads||0))};
+ const opt=(sel)=>`<option value="">${L('ohne Team','no team')}</option>`+Array.from({length:n},(_,i)=>`<option value="${i}"${sel===i?' selected':''}>${L('Team ','Team ')}${TN(i)}</option>`).join('');
+ const G=Array.from({length:n},(_,i)=>K.filter(x=>A[x.id]===i).sort((a,b)=>(a.rank||1e9)-(b.rank||1e9)||a.id-b.id)),free=K.filter(x=>A[x.id]===undefined);
+ const sm=(g,k)=>g.reduce((a,x)=>a+(+x[k]||0),0),cs=g=>g.reduce((a,x)=>a+comp(x,m),0),all=G.map(cs),mx=Math.max(0,...all),mn=Math.min(...all);
+ const mem=x=>`<div class="mb"><span>#${x.id}${x.group?' · '+esc(x.group):''}${x.id===D.me?' ★':''}</span><span>${x.power?short(x.power):'–'} · ${x.kp?short(x.kp):'–'}</span><select data-t="${x.id}" aria-label="Team">${opt(A[x.id])}</select></div>`;
+ $('tm').innerHTML=`<h2>${L('Teams bilden','Build teams')}</h2><p class="note">${L('Verteilt die Kingdoms möglichst fair auf Teams (nach Power, Kill Points und Deads). Danach kannst du jedes Kingdom per Auswahl in ein anderes Team schieben.','Splits the kingdoms as fairly as possible into teams (by power, kill points and deads). Afterwards you can move any kingdom to another team with the selector.')}</p>
+ <div class="tbar"><label>${L('Teams','Teams')} <select id="tn">${[2,3,4].map(v=>`<option value="${v}"${v===n?' selected':''}>${v}</option>`).join('')}</select></label><button type="button" id="tgo">${L('Teams bilden','Build teams')}</button><button type="button" id="tcl">${L('Zuweisung löschen','Clear assignment')}</button>${G.every(g=>g.length)&&mx?`<span class="note">${L('Unterschied stärkstes zu schwächstem Team: ','Difference strongest to weakest team: ')}${mn?Math.round((mx/mn-1)*100):0} %</span>`:''}</div>
+ <div class="tmc">${G.map((g,i)=>`<div class="${g.some(x=>x.id===D.me)?'me':''}"><h3>Team ${TN(i)} · ${g.length} ${L('Kingdoms','kingdoms')}</h3><div class="tt"><span>Power <b>${short(sm(g,'power'))}</b></span><span>KP <b>${short(sm(g,'kp'))}</b></span><span>Deads <b>${short(sm(g,'deads'))}</b></span></div>${g.map(mem).join('')||`<div class="note">${L('Noch leer','Empty')}</div>`}</div>`).join('')}${free.length?`<div><h3>${L('Ohne Team','No team')} · ${free.length}</h3>${free.map(mem).join('')}</div>`:''}</div>`}
 function draw(){if(!D)return;
  $('t1').textContent='KVK2';document.title='KVK2';
  $('s1').textContent=L('Die Matchmaking-Kingdoms im Vergleich. Zahlen trägst du selbst ein oder schickst mir Screenshots.','The matchmaking kingdoms compared. You enter the numbers yourself or send me screenshots.')+(D.season?' · '+D.season:'');
- const R=score().sort((a,b)=>{const x=S.col==='id'?a.id-b.id:S.col==='group'?String(a.group||'Z').localeCompare(String(b.group||'Z')):S.col==='rank'?(a.rank||1e9)-(b.rank||1e9):(+a[S.col]||0)-(+b[S.col]||0);return x*S.dir||a.id-b.id}),me=R.find(x=>x.id===D.me),others=R.filter(x=>x.id!==D.me&&x.str>0),by=[...R].sort((a,b)=>b.str-a.str),rk=me?by.findIndex(x=>x.id===me.id)+1:0;
- const avg=others.length?others.reduce((a,x)=>a+x.str,0)/others.length:0,top=others.slice().sort((a,b)=>b.str-a.str)[0];
- $('sum').innerHTML=`<div class="k"><b>${me&&me.str>0?'#'+rk+' / '+by.filter(x=>x.str>0).length:'–'}</b><span>${L('Rang deines Kingdoms (Stärke)','Rank of your kingdom (strength)')} · #${D.me}</span></div>
- <div class="k"><b>${top?'#'+top.id:'–'}</b><span>${L('Stärkster Gegner','Strongest opponent')}${top?' · '+top.str.toFixed(0)+' / 100':''}</span></div>
- <div class="k"><b>${others.length?avg.toFixed(0)+' / 100':'–'}</b><span>${L('Ø Gegner','Opponent average')}${me&&me.str>0&&others.length?' · '+(me.str>=avg?'+':'')+(me.str-avg).toFixed(0)+' '+L('für dich','for you'):''}</span></div>
- <div class="k"><b>${R.length}</b><span>${L('Kingdoms in der Liste','Kingdoms in the list')}</span></div>`;
- $('h2').textContent=L('Kingdom-Vergleich','Kingdom comparison');$('n2').textContent=L('Stärke = Durchschnitt aus Power, Kill Points und Deads im Verhältnis zum jeweils größten Kingdom (100 = überall vorn). Klick auf eine Spaltenüberschrift sortiert.','Strength = average of power, kill points and deads relative to the largest kingdom in each column (100 = ahead everywhere). Click a column header to sort.');
- const H=[['rank',L('Rang','Rank')],['id','Kingdom','lf'],['group',L('Gruppe','Group')],['power','Power'],['kp','Kill Points'],['deads','Deads'],['ch25','CH25'],['str',L('Stärke','Strength')]];
- $('tb').innerHTML=`<table><tr>${H.map(h=>`<th class="${h[2]||''}" data-c="${h[0]}">${h[1]}${S.col===h[0]?(S.dir<0?' ▼':' ▲'):''}</th>`).join('')}<th></th></tr>${R.map(x=>`<tr class="${x.id===D.me?'me':''}"><td>${x.rank?x.rank:'–'}</td><td class="lf">#${x.id}${x.id===D.me?' ★':''}</td><td>${esc(x.group)||'–'}</td><td title="${f(x.power)}">${x.power?short(x.power):'–'}</td><td title="${f(x.kp)}">${x.kp?short(x.kp):'–'}</td><td title="${f(x.deads)}">${x.deads?short(x.deads):'–'}</td><td>${x.ch25?f(x.ch25):'–'}</td><td><div class="sb2" title="${x.str.toFixed(1)}"><i style="width:${Math.min(100,x.str)}%"></i></div></td><td class="lf"><button type="button" data-e="${x.id}">${L('Bearbeiten','Edit')}</button> <button type="button" data-m="${x.id}" title="${L('Als mein Kingdom markieren','Mark as my kingdom')}">★</button> <button type="button" data-d="${x.id}">${L('Löschen','Delete')}</button></td></tr>`).join('')}</table>`;
+ const R=score().sort((a,b)=>{const x=S.col==='id'?a.id-b.id:S.col==='group'?String(a.group||'Z').localeCompare(String(b.group||'Z')):S.col==='rank'?a.lr-b.lr:(+a[S.col]||0)-(+b[S.col]||0);return x*S.dir||a.lr-b.lr}),me=R.find(x=>x.id===D.me),others=R.filter(x=>x.id!==D.me),top=others.slice().sort((a,b)=>a.lr-b.lr)[0];
+ const av=k=>{const v=others.map(x=>+x[k]||0).filter(Boolean);return v.length?v.reduce((a,b)=>a+b,0)/v.length:0},pc=(a,b)=>b?(a>=b?'+':'')+Math.round((a/b-1)*100)+' %':'';
+ $('sum').innerHTML=`<div class="k"><b>${me?'#'+me.lr+' / '+R.length:'–'}</b><span>${L('Platz deines Kingdoms in der Liste','Your kingdom\'s place in the list')} · #${D.me}</span></div>
+ <div class="k"><b>${top?'#'+top.id:'–'}</b><span>${L('Bestplatzierter Gegner','Best-ranked opponent')}${top?' · '+L('Platz ','place ')+top.lr:''}</span></div>
+ <div class="k"><b>${me&&me.power?short(me.power):'–'}</b><span>${L('Deine Power','Your power')}${me&&me.power?' · '+pc(me.power,av('power'))+' '+L('zum Ø Gegner','vs opponent avg'):''}</span></div>
+ <div class="k"><b>${me&&me.kp?short(me.kp):'–'}</b><span>${L('Deine Kill Points','Your kill points')}${me&&me.kp?' · '+pc(me.kp,av('kp'))+' '+L('zum Ø Gegner','vs opponent avg'):''}</span></div>`;
+ $('h2').textContent=L('Kingdom-Vergleich','Kingdom comparison');$('n2').textContent=L('Stärke = Durchschnitt aus Power, Kill Points und Deads im Verhältnis zum jeweils größten Kingdom (100 = überall vorn). Klick auf eine Spaltenüberschrift sortiert.','Places are numbered anew (1 to the number of kingdoms) in the order of the in-game rank. Click a column header to sort.');
+ const H=[['rank',L('Platz','Place')],['id','Kingdom','lf'],['group',L('Gruppe','Group')],['power','Power'],['kp','Kill Points'],['deads','Deads'],];
+ $('tb').innerHTML=`<table><tr>${H.map(h=>`<th class="${h[2]||''}" data-c="${h[0]}">${h[1]}${S.col===h[0]?(S.dir<0?' ▼':' ▲'):''}</th>`).join('')}<th></th></tr>${R.map(x=>`<tr class="${x.id===D.me?'me':''}"><td title="${L('Rang im Spiel','In-game rank')}: ${x.rank||'–'}">${x.lr}</td><td class="lf">#${x.id}${x.id===D.me?' ★':''}</td><td>${esc(x.group)||'–'}</td><td title="${f(x.power)}">${x.power?short(x.power):'–'}</td><td title="${f(x.kp)}">${x.kp?short(x.kp):'–'}</td><td title="${f(x.deads)}">${x.deads?short(x.deads):'–'}</td><td class="lf"><button type="button" data-e="${x.id}">${L('Bearbeiten','Edit')}</button> <button type="button" data-m="${x.id}" title="${L('Als mein Kingdom markieren','Mark as my kingdom')}">★</button> <button type="button" data-d="${x.id}">${L('Löschen','Delete')}</button></td></tr>`).join('')}</table>`;
  $('h3').textContent=L('Kingdom hinzufügen oder ändern','Add or change a kingdom');$('n3').textContent=L('Gleiche Kingdom-Nummer überschreibt den Eintrag. Zahlen gehen auch als 1,2M, 350K oder 1.200.000.','The same kingdom number overwrites the entry. Numbers also work as 1.2M, 350K or 1,200,000.');
  const lab=(id,t)=>{const l=$(id),i=l.querySelector('input');l.textContent='';l.append(t,i)};
- lab('l1',L('Kingdom-Nr.','Kingdom no.'));lab('l2','Power');lab('l3','Kill Points');lab('l4','Deads');lab('l5','CH25');lab('l6',L('Gruppe (A/B/C)','Group (A/B/C)'));lab('l7',L('Rang','Rank'));$('fa').textContent=L('Speichern','Save');
+ lab('l1',L('Kingdom-Nr.','Kingdom no.'));lab('l2','Power');lab('l3','Kill Points');lab('l4','Deads');lab('l6',L('Gruppe (A/B/C)','Group (A/B/C)'));lab('l7',L('Rang','Rank'));$('fa').textContent=L('Speichern','Save');
  $('h4').textContent=L('Daten bearbeiten (JSON)','Edit data (JSON)');$('n4').textContent=L('Alle Werte dieser Seite als JSON. Ändere sie oder füge eine komplette Liste ein und speichere.','All values of this page as JSON. Change them or paste a complete list and save.');
  $('ks').textContent=L('Speichern','Save');$('kr').textContent=L('Zurücksetzen','Reset');
- if(document.activeElement!==$('kj'))$('kj').value=JSON.stringify(D,null,1)}
+ teams();if(document.activeElement!==$('kj'))$('kj').value=JSON.stringify(D,null,1)}
 async function ld(){try{D=await fetch('/api/kvk2').then(r=>r.json());draw()}catch(e){}}
 async function sv(body){const r=await fetch('/api/kvk2',{method:'POST',body}).then(r=>r.json()).catch(e=>({ok:false,error:String(e)}));$('msg').textContent=r.ok?L('gespeichert','saved'):L('Fehler: ','Error: ')+r.error;if(r.ok){D=r.data;$('kj').value='';draw()}return r.ok}
 $('tb').onclick=e=>{const th=e.target.closest('th[data-c]');if(th){const c=th.dataset.c;S.dir=S.col===c?-S.dir:(['id','rank','group'].includes(c)?1:-1);S.col=c;try{localStorage.setItem('rokk2',JSON.stringify(S))}catch(x){}draw();return}
  const b=e.target.closest('button');if(!b)return;
  if(b.dataset.d){D.kingdoms=D.kingdoms.filter(x=>x.id!==+b.dataset.d);sv(JSON.stringify(D))}
  else if(b.dataset.m){D.me=+b.dataset.m;sv(JSON.stringify(D))}
- else if(b.dataset.e){const x=D.kingdoms.find(k=>k.id===+b.dataset.e);if(x){$('fi').value=x.id;$('fp').value=x.power||'';$('fk').value=x.kp||'';$('fd').value=x.deads||'';$('fn').value=x.ch25||'';$('fg').value=x.group||'';$('fr').value=x.rank||'';$('fi').focus()}}};
-$('f').onsubmit=e=>{e.preventDefault();const id=pn($('fi').value);if(!id)return;const x={id,power:pn($('fp').value),kp:pn($('fk').value),deads:pn($('fd').value),ch25:pn($('fn').value),group:$('fg').value.trim().toUpperCase().slice(0,1),rank:pn($('fr').value)};
+ else if(b.dataset.e){const x=D.kingdoms.find(k=>k.id===+b.dataset.e);if(x){$('fi').value=x.id;$('fp').value=x.power||'';$('fk').value=x.kp||'';$('fd').value=x.deads||'';$('fg').value=x.group||'';$('fr').value=x.rank||'';$('fi').focus()}}};
+$('f').onsubmit=e=>{e.preventDefault();const id=pn($('fi').value);if(!id)return;const x={id,power:pn($('fp').value),kp:pn($('fk').value),deads:pn($('fd').value),group:$('fg').value.trim().toUpperCase().slice(0,1),rank:pn($('fr').value)};
  D.kingdoms=D.kingdoms.filter(k=>k.id!==id).concat(x);sv(JSON.stringify(D)).then(ok=>{if(ok)$('f').reset()})};
+$('tm').onchange=e=>{const t=e.target;if(t.id==='tn'){D.teams.n=+t.value;D.teams.assign={};sv(JSON.stringify(D))}else if(t.dataset.t){const A=D.teams.assign;if(t.value==='')delete A[t.dataset.t];else A[t.dataset.t]=+t.value;sv(JSON.stringify(D))}};
+$('tm').onclick=e=>{const b=e.target.closest('button');if(!b)return;if(b.id==='tgo'){autoTeams();sv(JSON.stringify(D))}else if(b.id==='tcl'){D.teams.assign={};sv(JSON.stringify(D))}};
 $('ks').onclick=()=>{const v=$('kj').value.trim();if(v)sv(v)};
 $('kr').onclick=()=>{if(confirm(tx('Alle Einträge dieser Seite löschen und auf den Anfangszustand zurücksetzen?')))sv(JSON.stringify({reset:1}))};
 ld();
@@ -2279,19 +2299,19 @@ KVK1_DEFAULT = {
            "heal": {"food": 505692450, "wood": 484035130, "stone": 33426072, "gold": 34331240}},
 }
 
-# (Kingdom, Gruppe, Rang, Power, Kill Points, Deads, CH25) aus dem Leaderboard-Screenshot
+# (Kingdom, Gruppe, Rang, Power, Kill Points, Deads) aus dem Leaderboard-Screenshot
 KVK2_SEED = [
-    (4113, "C", 124, 6812745133, 15995332776, 188352597, 269), (4114, "C", 132, 6581656508, 16264779002, 188907230, 254),
-    (4115, "C", 137, 6457844135, 9661859677, 122914983, 256), (4116, "C", 130, 6702473003, 12472590639, 112606195, 234),
-    (4117, "B", 61, 8209002340, 25680565012, 233272154, 300), (4118, "A", 12, 11311597289, 89936642236, 393051756, 300),
-    (4119, "B", 88, 7676345287, 20050516438, 174834662, 286), (4120, "C", 142, 6287374813, 12252868055, 178663472, 251),
-    (4121, "A", 20, 10968506753, 49369342324, 273333106, 300), (4122, "C", 134, 6561240205, 11366224533, 143471525, 272),
-    (4123, "A", 35, 9073593572, 35826596041, 189024498, 296), (4124, "C", 153, 5734829911, 11565989702, 125708191, 175),
-    (4125, "C", 128, 6707514026, 10638016845, 109873171, 270), (4126, "A", 17, 11053146484, 79261001448, 318794739, 300),
-    (4127, "C", 139, 6401735524, 16764207274, 170173245, 242), (4128, "C", 147, 6119413509, 7427116956, 109597666, 266),
+    (4113, "C", 124, 6812745133, 15995332776, 188352597), (4114, "C", 132, 6581656508, 16264779002, 188907230),
+    (4115, "C", 137, 6457844135, 9661859677, 122914983), (4116, "C", 130, 6702473003, 12472590639, 112606195),
+    (4117, "B", 61, 8209002340, 25680565012, 233272154), (4118, "A", 12, 11311597289, 89936642236, 393051756),
+    (4119, "B", 88, 7676345287, 20050516438, 174834662), (4120, "C", 142, 6287374813, 12252868055, 178663472),
+    (4121, "A", 20, 10968506753, 49369342324, 273333106), (4122, "C", 134, 6561240205, 11366224533, 143471525),
+    (4123, "A", 35, 9073593572, 35826596041, 189024498), (4124, "C", 153, 5734829911, 11565989702, 125708191),
+    (4125, "C", 128, 6707514026, 10638016845, 109873171), (4126, "A", 17, 11053146484, 79261001448, 318794739),
+    (4127, "C", 139, 6401735524, 16764207274, 170173245), (4128, "C", 147, 6119413509, 7427116956, 109597666),
 ]
-KVK2_DEFAULT = {"season": "", "me": 4123, "kingdoms": [
-    {"id": i, "group": g, "rank": r, "power": p, "kp": k, "deads": d, "ch25": c} for i, g, r, p, k, d, c in KVK2_SEED]}
+KVK2_DEFAULT = {"season": "", "me": 4123, "teams": {"n": 2, "assign": {}}, "kingdoms": [
+    {"id": i, "group": g, "rank": r, "power": p, "kp": k, "deads": d} for i, g, r, p, k, d in KVK2_SEED]}
 
 
 def kvk2_clean(d):
@@ -2306,10 +2326,20 @@ def kvk2_clean(d):
         if i <= 0:
             continue
         out.append({"id": i, "group": str(x.get("group") or "")[:1].upper(),
-                    **{k: max(0, int(x.get(k) or 0)) for k in ("rank", "power", "kp", "deads", "ch25")}})
+                    **{k: max(0, int(x.get(k) or 0)) for k in ("rank", "power", "kp", "deads")}})
     ids = {x["id"] for x in out}
     me = int(d.get("me") or 0)
-    return {"season": str(d.get("season") or "")[:60], "me": me if me in ids else (out[0]["id"] if out else 0), "kingdoms": out}
+    t = d.get("teams") if isinstance(d.get("teams"), dict) else {}
+    n = min(4, max(2, int(t.get("n") or 2)))
+    assign = {}
+    for k, v in (t.get("assign") or {}).items():
+        try:
+            if int(k) in ids and 0 <= int(v) < n:
+                assign[str(int(k))] = int(v)
+        except (TypeError, ValueError):
+            pass
+    return {"season": str(d.get("season") or "")[:60], "me": me if me in ids else (out[0]["id"] if out else 0), "kingdoms": out,
+            "teams": {"n": n, "assign": assign}}
 
 
 def kvk2_load(db):
