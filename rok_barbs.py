@@ -1996,7 +1996,7 @@ function renderAlliance(a){lastAl=a;if(!a)return;try{inRender()}catch(e){}const 
  const sn=a.snaps||[];$('asel').innerHTML=sn.slice().reverse().map(d=>`<option value="${d}"${d===a.sel?' selected':''}>${dm(d)}</option>`).join('');
  $('abase').innerHTML=`<option value="">${LL('Vorheriger Stand','Previous snapshot')}</option>`+sn.filter(d=>d<a.sel).reverse().map(d=>`<option value="${d}"${d===a.base?' selected':''}>${dm(d)}</option>`).join('');
  const ls=a.lists||[];$('alst').innerHTML=`<option value="">${LL('Aktuelle Liste','Current list')}</option>`+ls.map(n=>`<option value="${esc(n)}"${n===a.lst?' selected':''}>${esc(n)}</option>`).join('');
- const arch=!!a.lst;$('adl').hidden=!arch;$('anew').hidden=arch;$('adel').hidden=arch||!sn.length;$('abtn').hidden=arch;$('anew').textContent=LL('Neue Liste','New list');$('adl').textContent=LL('Liste löschen','Delete list');
+ const arch=!!a.lst;$('adl').hidden=!arch;$('anew').hidden=arch;$('adel').hidden=arch||!sn.length;$('anew').textContent=LL('Neue Liste','New list');$('adl').textContent=LL('Liste löschen','Delete list');
  $('adel').hidden=arch||!sn.length;$('adel').textContent=LL('Diesen Stand löschen','Delete this snapshot');
  const AV=[['avg_all','Ø Rang',[]]];
   if(alOn===null){const u=a.ui||{};alOn=new Set(cats.map(c=>c.key).filter(k=>!(u.off||[]).includes(k)));
@@ -2031,7 +2031,7 @@ $('achips').addEventListener('drop',e=>{const t=e.target.closest('.chip');if(!t|
 $('abtn').onclick=()=>$('afile').click();
 $('aexp').href='/allianz/export?lang='+LANG;
 $('afile').onchange=async e=>{let n=0,err='';for(const fl of e.target.files){try{const r=await fetch('/api/alliance',{method:'POST',body:await fl.text()}).then(r=>r.json());if(r.ok)n+=r.n;else err=r.error}catch(x){err=String(x)}}
- $('amsg').textContent=err?'Fehler: '+err:n+' Eintrag/Einträge übernommen.';e.target.value='';lastSig='';load()};
+ $('amsg').textContent=err?'Fehler: '+err:n+' Eintrag/Einträge übernommen.';e.target.value='';alLst='';alSel='';alBase='';lastSig='';load()};
 let alSel='',alBase='',alLst='';
 $('alst').onchange=()=>{alLst=$('alst').value;alSel='';alBase='';lastSig='';load()};
 $('anew').onclick=async()=>{if(!lastAl||!lastAl.sel)return;const wk=(d=>{const t=new Date(Date.UTC(+d[0],+d[1]-1,+d[2]));const n=t.getUTCDay()||7;t.setUTCDate(t.getUTCDate()+4-n);const y=t.getUTCFullYear();return [Math.ceil(((t-Date.UTC(y,0,1))/864e5+1)/7),y]})(lastAl.sel.slice(0,10).split('-'));
