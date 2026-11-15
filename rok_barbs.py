@@ -1169,6 +1169,7 @@ body{transition:padding-left .18s ease,padding-right .18s ease}
 <script>(function(){
 let LG='de';try{LG=localStorage.getItem('roklang')==='en'?'en':'de'}catch(e){}
 const TT={'Schnellzugriff':'Quick access','Widgets auswählen':'Choose widgets','Schließen':'Close','Live-Feed':'Live feed','Chain-Länge':'Chain length','Ø Barbaren pro Chain':'Avg barbarians per chain','Zeitraum':'Period','Gesamt':'Total','Heute gegen gestern':'Today vs yesterday','Verlauf':'Trend','Seltene Drops':'Rare drops','Allianz':'Alliance','Letzte 7 Tage':'Last 7 days','Status':'Status','Festung':'Fort','Barbaren':'Barbarians','Speedups':'Speedups','Gems':'Gems','Tomes-XP':'Tome XP','Festungen':'Forts','heute':'today','gestern':'yesterday','Noch nichts da':'Nothing yet','Dein Ø Rang':'Your avg rank','Top 5 (Ø Rang)':'Top 5 (avg rank)','Rang':'Rank','von':'of','Dateien überwacht':'files watched','Letzter Bericht':'Last report','Vorwoche':'prev. week','7 Tage':'7 days','14 Tage':'14 days','Min':'min','Rally':'Rally','Solo':'Solo','Du bist in der Allianz-Liste nicht gefunden. Profil-Daten einlesen, damit dein Name bekannt ist.':'You were not found in the alliance list. Import profile data so your name is known.','Noch keine Allianz-Daten':'No alliance data yet'};
+const MON3=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'],dq=d=>LG==='en'?MON3[+d.slice(5,7)-1]+' '+(+d.slice(8)):d.slice(8)+'.'+d.slice(5,7)+'.';
 const t=s=>LG==='en'?(TT[s]||s):s,LOC=LG==='en'?'en-US':'de-DE',f=n=>Number(n||0).toLocaleString(LOC);
 const esc=s=>String(s==null?'':s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
 const $=id=>document.getElementById(id),B=document.body;
@@ -1191,9 +1192,9 @@ const norm=s=>String(s||'').normalize('NFKC').toLowerCase().replace(/\s+/g,'');
 function wFeed(){const l=Q.feed;return l.length?`<div class="qf">${l.map(e=>`<div><div class="r1"><time>${esc(e.time)}</time><span class="tg${e.type==='barb'?' b':''}">${t(e.type==='fort'?'Festung':'Barbaren')}</span><b>${esc(e.title)}</b>${e.role&&e.role!=='solo'?'<span class="tg">'+t('Rally')+'</span>':''}</div><div class="ls">${e.loot.length?e.loot.map(x=>x.name?f(x.qty)+'× '+esc(x.name):'+'+x.qty).join(', '):'–'}</div></div>`).join('')}</div>`:`<div class="q0">${t('Noch nichts da')}</div>`}
 function wVs(){const d=Q.days,a=d[d.length-1],b=d[d.length-2];return`<div class="qg">${['speed','gems','forts','xp'].map(k=>`<div><small>${t(MET[k][0])}${k==='speed'?tun():''}</small><b>${k==='speed'?tm(a[k]):short(a[k])}</b>${arrow(a[k],b[k],k)}</div>`).join('')}</div>`}
 function wTrend(){const n=S.n,d=Q.days.slice(-n),fn=MET[S.m][1],v=d.map(fn),mx=Math.max(1,...v),W=280,H=84,bw=W/n;
- const bars=v.map((x,i)=>{const h=Math.round(x/mx*(H-16));return`<rect class="bar${i===n-1?' td':''}" x="${(i*bw+1.5).toFixed(1)}" y="${H-h}" width="${(bw-3).toFixed(1)}" height="${h}" rx="2"><title>${d[i].day.slice(8)}.${d[i].day.slice(5,7)}.: ${f(x)}</title></rect>`}).join('');
- return`<div class="qt">${Object.entries(MET).map(([k,m])=>`<button type="button" data-m="${k}" class="${k===S.m?'on':''}">${t(m[0])}</button>`).join('')}</div><svg viewBox="0 0 ${W} ${H+10}">${bars}<text x="0" y="${H+9}">${d[0].day.slice(8)}.${d[0].day.slice(5,7)}.</text><text x="${W}" y="${H+9}" text-anchor="end">${t('heute')}</text><text x="${W}" y="9" text-anchor="end">max ${short(mx)}</text></svg><div class="qt" style="margin:6px 0 0"><button type="button" data-n="7" class="${n===7?'on':''}">${t('7 Tage')}</button><button type="button" data-n="14" class="${n===14?'on':''}">${t('14 Tage')}</button></div>`}
-function wRare(){const l=Q.rare;return l.length?`<div class="ql">${l.map(x=>`<div><span><img class="qi" src="/icon/${x.slug}" alt="" onerror="this.remove()">${f(x.qty)}× ${esc(x.name)}</span><span>${x.last.slice(8)}.${x.last.slice(5,7)}.</span></div>`).join('')}</div>`:`<div class="q0">${t('Noch nichts da')}</div>`}
+ const bars=v.map((x,i)=>{const h=Math.round(x/mx*(H-16));return`<rect class="bar${i===n-1?' td':''}" x="${(i*bw+1.5).toFixed(1)}" y="${H-h}" width="${(bw-3).toFixed(1)}" height="${h}" rx="2"><title>${dq(d[i].day)}: ${f(x)}</title></rect>`}).join('');
+ return`<div class="qt">${Object.entries(MET).map(([k,m])=>`<button type="button" data-m="${k}" class="${k===S.m?'on':''}">${t(m[0])}</button>`).join('')}</div><svg viewBox="0 0 ${W} ${H+10}">${bars}<text x="0" y="${H+9}">${dq(d[0].day)}</text><text x="${W}" y="${H+9}" text-anchor="end">${t('heute')}</text><text x="${W}" y="9" text-anchor="end">max ${short(mx)}</text></svg><div class="qt" style="margin:6px 0 0"><button type="button" data-n="7" class="${n===7?'on':''}">${t('7 Tage')}</button><button type="button" data-n="14" class="${n===14?'on':''}">${t('14 Tage')}</button></div>`}
+function wRare(){const l=Q.rare;return l.length?`<div class="ql">${l.map(x=>`<div><span><img class="qi" src="/icon/${x.slug}" alt="" onerror="this.remove()">${f(x.qty)}× ${esc(x.name)}</span><span>${dq(x.last)}</span></div>`).join('')}</div>`:`<div class="q0">${t('Noch nichts da')}</div>`}
 function wWeek(){const d=Q.days,a=d.slice(-7),b=d.slice(0,7),sm=(l,k)=>l.reduce((n,x)=>n+x[k],0);return`<div class="qg">${['speed','gems','forts','xp'].map(k=>{const x=sm(a,k),y=sm(b,k),df=x-y;return`<div><small>${t(MET[k][0])}${k==='speed'?tun():''}</small><b>${k==='speed'?tm(x):short(x)}</b><em class="${df>0?'up':df<0?'dn':'eq'}">${df>0?'▲':df<0?'▼':'='} ${k==='speed'?tm(Math.abs(df)):f(Math.abs(df))} ${t('Vorwoche')}</em></div>`}).join('')}</div>`}
 function wAli(){if(!AL||!AL.members||!AL.members.length)return`<div class="q0">${t('Noch keine Allianz-Daten')}</div>`;
  const off=(AL.ui&&AL.ui.off)||[],cats=AL.cats.filter(c=>!off.includes(c.key)),ms=AL.members.map(m=>{const r=cats.map(c=>m.c[c.key]&&m.c[c.key].r).filter(x=>x!=null);return{m,avg:r.length?r.reduce((a,b)=>a+b,0)/r.length:null}}).filter(x=>x.avg!=null).sort((a,b)=>a.avg-b.avg);
@@ -1321,7 +1322,7 @@ tr.flash td,details.flash{animation:fl 2.6s ease-out}
 .mbtn{position:fixed;top:12px;left:12px;z-index:60;padding:5px 11px;font-size:1.2rem;line-height:1.2;cursor:pointer}body.sbopen .mbtn#mbtn{display:none}.sb{position:fixed;top:0;left:0;bottom:0;width:260px;z-index:70;background:var(--card);border-right:1px solid var(--line);display:flex;flex-direction:column;transform:translateX(-102%);transition:transform .18s ease;overflow-y:auto}body.sbopen .sb{transform:none}.sbh{display:flex;align-items:center;justify-content:space-between;padding:16px 14px 12px 18px}.sbt{font-weight:800;font-size:1.15rem;letter-spacing:.02em}.sbh .mbtn{position:static;padding:3px 9px;font-size:1rem}.sbn{display:flex;flex-direction:column;padding:6px 10px 20px;gap:2px}.sbl{font-size:.72rem;color:var(--mute);padding:10px 8px 4px}.sbn a{display:flex;align-items:center;gap:10px;padding:9px 10px;border-radius:9px;text-decoration:none;color:var(--ink)}.sbn a svg{flex:none;color:var(--mute)}.sbn a:hover{background:var(--soft)}.sbn a.cur{background:var(--accsoft);color:var(--acc);font-weight:700}.sbn a.cur svg{color:var(--acc)}.msep{height:1px;background:var(--line);margin:10px 2px 4px}.mrow{display:flex;flex-direction:column;gap:5px;padding:6px 8px;font-size:.82rem;color:var(--mute)}.mrow select{width:100%}.seg{display:flex;gap:4px}.seg button{flex:1;padding:5px 2px;font-size:.78rem;cursor:pointer}.seg button.on{background:var(--acc);border-color:var(--acc);color:#fff}.sbov{display:none}body{transition:padding-left .18s ease}@media(min-width:1100px){body.sbopen{padding-left:260px}}@media(max-width:1099px){body.sbopen .sbov{display:block;position:fixed;inset:0;background:#0007;z-index:65}}
 
 </style></head><body><main>
-<button type="button" id="mbtn" class="mbtn" aria-label="Menü" aria-expanded="true" title="Menü">☰</button><aside id="sb" class="sb" aria-label="Menü"><div class="sbh"><span class="sbt">RoK&nbsp;Tracker</span><button type="button" id="sbx" class="mbtn" aria-label="Menü schließen" title="Menü schließen">⇤</button></div><nav class="sbn"><div class="sbl">Seiten</div><a href="/" data-p="/" data-k="loot"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l8 4v5c0 4.5-3.2 7.8-8 9-4.8-1.2-8-4.5-8-9V7z"/><path d="M9 12l2 2 4-4"/></svg><span>Loot-Tracker</span></a><a href="/allianz" data-p="/allianz" data-k="ali"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20V10M10 20V4M16 20v-8M22 20H2"/></svg><span>Allianz-Ranking</span></a><a href="/kvk1" data-p="/kvk1" data-k="kvk"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M14.5 17.5L3 6V3h3l11.5 11.5M13 19l6-6M16 16l4 4M19 21l2-2M14.5 6.5L18 3h3v3l-3.5 3.5M5 14l4 4M7 17l-3 3M3 19l2 2"/></svg><span>KVK1</span></a><a href="/woche" data-p="/woche" data-k="wb"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="17" rx="2"/><path d="M3 9h18M8 2v4M16 2v4M8 14h3M13 14h3M8 17h3"/></svg><span>Wochenbericht</span></a><a href="/settings" data-p="/settings" data-k="set"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.9l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.9-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1-1.5 1.7 1.7 0 0 0-1.9.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.9 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1 1.7 1.7 0 0 0-.3-1.9l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.9.3h0a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5h0a1.7 1.7 0 0 0 1.9-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.9v0a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg><span>Einstellungen</span><b class="sbb" id="sbbadge" hidden></b></a><div class="sbdiv" data-k="d1"></div><div class="sbdiv" data-k="d2"></div><div class="sbstat" data-k="prof"><div class="sbgh0">Profil</div><a href="/#profil"><span>Profil</span></a><a href="/#tag"><span>Pro Tag</span></a></div></nav></aside><div id="sbov" class="sbov"></div><script>try{var th=localStorage.getItem("roktheme");if(th)document.documentElement.dataset.theme=th}catch(e){}window.sbOrd=function(){var A=["loot","ali","kvk","wb"],o=A.slice();try{var v=JSON.parse(localStorage.getItem("roksbo")||"null");if(v&&v.length){v=v.filter(function(x){return A.indexOf(x)>=0});o=v.concat(A.filter(function(x){return v.indexOf(x)<0}))}}catch(e){}var m={d1:4,prof:5,d2:6,set:7};o.forEach(function(k,i){m[k]=i});document.querySelectorAll("#sb [data-k]").forEach(function(e){e.style.order=m[e.dataset.k]})};sbOrd();window.sbUnk=function(){fetch("/api/unk").then(r=>r.json()).then(u=>{var b=document.getElementById("sbbadge");b.textContent=u.n;b.hidden=!u.n;try{var R=JSON.parse(localStorage.getItem("rokrem")||"{}"),el=document.getElementById("sbrem"),hr=(u.now-u.last)/3600;if(R.on&&u.last&&hr>=(R.h||12)&&localStorage.getItem("rokremx")!=String(u.last)){if(!el){el=document.createElement("div");el.id="sbrem";el.style.cssText="position:fixed;top:12px;left:50%;transform:translateX(-50%);z-index:80;padding:9px 14px;border-radius:12px;background:var(--card);color:var(--ink);border:1px solid var(--warn);box-shadow:0 6px 24px rgba(0,0,0,.25);font-size:.9rem;display:flex;gap:10px;align-items:center";document.body.appendChild(el)}el.innerHTML="<span>⏰ Seit "+(hr<48?Math.floor(hr)+" Std":Math.floor(hr/24)+" Tagen")+" keine neuen Berichte.</span>";var x=document.createElement("button");x.textContent="Ausblenden";x.onclick=function(){try{localStorage.setItem("rokremx",String(u.last))}catch(e){}el.remove()};el.appendChild(x)}else if(el)el.remove()}catch(e){}}).catch(function(){})};sbUnk();setInterval(sbUnk,30000)</script><script>(function(){const b=document.getElementById("mbtn"),x=document.getElementById("sbx"),ov=document.getElementById("sbov"),n=document.getElementById("sb"),R=document.documentElement,B=document.body;n.querySelectorAll("a[data-p]").forEach(a=>{if(a.dataset.p===(location.pathname.replace(/\/+$/,"")||"/"))a.className="cur"});let V={w:"1600",a:"c"},O=window.innerWidth>=1100;try{V=Object.assign(V,JSON.parse(localStorage.getItem("rokview")||"{}"));const o=localStorage.getItem("roksb");if(o!==null)O=o==="1"}catch(e){}const ap=()=>{R.style.setProperty("--mw",V.w==="100%"?"100%":V.w+"px");R.style.setProperty("--ml",V.a==="l"?"0":"auto");R.style.setProperty("--mr",V.a==="r"?"0":"auto");document.querySelectorAll("#mw button").forEach(y=>y.classList.toggle("on",y.dataset.v===V.w));document.querySelectorAll("#ma button").forEach(y=>y.classList.toggle("on",y.dataset.v===V.a))};const so=v=>{O=v;B.classList.toggle("sbopen",O);b.setAttribute("aria-expanded",O);try{localStorage.setItem("roksb",O?"1":"0")}catch(e){}};document.addEventListener("DOMContentLoaded",ap);
+<button type="button" id="mbtn" class="mbtn" aria-label="Menü" aria-expanded="true" title="Menü">☰</button><aside id="sb" class="sb" aria-label="Menü"><div class="sbh"><span class="sbt">RoK&nbsp;Tracker</span><button type="button" id="sbx" class="mbtn" aria-label="Menü schließen" title="Menü schließen">⇤</button></div><nav class="sbn"><div class="sbl">Seiten</div><a href="/" data-p="/" data-k="loot"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l8 4v5c0 4.5-3.2 7.8-8 9-4.8-1.2-8-4.5-8-9V7z"/><path d="M9 12l2 2 4-4"/></svg><span>Loot-Tracker</span></a><a href="/allianz" data-p="/allianz" data-k="ali"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20V10M10 20V4M16 20v-8M22 20H2"/></svg><span>Allianz-Ranking</span></a><a href="/kvk1" data-p="/kvk1" data-k="kvk"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M14.5 17.5L3 6V3h3l11.5 11.5M13 19l6-6M16 16l4 4M19 21l2-2M14.5 6.5L18 3h3v3l-3.5 3.5M5 14l4 4M7 17l-3 3M3 19l2 2"/></svg><span>KVK1</span></a><a href="/woche" data-p="/woche" data-k="wb"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="17" rx="2"/><path d="M3 9h18M8 2v4M16 2v4M8 14h3M13 14h3M8 17h3"/></svg><span>Wochenbericht</span></a><a href="/kalender" data-p="/kalender" data-k="kal"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg><span>Event-Kalender</span></a><a href="/settings" data-p="/settings" data-k="set"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.9l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.9-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1-1.5 1.7 1.7 0 0 0-1.9.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.9 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1 1.7 1.7 0 0 0-.3-1.9l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.9.3h0a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5h0a1.7 1.7 0 0 0 1.9-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.9v0a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg><span>Einstellungen</span><b class="sbb" id="sbbadge" hidden></b></a><div class="sbdiv" data-k="d1"></div><div class="sbdiv" data-k="d2"></div><div class="sbstat" data-k="prof"><div class="sbgh0">Profil</div><a href="/#profil"><span>Profil</span></a><a href="/#tag"><span>Pro Tag</span></a></div></nav></aside><div id="sbov" class="sbov"></div><script>try{var th=localStorage.getItem("roktheme");if(th)document.documentElement.dataset.theme=th}catch(e){}window.sbOrd=function(){var A=["loot","ali","kvk","wb","kal"],o=A.slice();try{var v=JSON.parse(localStorage.getItem("roksbo")||"null");if(v&&v.length){v=v.filter(function(x){return A.indexOf(x)>=0});o=v.concat(A.filter(function(x){return v.indexOf(x)<0}))}}catch(e){}var m={d1:5,prof:6,d2:7,set:8};o.forEach(function(k,i){m[k]=i});document.querySelectorAll("#sb [data-k]").forEach(function(e){e.style.order=m[e.dataset.k]})};sbOrd();window.sbUnk=function(){fetch("/api/unk").then(r=>r.json()).then(u=>{var b=document.getElementById("sbbadge");b.textContent=u.n;b.hidden=!u.n;try{var R=JSON.parse(localStorage.getItem("rokrem")||"{}"),el=document.getElementById("sbrem"),hr=(u.now-u.last)/3600;if(R.on&&u.last&&hr>=(R.h||12)&&localStorage.getItem("rokremx")!=String(u.last)){if(!el){el=document.createElement("div");el.id="sbrem";el.style.cssText="position:fixed;top:12px;left:50%;transform:translateX(-50%);z-index:80;padding:9px 14px;border-radius:12px;background:var(--card);color:var(--ink);border:1px solid var(--warn);box-shadow:0 6px 24px rgba(0,0,0,.25);font-size:.9rem;display:flex;gap:10px;align-items:center";document.body.appendChild(el)}el.innerHTML="<span>⏰ Seit "+(hr<48?Math.floor(hr)+" Std":Math.floor(hr/24)+" Tagen")+" keine neuen Berichte.</span>";var x=document.createElement("button");x.textContent="Ausblenden";x.onclick=function(){try{localStorage.setItem("rokremx",String(u.last))}catch(e){}el.remove()};el.appendChild(x)}else if(el)el.remove()}catch(e){}}).catch(function(){})};sbUnk();setInterval(sbUnk,30000)</script><script>(function(){const b=document.getElementById("mbtn"),x=document.getElementById("sbx"),ov=document.getElementById("sbov"),n=document.getElementById("sb"),R=document.documentElement,B=document.body;n.querySelectorAll("a[data-p]").forEach(a=>{if(a.dataset.p===(location.pathname.replace(/\/+$/,"")||"/"))a.className="cur"});let V={w:"1600",a:"c"},O=window.innerWidth>=1100;try{V=Object.assign(V,JSON.parse(localStorage.getItem("rokview")||"{}"));const o=localStorage.getItem("roksb");if(o!==null)O=o==="1"}catch(e){}const ap=()=>{R.style.setProperty("--mw",V.w==="100%"?"100%":V.w+"px");R.style.setProperty("--ml",V.a==="l"?"0":"auto");R.style.setProperty("--mr",V.a==="r"?"0":"auto");document.querySelectorAll("#mw button").forEach(y=>y.classList.toggle("on",y.dataset.v===V.w));document.querySelectorAll("#ma button").forEach(y=>y.classList.toggle("on",y.dataset.v===V.a))};const so=v=>{O=v;B.classList.toggle("sbopen",O);b.setAttribute("aria-expanded",O);try{localStorage.setItem("roksb",O?"1":"0")}catch(e){}};document.addEventListener("DOMContentLoaded",ap);
 document.addEventListener("click",e=>{const y=e.target.closest(".seg button");if(!y||!y.parentNode.id.match(/^m[wa]$/))return;if(y.parentNode.id==="mw")V.w=y.dataset.v;else V.a=y.dataset.v;try{localStorage.setItem("rokview",JSON.stringify(V))}catch(e){}ap()});ap();B.classList.toggle("sbopen",O);b.onclick=()=>so(!O);x.onclick=()=>so(false);ov.onclick=()=>so(false);document.addEventListener("keydown",e=>{if(e.key==="Escape"&&window.innerWidth<1100)so(false)})})()</script>@@QP@@
 <section class="hero"><div class="avc"><div class="av" id="avbox" tabindex="0" role="button" title="Avatar ändern"><span id="hav">⚔</span></div><button id="avreset" hidden>Avatar zurücksetzen</button><input type="file" id="avfile" accept="image/*" hidden></div><div>
 <div class="hrow"><div><h1 id="hname">Barbaren-Tracker</h1><div id="per"></div><div id="st"></div></div>
@@ -1579,7 +1580,7 @@ $('avreset').onclick=()=>avPost('');
 $('avfile').onchange=e=>{const fl=e.target.files[0];e.target.value='';if(!fl)return;const im=new Image(),u=URL.createObjectURL(fl);
  im.onload=()=>{const S=256,c=document.createElement('canvas');c.width=c.height=S;const k=Math.max(S/im.width,S/im.height),w=im.width*k,h=im.height*k;
   c.getContext('2d').drawImage(im,(S-w)/2,(S-h)/2,w,h);URL.revokeObjectURL(u);let d=c.toDataURL('image/webp',.9);if(!d.startsWith('data:image/webp'))d=c.toDataURL('image/jpeg',.9);avPost(d)};
- im.onerror=()=>{URL.revokeObjectURL(u);alert('Bild konnte nicht gelesen werden.')};im.src=u};
+ im.onerror=()=>{URL.revokeObjectURL(u);alert(tx('Bild konnte nicht gelesen werden.'))};im.src=u};
 $('mainbtn').onclick=async()=>{const a=$('acc').value;if(!a)return;const cur=lastMain;await fetch('/api/main',{method:'POST',body:JSON.stringify({account:cur===a?'':a})});lastSig='';load()};
 $('pbtn').onclick=()=>$('pfile').click();
 $('pfile').onchange=async e=>{let n=0,err='';for(const fl of e.target.files){try{const r=await fetch('/api/profile',{method:'POST',body:await fl.text()}).then(r=>r.json());if(r.ok)n+=r.n;else err=r.error}catch(x){err=String(x)}}
@@ -1655,16 +1656,147 @@ const EN=[
 [`Stein: Rohstoff für Gebäude, Forschung und Truppen.`,`Stone: resource for buildings, research and troops.`],[`Gold: Rohstoff für Gebäude, Forschung und Truppen.`,`Gold: resource for buildings, research and troops.`],
 [`Edelsteine: Premium-Währung.`,`Gems: premium currency.`],[`Gibt einem Kommandanten Erfahrung (XP).`,`Gives a commander experience (XP).`],
 [`Ressourcenpaket. Lvl 2: zufällig 10.000 Mais, 10.000 Holz, 7.500 Stein oder 5.000 Gold (aus Barbarenfestungen, Hungry-Turkey-Event). Lvl 1 (C): zufällig 1.000 Mais, 1.000 Holz, 750 Stein oder 500 Gold.`,`Resource Pack. Lvl 2: random 10,000 Food, 10,000 Wood, 7,500 Stone or 5,000 Gold (from Barbarian Forts, Hungry Turkey event). Lvl 1 (C): random 1,000 Food, 1,000 Wood, 750 Stone or 500 Gold.`],
-[`Notfall-Aktionspunkte: stellen sofort Aktionspunkte für Angriffe auf Barbaren wieder her.`,`Emergency Action Points: instantly restore action points for attacking barbarians.`]
+[`Notfall-Aktionspunkte: stellen sofort Aktionspunkte für Angriffe auf Barbaren wieder her.`,`Emergency Action Points: instantly restore action points for attacking barbarians.`],
+[`Menü`,`Menu`],
+[`Menü schließen`,`Close menu`],
+[`Schnellzugriff`,`Quick access`],
+[`Widgets auswählen`,`Choose widgets`],
+[`Schließen`,`Close`],
+[`Zeitraum`,`Period`],
+[`Gesamt`,`Total`],
+[`Gesamt:`,`Total:`],
+[`Kategorien im Durchschnitt`,`Categories included in the average`],
+[`nach oben`,`Move up`],
+[`nach unten`,`Move down`],
+[`Wochenbericht`,`Weekly report`],
+[`Event-Kalender`,`Event calendar`],
+[`Neustart`,`Restart`],
+[`Farbschema`,`Color scheme`],
+[`Hell, dunkel oder wie dein Gerät.`,`Light, dark or the same as your device.`],
+[`Automatisch`,`Automatic`],
+[`Hell`,`Light`],
+[`Dunkel`,`Dark`],
+[`Erinnerung`,`Reminder`],
+[`Zeigt oben einen Hinweis, wenn lange keine neuen Berichte eingelesen wurden. Das Programm muss dafür geöffnet sein.`,`Shows a notice at the top when no new reports have been read for a long time. The program has to be open for this.`],
+[`Hinweis anzeigen nach`,`Show notice after`],
+[`Hinweis`,`Notice`],
+[`Std`,`h`],
+[`Tage`,`days`],
+[`Backup`,`Backup`],
+[`Sichert die komplette Datenbank (Berichte, Namen, Profile, Einstellungen) als Datei. Beim Einspielen wird zuvor automatisch eine Kopie der jetzigen Datenbank neben der Datenbankdatei abgelegt.`,`Saves the complete database (reports, names, profiles, settings) as a file. When restoring, a copy of the current database is saved next to the database file first.`],
+[`Backup herunterladen`,`Download backup`],
+[`Backup einspielen …`,`Restore backup …`],
+[`Alle aktuellen Daten werden durch dieses Backup ersetzt. Vorher wird automatisch eine Kopie der jetzigen Datenbank gespeichert (Datei mit der Endung .vor-restore). Fortfahren?`,`All current data will be replaced by this backup. A copy of the current database is saved first (file ending in .vor-restore). Continue?`],
+[`Reihenfolge im Menü`,`Order in the menu`],
+[`Reihenfolge der Einträge unter „Seiten“ (Loot-Tracker, Allianz-Ranking, KVK1). Zieh sie oder nutze die Pfeile. Profil und Einstellungen stehen darunter, getrennt durch Striche.`,`Order of the entries under “Pages” (Loot tracker, Alliance ranking, KVK1, Weekly report, Event calendar). Drag them or use the arrows. Profile and Settings sit below, separated by lines.`],
+[`Zurücksetzen`,`Reset`],
+[`Keine offenen Namen.`,`No open names.`],
+[`Diese Nummern kennt das Programm noch nicht. Schau im Spiel nach (Tooltip auf das Item, Kommandant im Bericht) und trage den Namen ein. Gilt sofort auch für alle alten Berichte. Unbenannte Items erscheinen in den Berichten gelb markiert, ein Klick darauf führt hierher.`,`The program does not know these IDs yet. Look them up in the game (item tooltip, commander in the report) and enter the name. It applies to all older reports immediately. Unnamed items are highlighted in yellow in the reports, and clicking one leads here.`],
+[`Loot-Tracker (Beute, Festungen, Barbarenkämpfe …)`,`Loot tracker (loot, forts, barbarian battles …)`],
+[`Kill Points (Profil, gesamt)`,`Kill Points (profile, total)`],
+[`Wie sich dein Beitrag in dieser KvK verteilt.`,`How your contribution is distributed in this KvK.`],
+[`Unterstützung`,`Support`],
+[`Tauschgeschäfte`,`Trades`],
+[`Profil-Verlauf`,`Profile history`],
+[`Macht und Kill Points aus deinen Profil-Screenshots.`,`Power and Kill Points from your profile screenshots.`],
+[`Datum`,`Date`],
+[`Macht Δ`,`Power Δ`],
+[`Macht (Profil)`,`Power (profile)`],
+[`Δ Macht`,`Δ Power`],
+[`Δ KP`,`Δ KP`],
+[`Aus dem Spielprofil: Kills und Kill Points je Truppenstufe.`,`From the game profile: kills and kill points per troop tier.`],
+[`Deine Bestwerte aus dem Profil (Daten ab May 30, 2023).`,`Your personal bests from the profile (data since May 30, 2023).`],
+[`Meiste Einheiten getötet`,`Most units killed`],
+[`Meiste Einheiten verloren`,`Most units lost`],
+[`Rückkehr gefallener Einheiten und die Kosten für die Heilung.`,`Return of fallen units and the cost of healing.`],
+[`Einheiten zurück`,`Units returned`],
+[`Einheiten gestorben`,`Units died`],
+[`Extra zurück`,`Extra returned`],
+[`Ressourcen für Heilung`,`Resources for healing`],
+[`Daten bearbeiten`,`Edit data`],
+[`Alle Werte dieser Seite stammen aus deinen Screenshots (Spielprofil, Kill-Statistik, Relentless Warriors, Statsmaster, KvK-Dashboard) und stehen hier als JSON. Ändere Zahlen und speichere, die Seite aktualisiert sich sofort.`,`All values on this page come from your screenshots (game profile, kill statistics, Relentless Warriors, Statsmaster, KvK dashboard) and are shown here as JSON. Change numbers and save, the page updates immediately.`],
+[`Auf Screenshot-Werte zurücksetzen`,`Reset to screenshot values`],
+[`beste`,`best`],
+[`Gouverneuren`,`governors`],
+[`Überblick`,`Overview`],
+[`Montag bis Sonntag, verglichen mit der Woche davor.`,`Monday to Sunday, compared with the week before.`],
+[`zur Vorwoche`,`vs previous week`],
+[`wie Vorwoche`,`same as previous week`],
+[`Vorwoche`,`Previous week`],
+[`◀ Vorwoche`,`◀ Previous week`],
+[`Nächste Woche ▶`,`Next week ▶`],
+[`Als Bild speichern`,`Save as image`],
+[`Text kopieren`,`Copy text`],
+[`Text kopiert`,`Text copied`],
+[`Kopieren nicht möglich`,`Copying not possible`],
+[`AP für Chains`,`AP for chains`],
+[`Barbaren pro Tag`,`Barbarians per day`],
+[`Besiegte Barbaren je Tag, darunter Chains und Festungen.`,`Barbarians defeated per day, including chains and forts.`],
+[`Alle Funde der Woche`,`All finds of the week`],
+[` – diese Woche gibt es noch keine Beute.`,` – no loot yet this week.`],
+[`Deine Bestwerte aus allen Berichten, mit Auszeichnung nach Bronze, Silber und Gold.`,`Your personal bests from all reports, with bronze, silver and gold awards.`],
+[`Noch keine Daten.`,`No data yet.`],
+[`noch keine Auszeichnung`,`no award yet`],
+[`Beste Chain`,`Best chain`],
+[`Längste Serie`,`Longest series`],
+[`Bester Tag (Barbaren)`,`Best day (barbarians)`],
+[`Meiste Chains an einem Tag`,`Most chains in one day`],
+[`Meiste Festungen an einem Tag`,`Most forts in one day`],
+[`Aktivitäts-Streak`,`Activity streak`],
+[`Rekord`,`Record`],
+[`Rekorde`,`Records`],
+[`(aktuell)`,`(current)`],
+[`aktuell`,`current`],
+[`Serie`,`Series`],
+[`Barbaren besiegt`,`Barbarians defeated`],
+[`Als Nächstes`,`Coming up`],
+[`Bronze`,`Bronze`],
+[`Silber`,`Silver`],
+[`Gold`,`Gold`],
+[`Eigene Termine`,`Your own events`],
+[`Hinzufügen`,`Add`],
+[`Löschen`,`Delete`],
+[`Voriger Monat`,`Previous month`],
+[`Nächster Monat`,`Next month`],
+[`Besondere Funde`,`Special finds`],
+[`Bild konnte nicht gelesen werden.`,`Image could not be read.`],
+[`Backup eingespielt`,`Backup restored`],
+[`Wochenbericht KW`,`Weekly report week`],
+[`KW`,`Week`],
+[`Mio`,`M`],
+[`Rekorde &`,`Records &`],
+[`Verluste`,`Losses`],
+[`Solider Beitrag`,`Solid contribution`],
+[`Saison-DNA`,`Season DNA`],
+[`Widerstandskraft`,`Resilience`],
+[`Kill-Statistik`,`Kill statistics`],
+[`Fernkampfpunkte`,`Ranged points`],
+[`Meiste Einheiten geheilt`,`Most units healed`],
+[`Teilnahmen`,`Participations`],
+[`Mal Autarch`,`Times Autarch`],
+[`Aggression`,`Aggression`],
+[`Kill Points (KvK)`,`Kill Points (KvK)`],
+[`Aus dem Spielprofil`,`From the game profile`],
+[`Name fehlt`,`Name missing`],
+[`ungültiger Schlüssel`,`invalid key`],
+[`Bild ungültig oder zu groß`,`Image invalid or too large`],
+[`Unbekannte Kategorie`,`Unknown category`],
+[`Das ist keine Datenbank-Sicherung.`,`This is not a database backup.`],
+[`Die Datei ist keine Sicherung dieses Programms.`,`This file is not a backup of this program.`],
+[`Datei zu gross`,`File too large`],
+[`Es fehlen Bereiche`,`Missing sections`],
+[`ungültige Account-ID`,`invalid account ID`],
+[`Datei unvollständig`,`File incomplete`],
 ];
 const ENM=new Map(EN.map(([a,b])=>[a,b]));
 const ENRE=new RegExp('(?<![\\p{L}\\p{N}])(?:'+EN.map(x=>x[0]).sort((a,b)=>b.length-a.length).map(s=>s.replace(/[.*+?^${}()|[\]\\]/g,'\\$&')).join('|')+')(?![\\p{L}\\p{N}])','giu');
-const DYN=[[/Überwache (\d+) Dateien \((\d+) neu seit Start\)/g,'Watching $1 files ($2 new since start)'],[/Lese gerade noch (\d+) Dateien, neueste zuerst …/g,'Still reading $1 files, newest first …'],
+const DYN=[[/(?<!\d)(\d{2})\.(\d{2})\.(\d{4})(?!\d)/g,(m,d,mo,y)=>MON[+mo-1]+' '+(+d)+', '+y],[/(\d),(\d)(?=\s?(?:M|K|%))/g,'$1.$2'],[/(?<![\d.])([1-9]\d{0,2})\.(\d{3})(?![\d.])/g,'$1,$2'],[/Überwache (\d+) Dateien \((\d+) neu seit Start\)/g,'Watching $1 files ($2 new since start)'],[/Lese gerade noch (\d+) Dateien, neueste zuerst …/g,'Still reading $1 files, newest first …'],
  [/(\d+) Eintrag\/Einträge übernommen\./g,'$1 entries imported.'],
  [/(?<!\d)(\d{1,2})\.(\d{2})\. (\d{2}:\d{2})/g,(m,d,mo,t)=>+d+' '+MON[+mo-1]+' '+t]];
 function enCase(m){let e=ENM.get(m);if(e!=null)return e;const a=m[0],up=a===a.toUpperCase()&&a!==a.toLowerCase(),alt=(up?a.toLowerCase():a.toUpperCase())+m.slice(1);e=ENM.get(alt);
  if(e==null)return m;return up?e[0].toUpperCase()+e.slice(1):e[0].toLowerCase()+e.slice(1)}
 function enText(s){if(!/[A-Za-zÄÖÜäöüß]|\d\.\d{2}\./.test(s))return s;for(const [r,v] of DYN)s=s.replace(r,v);return s.replace(ENRE,enCase)}
+const tx=s=>LANG==='en'?enText(String(s)):s;
 const ENATTR=['title','placeholder','data-tip','aria-label'];
 function enNode(n){
  if(n.nodeType===3){if(n.parentNode&&n.parentNode.closest&&n.parentNode.closest('.nm'))return;const v=enText(n.nodeValue);if(v!==n.nodeValue)n.nodeValue=v;return}
@@ -1695,7 +1827,7 @@ a.btn{font:inherit;color:var(--ink);background:var(--soft);border:1px solid var(
 #achips{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:12px}.chip{font:inherit;font-size:.85rem;color:var(--ink);background:var(--soft);border:1px solid var(--line);border-radius:999px;padding:5px 12px;cursor:pointer}.chip[aria-pressed="false"]{color:var(--mute);text-decoration:line-through;background:transparent}.chip[aria-pressed="true"]{border-color:var(--acc)}
 #al th,#al td{padding:9px 12px}#al td.r{color:var(--mute);width:2.5em;text-align:right}#al td.n{text-align:left}
 </style></head><body><main>
-<button type="button" id="mbtn" class="mbtn" aria-label="Menü" aria-expanded="true" title="Menü">☰</button><aside id="sb" class="sb" aria-label="Menü"><div class="sbh"><span class="sbt">RoK&nbsp;Tracker</span><button type="button" id="sbx" class="mbtn" aria-label="Menü schließen" title="Menü schließen">⇤</button></div><nav class="sbn"><div class="sbl">Seiten</div><a href="/" data-p="/" data-k="loot"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l8 4v5c0 4.5-3.2 7.8-8 9-4.8-1.2-8-4.5-8-9V7z"/><path d="M9 12l2 2 4-4"/></svg><span>Loot-Tracker</span></a><a href="/allianz" data-p="/allianz" data-k="ali"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20V10M10 20V4M16 20v-8M22 20H2"/></svg><span>Allianz-Ranking</span></a><a href="/kvk1" data-p="/kvk1" data-k="kvk"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M14.5 17.5L3 6V3h3l11.5 11.5M13 19l6-6M16 16l4 4M19 21l2-2M14.5 6.5L18 3h3v3l-3.5 3.5M5 14l4 4M7 17l-3 3M3 19l2 2"/></svg><span>KVK1</span></a><a href="/woche" data-p="/woche" data-k="wb"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="17" rx="2"/><path d="M3 9h18M8 2v4M16 2v4M8 14h3M13 14h3M8 17h3"/></svg><span>Wochenbericht</span></a><a href="/settings" data-p="/settings" data-k="set"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.9l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.9-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1-1.5 1.7 1.7 0 0 0-1.9.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.9 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1 1.7 1.7 0 0 0-.3-1.9l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.9.3h0a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5h0a1.7 1.7 0 0 0 1.9-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.9v0a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg><span>Einstellungen</span><b class="sbb" id="sbbadge" hidden></b></a><div class="sbdiv" data-k="d1"></div><div class="sbdiv" data-k="d2"></div><div class="sbstat" data-k="prof"><div class="sbgh0">Profil</div><a href="/#profil"><span>Profil</span></a><a href="/#tag"><span>Pro Tag</span></a></div></nav></aside><div id="sbov" class="sbov"></div><script>try{var th=localStorage.getItem("roktheme");if(th)document.documentElement.dataset.theme=th}catch(e){}window.sbOrd=function(){var A=["loot","ali","kvk","wb"],o=A.slice();try{var v=JSON.parse(localStorage.getItem("roksbo")||"null");if(v&&v.length){v=v.filter(function(x){return A.indexOf(x)>=0});o=v.concat(A.filter(function(x){return v.indexOf(x)<0}))}}catch(e){}var m={d1:4,prof:5,d2:6,set:7};o.forEach(function(k,i){m[k]=i});document.querySelectorAll("#sb [data-k]").forEach(function(e){e.style.order=m[e.dataset.k]})};sbOrd();window.sbUnk=function(){fetch("/api/unk").then(r=>r.json()).then(u=>{var b=document.getElementById("sbbadge");b.textContent=u.n;b.hidden=!u.n;try{var R=JSON.parse(localStorage.getItem("rokrem")||"{}"),el=document.getElementById("sbrem"),hr=(u.now-u.last)/3600;if(R.on&&u.last&&hr>=(R.h||12)&&localStorage.getItem("rokremx")!=String(u.last)){if(!el){el=document.createElement("div");el.id="sbrem";el.style.cssText="position:fixed;top:12px;left:50%;transform:translateX(-50%);z-index:80;padding:9px 14px;border-radius:12px;background:var(--card);color:var(--ink);border:1px solid var(--warn);box-shadow:0 6px 24px rgba(0,0,0,.25);font-size:.9rem;display:flex;gap:10px;align-items:center";document.body.appendChild(el)}el.innerHTML="<span>⏰ Seit "+(hr<48?Math.floor(hr)+" Std":Math.floor(hr/24)+" Tagen")+" keine neuen Berichte.</span>";var x=document.createElement("button");x.textContent="Ausblenden";x.onclick=function(){try{localStorage.setItem("rokremx",String(u.last))}catch(e){}el.remove()};el.appendChild(x)}else if(el)el.remove()}catch(e){}}).catch(function(){})};sbUnk();setInterval(sbUnk,30000)</script><script>(function(){const b=document.getElementById("mbtn"),x=document.getElementById("sbx"),ov=document.getElementById("sbov"),n=document.getElementById("sb"),R=document.documentElement,B=document.body;n.querySelectorAll("a[data-p]").forEach(a=>{if(a.dataset.p===(location.pathname.replace(/\/+$/,"")||"/"))a.className="cur"});let V={w:"1600",a:"c"},O=window.innerWidth>=1100;try{V=Object.assign(V,JSON.parse(localStorage.getItem("rokview")||"{}"));const o=localStorage.getItem("roksb");if(o!==null)O=o==="1"}catch(e){}const ap=()=>{R.style.setProperty("--mw",V.w==="100%"?"100%":V.w+"px");R.style.setProperty("--ml",V.a==="l"?"0":"auto");R.style.setProperty("--mr",V.a==="r"?"0":"auto");document.querySelectorAll("#mw button").forEach(y=>y.classList.toggle("on",y.dataset.v===V.w));document.querySelectorAll("#ma button").forEach(y=>y.classList.toggle("on",y.dataset.v===V.a))};const so=v=>{O=v;B.classList.toggle("sbopen",O);b.setAttribute("aria-expanded",O);try{localStorage.setItem("roksb",O?"1":"0")}catch(e){}};document.addEventListener("DOMContentLoaded",ap);
+<button type="button" id="mbtn" class="mbtn" aria-label="Menü" aria-expanded="true" title="Menü">☰</button><aside id="sb" class="sb" aria-label="Menü"><div class="sbh"><span class="sbt">RoK&nbsp;Tracker</span><button type="button" id="sbx" class="mbtn" aria-label="Menü schließen" title="Menü schließen">⇤</button></div><nav class="sbn"><div class="sbl">Seiten</div><a href="/" data-p="/" data-k="loot"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l8 4v5c0 4.5-3.2 7.8-8 9-4.8-1.2-8-4.5-8-9V7z"/><path d="M9 12l2 2 4-4"/></svg><span>Loot-Tracker</span></a><a href="/allianz" data-p="/allianz" data-k="ali"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20V10M10 20V4M16 20v-8M22 20H2"/></svg><span>Allianz-Ranking</span></a><a href="/kvk1" data-p="/kvk1" data-k="kvk"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M14.5 17.5L3 6V3h3l11.5 11.5M13 19l6-6M16 16l4 4M19 21l2-2M14.5 6.5L18 3h3v3l-3.5 3.5M5 14l4 4M7 17l-3 3M3 19l2 2"/></svg><span>KVK1</span></a><a href="/woche" data-p="/woche" data-k="wb"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="17" rx="2"/><path d="M3 9h18M8 2v4M16 2v4M8 14h3M13 14h3M8 17h3"/></svg><span>Wochenbericht</span></a><a href="/kalender" data-p="/kalender" data-k="kal"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg><span>Event-Kalender</span></a><a href="/settings" data-p="/settings" data-k="set"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.9l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.9-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1-1.5 1.7 1.7 0 0 0-1.9.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.9 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1 1.7 1.7 0 0 0-.3-1.9l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.9.3h0a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5h0a1.7 1.7 0 0 0 1.9-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.9v0a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg><span>Einstellungen</span><b class="sbb" id="sbbadge" hidden></b></a><div class="sbdiv" data-k="d1"></div><div class="sbdiv" data-k="d2"></div><div class="sbstat" data-k="prof"><div class="sbgh0">Profil</div><a href="/#profil"><span>Profil</span></a><a href="/#tag"><span>Pro Tag</span></a></div></nav></aside><div id="sbov" class="sbov"></div><script>try{var th=localStorage.getItem("roktheme");if(th)document.documentElement.dataset.theme=th}catch(e){}window.sbOrd=function(){var A=["loot","ali","kvk","wb","kal"],o=A.slice();try{var v=JSON.parse(localStorage.getItem("roksbo")||"null");if(v&&v.length){v=v.filter(function(x){return A.indexOf(x)>=0});o=v.concat(A.filter(function(x){return v.indexOf(x)<0}))}}catch(e){}var m={d1:5,prof:6,d2:7,set:8};o.forEach(function(k,i){m[k]=i});document.querySelectorAll("#sb [data-k]").forEach(function(e){e.style.order=m[e.dataset.k]})};sbOrd();window.sbUnk=function(){fetch("/api/unk").then(r=>r.json()).then(u=>{var b=document.getElementById("sbbadge");b.textContent=u.n;b.hidden=!u.n;try{var R=JSON.parse(localStorage.getItem("rokrem")||"{}"),el=document.getElementById("sbrem"),hr=(u.now-u.last)/3600;if(R.on&&u.last&&hr>=(R.h||12)&&localStorage.getItem("rokremx")!=String(u.last)){if(!el){el=document.createElement("div");el.id="sbrem";el.style.cssText="position:fixed;top:12px;left:50%;transform:translateX(-50%);z-index:80;padding:9px 14px;border-radius:12px;background:var(--card);color:var(--ink);border:1px solid var(--warn);box-shadow:0 6px 24px rgba(0,0,0,.25);font-size:.9rem;display:flex;gap:10px;align-items:center";document.body.appendChild(el)}el.innerHTML="<span>⏰ Seit "+(hr<48?Math.floor(hr)+" Std":Math.floor(hr/24)+" Tagen")+" keine neuen Berichte.</span>";var x=document.createElement("button");x.textContent="Ausblenden";x.onclick=function(){try{localStorage.setItem("rokremx",String(u.last))}catch(e){}el.remove()};el.appendChild(x)}else if(el)el.remove()}catch(e){}}).catch(function(){})};sbUnk();setInterval(sbUnk,30000)</script><script>(function(){const b=document.getElementById("mbtn"),x=document.getElementById("sbx"),ov=document.getElementById("sbov"),n=document.getElementById("sb"),R=document.documentElement,B=document.body;n.querySelectorAll("a[data-p]").forEach(a=>{if(a.dataset.p===(location.pathname.replace(/\/+$/,"")||"/"))a.className="cur"});let V={w:"1600",a:"c"},O=window.innerWidth>=1100;try{V=Object.assign(V,JSON.parse(localStorage.getItem("rokview")||"{}"));const o=localStorage.getItem("roksb");if(o!==null)O=o==="1"}catch(e){}const ap=()=>{R.style.setProperty("--mw",V.w==="100%"?"100%":V.w+"px");R.style.setProperty("--ml",V.a==="l"?"0":"auto");R.style.setProperty("--mr",V.a==="r"?"0":"auto");document.querySelectorAll("#mw button").forEach(y=>y.classList.toggle("on",y.dataset.v===V.w));document.querySelectorAll("#ma button").forEach(y=>y.classList.toggle("on",y.dataset.v===V.a))};const so=v=>{O=v;B.classList.toggle("sbopen",O);b.setAttribute("aria-expanded",O);try{localStorage.setItem("roksb",O?"1":"0")}catch(e){}};document.addEventListener("DOMContentLoaded",ap);
 document.addEventListener("click",e=>{const y=e.target.closest(".seg button");if(!y||!y.parentNode.id.match(/^m[wa]$/))return;if(y.parentNode.id==="mw")V.w=y.dataset.v;else V.a=y.dataset.v;try{localStorage.setItem("rokview",JSON.stringify(V))}catch(e){}ap()});ap();B.classList.toggle("sbopen",O);b.onclick=()=>so(!O);x.onclick=()=>so(false);ov.onclick=()=>so(false);document.addEventListener("keydown",e=>{if(e.key==="Escape"&&window.innerWidth<1100)so(false)})})()</script>@@QP@@
 <section class="ah"><div><h1>Allianz-Tracker</h1><div class="sub" id="asub">Member-Rangliste</div></div>
 <div class="bar"><a class="btn" id="aexp" href="/allianz/export?lang=de" title="Speichert die Rangliste als eigenständige Datei, die du weitergeben kannst">Als HTML exportieren</a><button id="abtn">Allianz-Daten einfügen …</button><input type="file" id="afile" accept=".json" multiple hidden></div></section>
@@ -1788,8 +1920,8 @@ const esc=s=>String(s==null?'':s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;',
 const MON=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
 const dm=d=>LANG==='en'?(p=>p.length===3?+p[2]+' '+MON[+p[1]-1]+' '+p[0]:d)(d.split('-')):d.split('-').reverse().join('.');
 
-const ORDN={loot:'Loot-Tracker (Beute, Festungen, Barbarenkämpfe …)',ali:'Allianz-Ranking',kvk:'KVK1',wb:'Wochenbericht'};
-let ORD=['loot','ali','kvk','wb'];try{const v=JSON.parse(localStorage.getItem('roksbo')||'null');if(v&&v.length)ORD=v.filter(x=>ORDN[x]).concat(['loot','ali','kvk','wb'].filter(x=>!v.includes(x)))}catch(e){}
+const ORDN={loot:'Loot-Tracker (Beute, Festungen, Barbarenkämpfe …)',ali:'Allianz-Ranking',kvk:'KVK1',wb:'Wochenbericht',kal:'Event-Kalender'};
+let ORD=['loot','ali','kvk','wb','kal'];try{const v=JSON.parse(localStorage.getItem('roksbo')||'null');if(v&&v.length)ORD=v.filter(x=>ORDN[x]).concat(['loot','ali','kvk','wb','kal'].filter(x=>!v.includes(x)))}catch(e){}
 function ordSave(){try{localStorage.setItem('roksbo',JSON.stringify(ORD))}catch(e){}if(window.sbOrd)sbOrd();ordDraw()}
 function ordDraw(){$('ordl').innerHTML=ORD.map((k,i)=>`<li draggable="true" data-k="${k}"><span>${ORDN[k]}</span><button type="button" data-d="-1" ${i?'':'disabled'} aria-label="nach oben">▲</button><button type="button" data-d="1" ${i<ORD.length-1?'':'disabled'} aria-label="nach unten">▼</button></li>`).join('')}
 $('ordl').addEventListener('click',e=>{const b=e.target.closest('button[data-d]');if(!b)return;const k=b.closest('li').dataset.k,i=ORD.indexOf(k),j=i+ +b.dataset.d;if(j<0||j>=ORD.length)return;ORD.splice(i,1);ORD.splice(j,0,k);ordSave()});
@@ -1797,7 +1929,7 @@ let dragK=null;$('ordl').addEventListener('dragstart',e=>{const li=e.target.clos
 $('ordl').addEventListener('dragover',e=>{if(dragK)e.preventDefault()});
 $('ordl').addEventListener('drop',e=>{e.preventDefault();const li=e.target.closest('li');if(!li||!dragK||li.dataset.k===dragK)return;const j=ORD.indexOf(li.dataset.k);ORD.splice(ORD.indexOf(dragK),1);ORD.splice(j,0,dragK);dragK=null;ordSave()});
 $('ordl').addEventListener('dragend',()=>{dragK=null;ordDraw()});
-$('ordr').onclick=()=>{ORD=['loot','ali','kvk','wb'];ordSave()};ordDraw();
+$('ordr').onclick=()=>{ORD=['loot','ali','kvk','wb','kal'];ordSave()};ordDraw();
 // ===== Namen eintragen
 const KINDS=[['speed_training','Training-Speedup (Min)'],['speed_universal','Universal-Speedup (Min)'],['speed_healing','Heilungs-Speedup (Min)'],['wood','Holz'],['stone','Stein'],['gold','Gold'],['food','Mais'],['gems','Edelsteine'],['xp_books','XP-Buch'],['packs','Ressourcenpaket'],['ap','Aktionspunkte'],['other','Sonstiges']];
 let nmSig='',lastNames={items:[],heroes:[],foes:[],ignored:[]},nmSort='qty';try{nmSort=localStorage.getItem('roknmsort')||'qty'}catch(e){}$('nmsort').value=nmSort;
@@ -1838,7 +1970,7 @@ $('rmon').onchange=rmSave;$('rmh').onchange=rmSave;
 $('bkd').onclick=()=>{location.href='/api/backup'};
 $('bkb').onclick=()=>$('bkr').click();
 $('bkr').onchange=async()=>{const fl=$('bkr').files[0];if(!fl)return;
- if(!confirm('Alle aktuellen Daten werden durch dieses Backup ersetzt. Vorher wird automatisch eine Kopie der jetzigen Datenbank gespeichert (Datei mit der Endung .vor-restore). Fortfahren?')){$('bkr').value='';return}
+ if(!confirm(tx('Alle aktuellen Daten werden durch dieses Backup ersetzt. Vorher wird automatisch eine Kopie der jetzigen Datenbank gespeichert (Datei mit der Endung .vor-restore). Fortfahren?'))){$('bkr').value='';return}
  const r=await fetch('/api/restore',{method:'POST',body:fl}).then(r=>r.json()).catch(e=>({ok:false,error:String(e)}));
  $('bkm').textContent=r.ok?'Backup eingespielt':'Fehler: '+r.error;$('bkr').value='';if(r.ok){nmSig='';nmLoad()}};
 """ + _I18N + r"""</script></body></html>"""
@@ -1925,11 +2057,12 @@ let LANG='de';try{LANG=localStorage.getItem('roklang')==='en'?'en':'de'}catch(e)
 const LOC=LANG==='en'?'en-US':'de-DE',$=id=>document.getElementById(id),f=n=>Number(n).toLocaleString(LOC);
 const esc=s=>String(s==null?'':s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
 const MON=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
-const dm=d=>d.split('-').reverse().join('.'),dms=d=>d.slice(8)+'.'+d.slice(5,7)+'.';
-const WD=['Mo','Di','Mi','Do','Fr','Sa','So'];
+const dm=d=>LANG==='en'?MON[+d.slice(5,7)-1]+' '+(+d.slice(8))+', '+d.slice(0,4):d.split('-').reverse().join('.'),dms=d=>d.slice(8)+'.'+d.slice(5,7)+'.';
+const L=(d,e)=>LANG==='en'?e:d,DEC=x=>LANG==='en'?x:x.replace('.',',');
+const WD=LANG==='en'?['Mon','Tue','Wed','Thu','Fri','Sat','Sun']:['Mo','Di','Mi','Do','Fr','Sa','So'];
 const KL=[['speed_training','⏩','Training-Speedups',1],['speed_universal','⏱️','Universal-Speedups',1],['speed_healing','💊','Heilungs-Speedups',1],['wood','🪵','Holz'],['stone','🪨','Stein'],['gold','🪙','Gold'],['food','🌽','Mais'],['gems','💎','Edelsteine'],['xp_books','📘','XP aus Büchern'],['packs','📦','Ressourcenpakete'],['ap','⚡','Notfall-AP']];
-const dur=m=>{m=Math.round(m);const d=Math.floor(m/1440),h=Math.floor(m%1440/60),n=m%60;return d?`${d} Tage ${h} Std`:h?`${h} Std ${n} Min`:`${n} Min`};
-const big=n=>n>=1e6?(n/1e6).toFixed(1).replace('.',',')+' Mio':n>=1e4?(n/1e3).toFixed(1).replace('.',',')+' K':f(n);
+const dur=m=>{m=Math.round(m);const d=Math.floor(m/1440),h=Math.floor(m%1440/60),n=m%60;return d?`${d} ${L('Tage','d')} ${h} ${L('Std','h')}`:h?`${h} ${L('Std','h')} ${n} ${L('Min','min')}`:`${n} ${L('Min','min')}`};
+const big=n=>n>=1e6?DEC((n/1e6).toFixed(1))+L(' Mio',' M'):n>=1e4?DEC((n/1e3).toFixed(1))+' K':f(n);
 const val=(k,v,t)=>t?dur(v):big(v);
 function kw(d){const t=new Date(d+'T00:00:00Z'),n=(t.getUTCDay()+6)%7;t.setUTCDate(t.getUTCDate()-n+3);const y=t.getUTCFullYear(),j=new Date(Date.UTC(y,0,4));return 1+Math.round(((t-j)/864e5-3+((j.getUTCDay()+6)%7))/7)}
 const dl=(a,b)=>{if(b==null||b===0&&a===0)return '';const x=a-b;return x===0?'<small class="note">wie Vorwoche</small>':`<small class="${x>0?'good':'bad'}">${x>0?'+':''}${f(x)} zur Vorwoche</small>`};
@@ -1944,8 +2077,8 @@ const REC=r=>{const R=r.records,o=[];
  if(R.streak)o.push(['📅','Aktivitäts-Streak',R.streak.now+' Tage (aktuell)','Rekord: '+R.streak.best+' Tage',TIER(R.streak.best,[3,7,14])]);
  return o};
 function draw(){const w=W,c=w.cur,p=w.prev,mx=Math.max(1,...w.days.map(d=>d.barbs));
- $('wl').textContent=`KW ${kw(w.from)} · ${dm(w.from)} – ${dm(w.to)}`;$('wn').disabled=off<=0;
- const kp=[[f(c.barbs),'Barbaren besiegt',dl(c.barbs,p.barbs)],[f(c.chains),'Chains',dl(c.chains,p.chains)],[c.chains?(c.cbarbs/c.chains).toFixed(1).replace('.',','):'–','Ø Barbaren pro Chain',''],[f(c.series),'Serien',dl(c.series,p.series)],[f(c.longest),'Längste Serie (Chains)',dl(c.longest,p.longest)],[f(c.forts),'Festungen',dl(c.forts,p.forts)],[f(c.ap),'AP für Chains',dl(c.ap,p.ap)],[f(c.xp),'Kommandanten-XP',dl(c.xp,p.xp)]];
+ $('wl').textContent=`${L('KW','Week')} ${kw(w.from)} · ${dm(w.from)} – ${dm(w.to)}`;$('wn').disabled=off<=0;
+ const kp=[[f(c.barbs),'Barbaren besiegt',dl(c.barbs,p.barbs)],[f(c.chains),'Chains',dl(c.chains,p.chains)],[c.chains?DEC((c.cbarbs/c.chains).toFixed(1)):'–','Ø Barbaren pro Chain',''],[f(c.series),'Serien',dl(c.series,p.series)],[f(c.longest),'Längste Serie (Chains)',dl(c.longest,p.longest)],[f(c.forts),'Festungen',dl(c.forts,p.forts)],[f(c.ap),'AP für Chains',dl(c.ap,p.ap)],[f(c.xp),'Kommandanten-XP',dl(c.xp,p.xp)]];
  const loot=KL.filter(k=>c.loot[k[0]]).map(k=>`<div><span>${k[1]} ${k[2]}</span><b>${val(k[0],c.loot[k[0]],k[3])}</b></div>`).join('');
  $('wb').innerHTML=`<section class="ks"><h2>Überblick</h2><p class="note">Montag bis Sonntag, verglichen mit der Woche davor.</p><div class="kg">${kp.map(x=>`<div class="k"><b>${x[0]}</b><span>${x[1]}</span>${x[2]}</div>`).join('')}</div></section>
  <section class="ks"><h2>Barbaren pro Tag</h2><p class="note">Besiegte Barbaren je Tag, darunter Chains und Festungen.</p><div class="dy">${w.days.map((d,i)=>`<div><b>${d.barbs||''}</b><div class="b ${d.barbs?'':'z'}" style="height:${d.barbs?Math.max(4,d.barbs/mx*130):3}px"></div>${WD[i]}<span>${d.chains} Ch · ${d.forts} F</span></div>`).join('')}</div></section>
@@ -1954,10 +2087,10 @@ function draw(){const w=W,c=w.cur,p=w.prev,mx=Math.max(1,...w.days.map(d=>d.barb
 function txt(){const w=W,c=w.cur;let t=`Wochenbericht KW ${kw(w.from)} (${dm(w.from)} – ${dm(w.to)})\n`;t+=`Barbaren: ${f(c.barbs)} | Chains: ${f(c.chains)} (Ø ${c.chains?(c.cbarbs/c.chains).toFixed(1):'–'} Barbaren) | Serien: ${c.series} | Festungen: ${c.forts}\n`;
  const l=KL.filter(k=>c.loot[k[0]]).map(k=>`${k[2]}: ${val(k[0],c.loot[k[0]],k[3])}`);if(l.length)t+='Beute: '+l.join(', ')+'\n';
  const R=REC(w);if(R.length)t+='Rekorde: '+R.map(r=>`${r[1]} ${r[2]}`).join(' | ');return t}
-function png(){const w=W,c=w.cur,cv=document.createElement('canvas');cv.width=1080;cv.height=1500;const g=cv.getContext('2d');
+function png(){const w=W,c=w.cur,cv=document.createElement('canvas');cv.width=1080;cv.height=1500;const g=cv.getContext('2d'),ft=g.fillText.bind(g);g.fillText=(t,x,y)=>ft(tx(t),x,y);
  g.fillStyle='#0b1020';g.fillRect(0,0,1080,1500);const gr=g.createLinearGradient(0,0,1080,300);gr.addColorStop(0,'#1d3a78');gr.addColorStop(1,'#0b1020');g.fillStyle=gr;g.fillRect(0,0,1080,300);
  const F='system-ui,Segoe UI,Arial,sans-serif';g.fillStyle='#fff';g.font='bold 64px '+F;g.fillText('Wochenbericht',60,110);g.font='32px '+F;g.fillStyle='#b8c7e6';g.fillText(`KW ${kw(w.from)} · ${dm(w.from)} – ${dm(w.to)}`,60,160);g.fillText('RoK Tracker',60,220);
- const kp=[[f(c.barbs),'Barbaren'],[f(c.chains),'Chains'],[c.chains?(c.cbarbs/c.chains).toFixed(1).replace('.',','):'–','Ø pro Chain'],[f(c.series),'Serien'],[f(c.longest),'Längste Serie'],[f(c.forts),'Festungen']];
+ const kp=[[f(c.barbs),'Barbaren'],[f(c.chains),'Chains'],[c.chains?DEC((c.cbarbs/c.chains).toFixed(1)):'–','Ø pro Chain'],[f(c.series),'Serien'],[f(c.longest),'Längste Serie'],[f(c.forts),'Festungen']];
  kp.forEach((k,i)=>{const x=60+(i%3)*330,y=340+Math.floor(i/3)*150;g.fillStyle='#16203a';g.beginPath();g.roundRect(x,y,300,126,18);g.fill();g.fillStyle='#fff';g.font='bold 50px '+F;g.fillText(k[0],x+22,y+68);g.fillStyle='#8ea2c8';g.font='26px '+F;g.fillText(k[1],x+22,y+105)});
  const mx=Math.max(1,...w.days.map(d=>d.barbs));g.fillStyle='#fff';g.font='bold 34px '+F;g.fillText('Barbaren pro Tag',60,700);
  w.days.forEach((d,i)=>{const x=60+i*144,h=d.barbs?Math.max(6,d.barbs/mx*200):4;g.fillStyle=d.barbs?'#3b82f6':'#25304a';g.beginPath();g.roundRect(x,930-h,100,h,10);g.fill();g.fillStyle='#fff';g.font='bold 26px '+F;g.textAlign='center';if(d.barbs)g.fillText(d.barbs,x+50,920-h);g.fillStyle='#8ea2c8';g.font='24px '+F;g.fillText(WD[i],x+50,965);g.textAlign='left'});
@@ -1967,9 +2100,92 @@ function png(){const w=W,c=w.cur,cv=document.createElement('canvas');cv.width=10
  return new Promise(r=>cv.toBlob(r,'image/png'))}
 async function ld(){try{W=await fetch('/api/week?offset='+off).then(r=>r.json());draw()}catch(e){}}
 $('wp').onclick=()=>{off++;ld()};$('wn').onclick=()=>{if(off>0){off--;ld()}};
-$('wi').onclick=async()=>{if(!W)return;const b=await png(),a=document.createElement('a');a.href=URL.createObjectURL(b);a.download='wochenbericht-'+W.from+'.png';document.body.appendChild(a);a.click();a.remove();$('wm').textContent='Bild gespeichert'};
-$('wt').onclick=async()=>{if(!W)return;try{await navigator.clipboard.writeText(txt());$('wm').textContent='Text kopiert'}catch(e){$('wm').textContent='Kopieren nicht möglich'}};
+$('wi').onclick=async()=>{if(!W)return;const b=await png(),a=document.createElement('a');a.href=URL.createObjectURL(b);a.download=L('wochenbericht-','weekly-report-')+W.from+'.png';document.body.appendChild(a);a.click();a.remove();$('wm').textContent='Bild gespeichert'};
+$('wt').onclick=async()=>{if(!W)return;try{await navigator.clipboard.writeText(tx(txt()));$('wm').textContent='Text kopiert'}catch(e){$('wm').textContent='Kopieren nicht möglich'}};
 ld();
+""" + _I18N + r"""</script></body></html>"""
+
+CAL_PAGE = r"""<!doctype html><html lang="de"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1"><title>Event-Kalender</title>
+""" + _STYLE + r"""
+<style>
+.wh{display:flex;flex-wrap:wrap;gap:10px 16px;align-items:center;justify-content:space-between;padding:18px 22px;border:1px solid var(--line);border-radius:20px;background:linear-gradient(135deg,var(--accsoft),var(--card) 60%);margin-bottom:14px}
+.wh h1{margin:0;font-size:1.4rem}.wh .sub{color:var(--mute);font-size:.9rem}.wh .nav{display:flex;gap:6px;align-items:center;flex-wrap:wrap}.wh button{padding:7px 12px;cursor:pointer}
+.ks{border:1px solid var(--line);border-radius:20px;background:var(--card);padding:18px 22px;margin-bottom:14px}.ks h2{margin:0 0 4px;font-size:1.1rem}.ks .note{margin:0 0 12px}
+.nx{display:grid;grid-template-columns:repeat(auto-fit,minmax(210px,1fr));gap:10px}
+.nx .e{padding:12px 14px;border:1px solid var(--line);border-left-width:5px;border-radius:14px;background:var(--soft)}
+.nx .e b{display:block;font-size:.98rem}.nx .e span{display:block;color:var(--mute);font-size:.84rem}.nx .e .cd{color:var(--ink);font-size:1.15rem;font-weight:800;font-variant-numeric:tabular-nums;margin-top:4px}
+.nx .e.on{background:var(--accsoft)}
+.lg{display:flex;flex-wrap:wrap;gap:6px;margin:0 0 12px}.lg button{display:inline-flex;gap:6px;align-items:center;padding:5px 11px;border:1px solid var(--line);border-radius:99px;background:var(--card);color:var(--ink);cursor:pointer;font-size:.84rem}
+.lg button i{width:11px;height:11px;border-radius:3px;display:inline-block}.lg button[aria-pressed=false]{opacity:.45}
+.gh{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:6px;margin-bottom:6px;text-align:center;color:var(--mute);font-size:.8rem;font-weight:700}
+.gd{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:6px}
+.dc{min-height:104px;padding:6px;border:1px solid var(--line);border-radius:12px;background:var(--soft);display:flex;flex-direction:column;gap:3px;min-width:0}
+.dc.o{opacity:.4}.dc.t{border-color:var(--acc);box-shadow:0 0 0 2px var(--accsoft)}.dc.z{background:transparent;border-color:transparent}
+.dc>b{font-size:.8rem;font-variant-numeric:tabular-nums}.dc.t>b{color:var(--acc)}
+.ch2{display:block;padding:2px 6px;border-radius:6px;border-left:4px solid;font-size:.72rem;line-height:1.3;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;background:var(--card);color:var(--ink)}
+.cf{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;align-items:end}.cf label{display:flex;flex-direction:column;gap:4px;font-size:.82rem;color:var(--mute)}
+.cf input,.cf select{padding:7px 9px}.cf input[type=color]{padding:2px;height:36px}
+.cl{margin-top:12px;display:grid;gap:6px}.cl div{display:flex;justify-content:space-between;gap:8px;align-items:center;padding:8px 12px;border:1px solid var(--line);border-radius:12px;background:var(--soft)}
+@media(max-width:700px){.ks{padding:14px}.dc{min-height:64px;padding:4px}.ch2{font-size:.62rem;padding:1px 3px;border-left-width:3px}.gd,.gh{gap:3px}}
+</style></head><body><main>
+""" + _SB + r"""
+<section class="wh"><div><h1 id="ct"></h1><div class="sub" id="cs"></div></div><div class="nav"><button id="cp" type="button"></button><button id="cy" type="button"></button><button id="cn" type="button"></button></div></section>
+<section class="ks"><h2 id="h1"></h2><p class="note" id="n1"></p><div class="nx" id="nx"></div></section>
+<section class="ks"><h2 id="mt"></h2><p class="note" id="n2"></p><div class="lg" id="lg"></div><div class="gh" id="gh"></div><div class="gd" id="gd"></div></section>
+<section class="ks"><h2 id="h3"></h2><p class="note" id="n3"></p><form class="cf" id="cf" autocomplete="off"><label id="l1"><input id="cn1" required maxlength="40"></label><label id="l2"><input id="cd1" type="date" required></label><label id="l3"><input id="cl1" type="number" min="1" max="60" value="1"></label><label id="l4"><input id="cr1" type="number" min="0" max="400" value="0"></label><label id="l5"><input id="cc1" type="color" value="#f59e0b"></label><button type="submit" id="ca"></button></form><div class="cl" id="cl"></div></section>
+@@QP@@
+<script>
+let LANG='de';try{LANG=localStorage.getItem('roklang')==='en'?'en':'de'}catch(e){}
+const MON=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+const L=(d,e)=>LANG==='en'?e:d,LOC=LANG==='en'?'en-US':'de-DE',$=id=>document.getElementById(id);
+const esc=s=>String(s==null?'':s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const DAY=864e5,dn=s=>Math.floor(Date.parse(s+'T00:00:00Z')/DAY),ds=n=>new Date(n*DAY).toISOString().slice(0,10);
+const fd=(n,o)=>new Date(n*DAY).toLocaleDateString(LOC,Object.assign({day:'numeric',month:'short',timeZone:'UTC'},o||{}));
+const MGE=['Archer','Leadership','Cavalry','Infantry'];
+// Rhythmus aus dem ROK-Central-Kalender: alles wiederholt sich alle 14 Tage (UTC), MGE wechselt alle 14 Tage durch 4 Truppenarten.
+const BASE=[
+ {k:'mge',n:'MGE',c:'#d4a017',a:'2026-11-02',p:14,l:6,mge:1},
+ {k:'esm',n:'Esmeralda',c:'#22c55e',a:'2026-11-02',p:14,l:2},
+ {k:'wheel',n:'Wheel',c:'#38bdf8',a:'2026-11-03',p:14,l:3},
+ {k:'mtg',n:'MTG (expected)',c:'#ef4444',a:'2026-11-07',p:14,l:2},
+ {k:'ark',n:'Ark of Osiris',c:'#9aa0a6',a:'2026-11-11',p:14,l:5},
+ {k:'egg',n:'Egg / Hunt for History',c:'#a855f7',a:'2026-11-13',p:14,l:2}];
+let S={off:[],custom:[]};try{const j=JSON.parse(localStorage.getItem('rokcal')||'null');if(j)S=Object.assign(S,j)}catch(e){}
+const save=()=>{try{localStorage.setItem('rokcal',JSON.stringify(S))}catch(e){}};
+const TYPES=()=>BASE.concat(S.custom.map(c=>({k:c.id,n:c.n,c:c.c,a:c.a,p:+c.p||0,l:+c.l||1,cust:1})));
+function inst(e,k){const s=dn(e.a)+k*e.p;return{s,e:s+e.l-1,name:e.mge?'MGE '+MGE[((k%4)+4)%4]:e.n,t:e}}
+function onDay(e,day){if(!e.p){const d=day-dn(e.a);return d>=0&&d<e.l?inst(e,0):null}const k=Math.floor((day-dn(e.a))/e.p),i=inst(e,k);return day-i.s<e.l?i:null}
+function nextOf(e,now){const today=Math.floor(now);if(!e.p){const i=inst(e,0);return i.e+1>now?i:null}let k=Math.floor((today-dn(e.a))/e.p);let i=inst(e,k);if(i.e+1<=now)i=inst(e,k+1);return i}
+const cdf=ms=>{let m=Math.max(0,Math.floor(ms/6e4));const d=Math.floor(m/1440),h=Math.floor(m%1440/60);m%=60;return(d?d+' '+L('Tg','d')+' ':'')+h+' '+L('Std','h')+' '+m+' '+L('Min','min')};
+let cur=new Date(),Y=cur.getUTCFullYear(),M=cur.getUTCMonth();
+function head(){$('ct').textContent=L('Event-Kalender','Event calendar');document.title=L('Event-Kalender','Event calendar');
+ $('cp').textContent=L('◀ Voriger Monat','◀ Previous month');$('cn').textContent=L('Nächster Monat ▶','Next month ▶');$('cy').textContent=L('Heute','Today');
+ $('h1').textContent=L('Als Nächstes','Coming up');$('n1').textContent=L('Alle Zeiten in UTC, ein Event beginnt um 00:00 UTC des ersten Tages und endet am Ende des letzten Tages.','All times are UTC. An event starts at 00:00 UTC on its first day and ends at the end of its last day.');
+ $('n2').textContent=L('Ein Klick auf die Namen oben blendet Events ein oder aus. Die Termine wiederholen sich im 14-Tage-Rhythmus, die genauen Namen der MGE-Runden stammen aus dem ROK-Central-Kalender.','Click the names to show or hide events. The dates repeat in a 14-day rhythm; the MGE rounds follow the ROK Central calendar.');
+ $('h3').textContent=L('Eigene Termine','Your own events');$('n3').textContent=L('Zum Beispiel KvK-Start, Allianz-Treffen oder eine Erinnerung. Wiederholung 0 heißt einmalig. Die Termine bleiben in diesem Browser gespeichert.','For example KvK start, an alliance meeting or a reminder. Repeat 0 means one time only. The events are stored in this browser.');
+ const lab=(id,t)=>{const l=$(id),i=l.querySelector('input');l.textContent='';l.append(t,i)};
+ lab('l1',L('Name','Name'));lab('l2',L('Startdatum (UTC)','Start date (UTC)'));lab('l3',L('Dauer in Tagen','Length in days'));lab('l4',L('Wiederholung alle … Tage','Repeat every … days'));lab('l5',L('Farbe','Color'));$('ca').textContent=L('Hinzufügen','Add')}
+function nowDay(){return Date.now()/DAY}
+function upcoming(){const now=nowDay(),T=TYPES().filter(e=>!S.off.includes(e.k)),L2=[];
+ T.forEach(e=>{const i=nextOf(e,now);if(i)L2.push(i)});L2.sort((a,b)=>a.s-b.s);
+ $('nx').innerHTML=L2.map(i=>{const on=i.s<=now,ms=((on?i.e+1:i.s)-now)*DAY;return`<div class="e${on?' on':''}" style="border-left-color:${i.t.c}"><b>${esc(i.name)}</b><span>${fd(i.s)}${i.e>i.s?' – '+fd(i.e):''}</span><div class="cd">${on?L('läuft, noch ','running, ')+cdf(ms)+(LANG==='en'?' left':''):L('in ','in ')+cdf(ms)}</div></div>`}).join('')||`<div class="note">${L('Keine Events eingeschaltet.','No events switched on.')}</div>`}
+function legend(){$('lg').innerHTML=TYPES().map(e=>`<button type="button" data-k="${esc(e.k)}" aria-pressed="${!S.off.includes(e.k)}"><i style="background:${e.c}"></i>${esc(e.n)}</button>`).join('')}
+function grid(){const first=Date.UTC(Y,M,1)/DAY,len=new Date(Date.UTC(Y,M+1,0)).getUTCDate(),lead=(new Date(first*DAY).getUTCDay()+6)%7,today=Math.floor(nowDay());
+ $('ct').textContent=L('Event-Kalender','Event calendar');$('cs').textContent=new Date(Date.UTC(Y,M,1)).toLocaleDateString(LOC,{month:'long',year:'numeric',timeZone:'UTC'})+' · '+L('Heute (UTC): ','Today (UTC): ')+fd(today,{weekday:'short',year:'numeric'});
+ $('mt').textContent=new Date(Date.UTC(Y,M,1)).toLocaleDateString(LOC,{month:'long',year:'numeric',timeZone:'UTC'});
+ $('gh').innerHTML=[0,1,2,3,4,5,6].map(i=>`<div>${new Date(Date.UTC(2024,0,1+i)).toLocaleDateString(LOC,{weekday:'short',timeZone:'UTC'})}</div>`).join('');
+ const T=TYPES().filter(e=>!S.off.includes(e.k));let h='';for(let i=0;i<lead;i++)h+='<div class="dc z"></div>';
+ for(let d=1;d<=len;d++){const n=first+d-1,ev=T.map(e=>onDay(e,n)).filter(Boolean);
+  h+=`<div class="dc${n===today?' t':''}"><b>${d}</b>${ev.map(i=>`<span class="ch2" style="border-left-color:${i.t.c}" title="${esc(i.name)} · ${fd(i.s)}${i.e>i.s?' – '+fd(i.e):''}">${esc(i.name)}</span>`).join('')}</div>`}
+ $('gd').innerHTML=h}
+function custList(){$('cl').innerHTML=S.custom.map(c=>`<div><span><i style="display:inline-block;width:11px;height:11px;border-radius:3px;background:${c.c};margin-right:8px"></i>${esc(c.n)} · ${fd(dn(c.a),{year:'numeric'})}${c.l>1?' · '+c.l+' '+L('Tage','days'):''}${+c.p?' · '+L('alle ','every ')+c.p+' '+L('Tage','days'):''}</span><button type="button" data-d="${esc(c.id)}">${L('Löschen','Delete')}</button></div>`).join('')}
+function all(){head();legend();grid();upcoming();custList()}
+$('cp').onclick=()=>{M--;if(M<0){M=11;Y--}grid()};$('cn').onclick=()=>{M++;if(M>11){M=0;Y++}grid()};$('cy').onclick=()=>{const n=new Date();Y=n.getUTCFullYear();M=n.getUTCMonth();grid()};
+$('lg').onclick=e=>{const b=e.target.closest('button');if(!b)return;const k=b.dataset.k;S.off=S.off.includes(k)?S.off.filter(x=>x!==k):S.off.concat(k);save();legend();grid();upcoming()};
+$('cl').onclick=e=>{const b=e.target.closest('button[data-d]');if(!b)return;S.custom=S.custom.filter(c=>c.id!==b.dataset.d);save();all()};
+$('cf').onsubmit=e=>{e.preventDefault();const n=$('cn1').value.trim();if(!n||!$('cd1').value)return;S.custom.push({id:'c'+Date.now(),n:n.slice(0,40),a:$('cd1').value,l:Math.max(1,+$('cl1').value||1),p:Math.max(0,+$('cr1').value||0),c:$('cc1').value});save();$('cn1').value='';all()};
+all();setInterval(upcoming,30000);
 """ + _I18N + r"""</script></body></html>"""
 
 PAGE = PAGE.replace("@@QP@@", QP_BLOCK)
@@ -1977,6 +2193,7 @@ ALLIANCE_PAGE = ALLIANCE_PAGE.replace("@@QP@@", QP_BLOCK)
 SETTINGS_PAGE = SETTINGS_PAGE.replace("@@QP@@", QP_BLOCK)
 KVK_PAGE = KVK_PAGE.replace("@@QP@@", QP_BLOCK)
 WOCHE_PAGE = WOCHE_PAGE.replace("@@QP@@", QP_BLOCK)
+CAL_PAGE = CAL_PAGE.replace("@@QP@@", QP_BLOCK)
 
 KVK1_DEFAULT = {
     "season": {"id": "S11474", "name": "Endless War", "kvk": "#4123", "from": "13.09.2026", "to": "09.11.2026"},
@@ -2133,6 +2350,8 @@ def make_handler(db, watcher):
             elif u.path == "/api/week":
                 q = parse_qs(u.query)
                 self.send(json.dumps(db.week(q.get("account", ["main"])[0], q.get("offset", ["0"])[0])), "application/json")
+            elif u.path in ("/kalender", "/kalender/", "/calendar"):
+                self.send(CAL_PAGE, "text/html")
             elif u.path in ("/kvk1", "/kvk1/"):
                 self.send(KVK_PAGE, "text/html")
             elif u.path == "/api/kvk1":
@@ -2343,10 +2562,10 @@ def main():
     for _n in ("stdout", "stderr"):        # ohne Konsole (pythonw / .pyw) gibt es keine Ausgabe
         if getattr(sys, _n) is None:
             setattr(sys, _n, open(os.devnull, "w"))
-    ap = argparse.ArgumentParser(description="RoK Barbaren-Tracker")
-    ap.add_argument("--folder", default=DEFAULT_FOLDER, help="Pfad zum mailcache-Ordner")
+    ap = argparse.ArgumentParser(description="RoK Barbarian Tracker")
+    ap.add_argument("--folder", default=DEFAULT_FOLDER, help="Path to the mailcache folder")
     ap.add_argument("--port", type=int, default=8765)
-    ap.add_argument("--data", default=DATA_DIR, help="Ordner für Datenbank und Beispiel-Berichte")
+    ap.add_argument("--data", default=DATA_DIR, help="Folder for the database and sample reports")
     ap.add_argument("--no-browser", action="store_true")
     args = ap.parse_args()
 
@@ -2363,10 +2582,10 @@ def main():
     w.start()
     server = ThreadingHTTPServer(("127.0.0.1", args.port), make_handler(db, w))
     url = "http://127.0.0.1:%d" % args.port
-    print("Barbaren-Tracker läuft: %s\nÜberwachter Ordner: %s\nStatistik gespeichert in: %s\nBeenden mit Strg+C"
+    print("Barbarian Tracker running: %s\nWatched folder: %s\nStatistics stored in: %s\nStop with Ctrl+C"
           % (url, args.folder, db_path))
     if not os.path.isdir(args.folder):
-        print("WARNUNG: Ordner nicht gefunden. Mit --folder den richtigen Pfad angeben.")
+        print("WARNING: folder not found. Use --folder to give the correct path.")
     if not args.no_browser:
         webbrowser.open(url)
     try:

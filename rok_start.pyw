@@ -40,6 +40,28 @@ def config_lesen():
     except Exception:
         return {}
 
+def _sprache():
+    """Sprache des Launchers: gespeicherte Wahl, sonst die Windows-Sprache (Deutsch oder Englisch)."""
+    l = config_lesen().get("lang")
+    if l in ("de", "en"):
+        return l
+    try:
+        import ctypes
+        if os.name == "nt" and (ctypes.windll.kernel32.GetUserDefaultUILanguage() & 0xFF) == 0x07:
+            return "de"
+    except Exception:
+        pass
+    return "en"
+
+SPRACHE = None
+
+def TR(de, en):
+    """Gibt den deutschen oder englischen Text zurueck."""
+    global SPRACHE
+    if SPRACHE is None:
+        SPRACHE = _sprache()
+    return en if SPRACHE == "en" else de
+
 def config_schreiben(d):
     try:
         os.makedirs(DATA, exist_ok=True)
@@ -68,7 +90,7 @@ def beenden():
     """Beendet eine laufende Version. Neue Versionen per Anfrage, aeltere ueber den Port."""
     if not laeuft():
         return True
-    log("laufende Version wird beendet")
+    log(TR("laufende Version wird beendet", "stopping the running version"))
     try:
         req = urllib.request.Request(URL + "api/quit", data=b"{}", method="POST")
         urllib.request.urlopen(req, timeout=2).read()
@@ -84,7 +106,7 @@ def beenden():
             for pid in pids:
                 subprocess.run(["taskkill", "/PID", pid, "/F"], **kw)
         except Exception as e:
-            log("Beenden ueber Port fehlgeschlagen: %s" % e)
+            log(TR("Beenden ueber Port fehlgeschlagen: %s", "Stopping via port failed: %s") % e)
     return warten(4, False)
 
 def python_exe(mit_fenster=False):
@@ -120,7 +142,7 @@ def tracker_starten():
         if p.poll() is not None:
             break
         time.sleep(0.3)
-    return False, "Das Programm hat sich beendet oder antwortet nicht. Siehe " + TRACKER_LOG
+    return False, TR("Das Programm hat sich beendet oder antwortet nicht. Siehe ", "The program has stopped or is not responding. See ") + TRACKER_LOG
 
 def browser_oeffnen(ziel="", seite=""):
     webbrowser.open(URL + seite + (("#" + ziel) if ziel else ""))
@@ -158,16 +180,16 @@ def holen(name, basis=None):
 def aktualisieren(melden=lambda t: None):
     """Laedt neue Dateien. Gibt (Text, geaendert, launcher_geaendert, sha) zurueck."""
     if not UPDATE_URL:
-        return "Kein Update-Server eingetragen", False, False, None
-    melden("Suche nach Updates ...")
+        return TR("Kein Update-Server eingetragen", "No update server configured"), False, False, None
+    melden(TR("Suche nach Updates ...", "Checking for updates ..."))
     sha, basis = neueste_version()
     geaendert = launcher = False
     for name in DATEIEN:
         try:
-            melden("Lade %s ..." % name)
+            melden(TR("Lade %s ...", "Downloading %s ...") % name)
             neu = holen(name, basis)
             if len(neu) < 2000:
-                raise ValueError("Antwort zu kurz")
+                raise ValueError(TR("Antwort zu kurz", "Response too short"))
             compile(neu, name, "exec")                       # nur pruefen, nichts ausfuehren
             pfad = os.path.join(HIER, name)
             alt = open(pfad, "rb").read() if os.path.exists(pfad) else b""
@@ -179,20 +201,20 @@ def aktualisieren(melden=lambda t: None):
             with open(pfad + ".neu", "wb") as f:
                 f.write(neu)
             os.replace(pfad + ".neu", pfad)
-            log("aktualisiert: %s (%s)" % (name, sha[:7] if sha else "Zwischenspeicher"))
+            log(TR("aktualisiert: %s (%s)", "updated: %s (%s)") % (name, sha[:7] if sha else TR("Zwischenspeicher", "cache")))
             geaendert = True
             launcher = launcher or name == os.path.basename(__file__)
         except Exception as e:
             log("Update %s uebersprungen: %s" % (name, e))
     if sha is None:
-        return "GitHub nicht erreichbar, es kann noch die alte Version sein", geaendert, launcher, None
+        return TR("GitHub nicht erreichbar, es kann noch die alte Version sein", "GitHub is not reachable, this may still be the old version"), geaendert, launcher, None
     try:
         os.makedirs(DATA, exist_ok=True)
         with open(VERSION_FILE, "w", encoding="utf-8") as f:
             f.write(sha)
     except Exception:
         pass
-    return ("Neue Version geladen (%s)" if geaendert else "Bereits aktuell (%s)") % sha[:7], geaendert, launcher, sha
+    return (TR("Neue Version geladen (%s)", "New version downloaded (%s)") if geaendert else TR("Bereits aktuell (%s)", "Already up to date (%s)")) % sha[:7], geaendert, launcher, sha
 
 def launcher_neu_starten():
     """Startet den (soeben aktualisierten) Launcher neu und beendet diesen."""
@@ -207,16 +229,16 @@ def launcher_neu_starten():
                          creationflags=(0x00000008 | 0x00000200) if os.name == "nt" else 0)
         return True
     except Exception as e:
-        log("Neustart des Launchers fehlgeschlagen: %s" % e)
+        log(TR("Neustart des Launchers fehlgeschlagen: %s", "Restarting the launcher failed: %s") % e)
         return False
 
 def diagnose_starten():
     pfad = os.path.join(HIER, "rok_diagnose.py")
     if not os.path.exists(pfad):
-        return False, "rok_diagnose.py fehlt. Erst auf Update pruefen."
+        return False, TR("rok_diagnose.py fehlt. Erst auf Update pruefen.", "rok_diagnose.py is missing. Check for updates first.")
     kw = {"creationflags": 0x00000010} if os.name == "nt" else {}          # CREATE_NEW_CONSOLE
     subprocess.Popen([python_exe(True), pfad], cwd=HIER, **kw)
-    return True, "Diagnose gestartet. Das Ergebnis liegt als diagnose.txt auf dem Desktop."
+    return True, TR("Diagnose gestartet. Das Ergebnis liegt als diagnose.txt auf dem Desktop.", "Diagnostics started. The result is saved as diagnose.txt on the desktop.")
 
 RUN_KEY = r"Software\Microsoft\Windows\CurrentVersion\Run"
 RUN_NAME = "RoKTracker"
@@ -261,7 +283,7 @@ def ordner_oeffnen(pfad):
         else:
             subprocess.Popen(["xdg-open", pfad])
     except Exception as e:
-        log("Ordner oeffnen fehlgeschlagen: %s" % e)
+        log(TR("Ordner oeffnen fehlgeschlagen: %s", "Opening the folder failed: %s") % e)
 
 
 # ---------------------------------------------------------------- Symbol und Infobereich (Taskleiste)
@@ -325,7 +347,7 @@ def symbol_sichern():
             symbol_schreiben(ICO)
         return ICO
     except Exception as e:
-        log("Symbol konnte nicht erstellt werden: %s" % e)
+        log(TR("Symbol konnte nicht erstellt werden: %s", "Could not create the icon: %s") % e)
         return None
 
 class TrayIcon:
@@ -391,7 +413,7 @@ class TrayIcon:
             u.RegisterClassW(ctypes.byref(wc))
             self.hwnd = u.CreateWindowExW(0, "RoKTrackerTray", "RoK Tracker", 0, 0, 0, 0, 0, None, None, inst, None)
             if not self.hwnd:
-                raise OSError("Fenster fuer das Symbol konnte nicht erstellt werden")
+                raise OSError("Could not create the window for the tray icon")
             icon = u.LoadImageW(None, self.ico, 1, 0, 0, 0x10 | 0x40) if self.ico and os.path.exists(self.ico) else None
             if not icon:
                 icon = u.LoadIconW(None, ctypes.c_void_p(32512))
@@ -399,7 +421,7 @@ class TrayIcon:
             nid.cbSize, nid.hWnd, nid.uID = ctypes.sizeof(NOTIFYICONDATAW), self.hwnd, 1
             nid.uFlags, nid.uCallbackMessage, nid.hIcon, nid.szTip = 0x1 | 0x2 | 0x4, self.WM_TRAY, icon, self.tip[:120]
             if not sh.Shell_NotifyIconW(0, ctypes.byref(nid)):    # NIM_ADD
-                raise OSError("Symbol konnte nicht in den Infobereich gesetzt werden")
+                raise OSError("Could not add the icon to the notification area")
             self.nid, self._sh, self._ct = nid, sh, ctypes
             self.ok = True
             self.bereit.set()
@@ -408,16 +430,16 @@ class TrayIcon:
                 u.TranslateMessage(ctypes.byref(msg))
                 u.DispatchMessageW(ctypes.byref(msg))
         except Exception:
-            log("Infobereich-Symbol nicht verfuegbar: " + traceback.format_exc())
+            log("Tray icon not available: " + traceback.format_exc())
         finally:
             self.bereit.set()
 
     def _menue(self, u, ct, wt, hwnd):
         m = u.CreatePopupMenu()
-        u.AppendMenuW(m, 0, 1, "Fenster zeigen")
-        u.AppendMenuW(m, 0, 2, "Dashboard öffnen")
+        u.AppendMenuW(m, 0, 1, TR("Fenster zeigen", "Show window"))
+        u.AppendMenuW(m, 0, 2, TR("Dashboard öffnen", "Open dashboard"))
         u.AppendMenuW(m, 0x800, 0, None)
-        u.AppendMenuW(m, 0, 3, "Launcher schließen")
+        u.AppendMenuW(m, 0, 3, TR("Launcher schließen", "Close launcher"))
         pt = wt.POINT()
         u.GetCursorPos(ct.byref(pt))
         u.SetForegroundWindow(hwnd)
@@ -464,11 +486,11 @@ CHAT_URL = "https://claude.ai/code/session_01LFjMW45VQY2gAnMtkdR1Uk"     # kann 
 
 # Kacheln: (Symbol, Titel, Beschreibung, [(Knopftext, Aktion), ...]). Aktion None = noch nicht verfuegbar.
 MODULE = [
-    ("\u2694", "Barbaren- und Beute-Tracker", "Berichte, Festungen, Spielerkaempfe und Ark of Osiris", [("Oeffnen", "dashboard")]),
-    ("\U0001F464", "Profil-Tracker", "Macht, Kill Points und Verlauf aus deinen Profil-Screenshots", [("Oeffnen", "profil")]),
-    ("\U0001F6E1", "Allianz-Tracker", "Member-Rangliste: Power, Kills, Tech, Bau, Hilfen, Festungen",
-     [("Oeffnen", "allianz"), ("Daten einfuegen", "allianz_import"), ("Bilder hinzufuegen", "allianz_bilder")]),
-    ("\U0001F50D", "Diagnose", "Prueft den mailcache und schreibt diagnose.txt auf den Desktop", [("Starten", "diagnose")]),
+    ("\u2694", TR("Barbaren- und Beute-Tracker", "Barbarian & loot tracker"), TR("Berichte, Festungen, Spielerkaempfe und Ark of Osiris", "Reports, forts, PvP battles and Ark of Osiris"), [(TR("Oeffnen", "Open"), "dashboard")]),
+    ("\U0001F464", TR("Profil-Tracker", "Profile tracker"), TR("Macht, Kill Points und Verlauf aus deinen Profil-Screenshots", "Power, kill points and history from your profile screenshots"), [(TR("Oeffnen", "Open"), "profil")]),
+    ("\U0001F6E1", TR("Allianz-Tracker", "Alliance tracker"), TR("Member-Rangliste: Power, Kills, Tech, Bau, Hilfen, Festungen", "Member ranking: power, kills, tech, building, helps, forts"),
+     [(TR("Oeffnen", "Open"), "allianz"), (TR("Daten einfuegen", "Import data"), "allianz_import"), (TR("Bilder hinzufuegen", "Add images"), "allianz_bilder")]),
+    ("\U0001F50D", TR("Diagnose", "Diagnostics"), TR("Prueft den mailcache und schreibt diagnose.txt auf den Desktop", "Checks the mailcache and writes diagnose.txt to the desktop"), [(TR("Starten", "Start"), "diagnose")]),
 ]
 BILDER = os.path.join(DATA, "allianz", "bilder")
 
@@ -714,9 +736,9 @@ def mit_fenster():
         except queue.Empty:
             pass
         except Exception:
-            log("Fenster-Fehler: " + traceback.format_exc())
+            log("Window error: " + traceback.format_exc())
         root.after(100, pump)
-    root.report_callback_exception = lambda *a: log("Fenster-Fehler: " + "".join(traceback.format_exception(*a)))
+    root.report_callback_exception = lambda *a: log("Window error: " + "".join(traceback.format_exception(*a)))
 
     cfg = config_lesen()
     chat_url = cfg.get("chat_url") or CHAT_URL
@@ -762,14 +784,14 @@ def mit_fenster():
     main.create_image(520, 20, anchor="nw", image=rr_img(180, 40, 20, C["card"], C["line"], C["bg"]))
     punkt = main
     kreis = main.create_oval(536, 35, 546, 45, fill=C["mute"], outline="")
-    t_tracker = Txt(main, main.create_text(554, 40, text="PRÜFE ...", fill=C["ink"], anchor="w", font=(PIX, 8, "bold")))
+    t_tracker = Txt(main, main.create_text(554, 40, text=TR("PRÜFE ...", "CHECKING ..."), fill=C["ink"], anchor="w", font=(PIX, 8, "bold")))
     kopf_chat = Knopf(main, "CLAUDE CHAT", lambda: webbrowser.open(chat_url), klein=True)
     main.create_window(716, 40, window=kopf_chat, anchor="w")
 
     # Fuss (auf jeder Seite sichtbar)
     bar = Balken(main)
     main.create_window(36, 592, window=bar, anchor="nw", width=832)
-    status = Txt(main, main.create_text(36, 608, text="Bereit", fill=C["mute"], anchor="nw", font=(FONT, 9), width=832))
+    status = Txt(main, main.create_text(36, 608, text=TR("Bereit", "Ready"), fill=C["mute"], anchor="nw", font=(FONT, 9), width=832))
 
     def melden(text):
         ui(lambda: status.configure(text=text))
@@ -784,8 +806,8 @@ def mit_fenster():
             try:
                 fn()
             except Exception:
-                log("Fehler: " + traceback.format_exc())
-                melden("Fehler, Details in update.log")
+                log("Error: " + traceback.format_exc())
+                melden(TR("Fehler, Details in update.log", "Error, details in update.log"))
             finally:
                 st["busy"] = False
                 ui(lambda: (bar.stop(), sperren(False)))
@@ -801,21 +823,21 @@ def mit_fenster():
         melden(text)
         if geaendert and laeuft():
             st["veraltet"] = True
-            melden(text + ". Zum Uebernehmen: Neu starten.")
+            melden(text + TR(". Zum Uebernehmen: Neu starten.", ". To apply it: restart."))
         if launcher and launcher_neu_starten():
-            ui(lambda: (log("Launcher aktualisiert, startet neu"), root.destroy()))
+            ui(lambda: (log(TR("Launcher aktualisiert, startet neu", "Launcher updated, restarting")), root.destroy()))
 
     def start_und_oeffnen(ziel="", seite=""):
-        melden("Starte Tracker ...")
+        melden(TR("Starte Tracker ...", "Starting tracker ..."))
         ok, fehler = tracker_starten()
         if ok:
             browser_oeffnen(ziel, seite)
-            melden("Tracker laeuft. Browser geoeffnet.")
+            melden(TR("Tracker laeuft. Browser geoeffnet.", "Tracker is running. Browser opened."))
         else:
-            melden("Start fehlgeschlagen. " + fehler)
+            melden(TR("Start fehlgeschlagen. ", "Start failed. ") + fehler)
 
     def neu_starten():
-        melden("Beende laufende Version ...")
+        melden(TR("Beende laufende Version ...", "Stopping the running version ..."))
         beenden()
         if st["auto"]:
             update_ausfuehren()
@@ -823,48 +845,49 @@ def mit_fenster():
         start_und_oeffnen()
 
     def tracker_beenden():
-        melden("Beende Tracker ...")
+        melden(TR("Beende Tracker ...", "Stopping tracker ..."))
         ok = beenden()
-        melden("Tracker beendet." if ok else "Konnte den Tracker nicht beenden.")
+        melden(TR("Tracker beendet.", "Tracker stopped.") if ok else TR("Konnte den Tracker nicht beenden.", "Could not stop the tracker."))
 
     def aktion(name):
         if name == "dashboard":
-            arbeit(lambda: start_und_oeffnen(), "Oeffne Dashboard ...")
+            arbeit(lambda: start_und_oeffnen(), TR("Oeffne Dashboard ...", "Opening dashboard ..."))
         elif name == "profil":
-            arbeit(lambda: start_und_oeffnen("profil"), "Oeffne Profil ...")
+            arbeit(lambda: start_und_oeffnen("profil"), TR("Oeffne Profil ...", "Opening profile ..."))
         elif name == "allianz":
-            arbeit(lambda: start_und_oeffnen(seite="allianz"), "Oeffne Allianz-Tracker ...")
+            arbeit(lambda: start_und_oeffnen(seite="allianz"), TR("Oeffne Allianz-Tracker ...", "Opening alliance tracker ..."))
         elif name == "allianz_import":
-            pfade = filedialog.askopenfilenames(title="Allianz-Datei (JSON) waehlen", filetypes=[("JSON-Datei", "*.json"), ("Alle Dateien", "*.*")])
+            pfade = filedialog.askopenfilenames(title=TR("Allianz-Datei (JSON) waehlen", "Choose alliance file (JSON)"), filetypes=[(TR("JSON-Datei", "JSON file"), "*.json"), (TR("Alle Dateien", "All files"), "*.*")])
             if pfade:
                 def imp():
-                    melden("Starte Tracker ...")
+                    melden(TR("Starte Tracker ...", "Starting tracker ..."))
                     ok, fehler = tracker_starten()
                     if not ok:
-                        return melden("Start fehlgeschlagen. " + fehler)
+                        return melden(TR("Start fehlgeschlagen. ", "Start failed. ") + fehler)
                     n, f = json_einspielen(pfade)
-                    melden(("%d Eintraege uebernommen." % n) + (" Fehler: " + f if f else " Im Dashboard unter Allianz ansehen."))
-                arbeit(imp, "Spiele Allianz-Daten ein ...")
+                    melden((TR("%d Eintraege uebernommen.", "%d entries imported.") % n) + (TR(" Fehler: ", " Error: ") + f if f else TR(" Im Dashboard unter Allianz ansehen.", " See them in the dashboard under Alliance.")))
+                arbeit(imp, TR("Spiele Allianz-Daten ein ...", "Importing alliance data ..."))
         elif name == "allianz_bilder":
-            pfade = filedialog.askopenfilenames(title="Allianz-Screenshots waehlen",
-                                                filetypes=[("Bilder", "*.png *.jpg *.jpeg *.webp"), ("Alle Dateien", "*.*")])
+            pfade = filedialog.askopenfilenames(title=TR("Allianz-Screenshots waehlen", "Choose alliance screenshots"),
+                                                filetypes=[(TR("Bilder", "Images"), "*.png *.jpg *.jpeg *.webp"), (TR("Alle Dateien", "All files"), "*.*")])
             if pfade:
                 def bilder():
                     n, ziel = bilder_sammeln(pfade)
-                    melden("%d Bilder gesammelt in %s" % (n, ziel))
+                    melden(TR("%d Bilder gesammelt in %s", "%d images collected in %s") % (n, ziel))
                     def fragen():
-                        if messagebox.askyesno("Bilder gesammelt",
-                                               "%d Bilder wurden gesammelt.\n\nDie Auswertung macht Claude im Chat. Chat und Ordner jetzt oeffnen, "
-                                               "um die Bilder dort hochzuladen?" % n):
+                        if messagebox.askyesno(TR("Bilder gesammelt", "Images collected"),
+                                               TR("%d Bilder wurden gesammelt.\n\nDie Auswertung macht Claude im Chat. Chat und Ordner jetzt oeffnen, "
+                                                  "um die Bilder dort hochzuladen?", "%d images were collected.\n\nClaude analyzes them in the chat. Open the chat and the folder now "
+                                                  "to upload the images there?") % n):
                             ordner_oeffnen(ziel)
                             webbrowser.open(chat_url)
                     ui(fragen)
-                arbeit(bilder, "Kopiere Bilder ...")
+                arbeit(bilder, TR("Kopiere Bilder ...", "Copying images ..."))
         elif name == "diagnose":
             def d():
                 ok, t = diagnose_starten()
                 melden(t)
-            arbeit(d, "Starte Diagnose ...")
+            arbeit(d, TR("Starte Diagnose ...", "Starting diagnostics ..."))
 
 
     # ---------------- Seite START
@@ -872,8 +895,8 @@ def mit_fenster():
     main.create_image(cx, 166, image=ring_img(156, 11, ("#3b82f6", "#22d3ee", "#34d399", "#fbbf24", "#f472b6", "#8b5cf6"), C["bg"]), tags=("p_play",))
     T("play", cx, 166, "RK", 22, fett=True, anker="center")
     T("play", cx, 268, "ROK TRACKER", 20, fett=True, anker="center")
-    T("play", cx, 298, "BARBAREN, BEUTE UND PROFIL", 8, C["mute"], True, "center")
-    b_start = Knopf(main, "DASHBOARD ÖFFNEN", lambda: aktion("dashboard"), primaer=True, w=340, h=88, sub="Startet den Tracker und öffnet den Browser")
+    T("play", cx, 298, TR("BARBAREN, BEUTE UND PROFIL", "BARBARIANS, LOOT AND PROFILE"), 8, C["mute"], True, "center")
+    b_start = Knopf(main, TR("DASHBOARD ÖFFNEN", "OPEN DASHBOARD"), lambda: aktion("dashboard"), primaer=True, w=340, h=88, sub=TR("Startet den Tracker und öffnet den Browser", "Starts the tracker and opens the browser"))
     Wf("play", cx - 44, 392, b_start, "center")
     menue = tk.Menu(root, tearoff=0, bg=C["card"], fg=C["ink"], activebackground=C["soft2"], activeforeground=C["ink"], bd=0, font=(FONT, 10))
     b_menue = Knopf(main, "▾", lambda: menue.tk_popup(b_menue.winfo_rootx(), b_menue.winfo_rooty() + b_menue.winfo_height()), primaer=True, w=76, h=88)
@@ -902,14 +925,14 @@ def mit_fenster():
 
     # ---------------- Seite UPDATE
     upd_karte = main.create_image(60, 112, anchor="nw", tags=("p_upd",))      # Bild folgt erst beim ersten Oeffnen der Seite
-    T("upd", 92, 140, "INSTALLIERT", 8, C["mute"], True)
+    T("upd", 92, 140, TR("INSTALLIERT", "INSTALLED"), 8, C["mute"], True)
     t_version = Txt(main, T("upd", 92, 162, "...", 16, fett=True))
     t_version2 = Txt(main, T("upd", 92, 196, "", 10, C["mute"], schrift=FONT))
-    b_upd = Knopf(main, "UPDATE SUCHEN", lambda: arbeit(update_ausfuehren, "Suche nach Updates ..."), bg=C["card"])
+    b_upd = Knopf(main, TR("UPDATE SUCHEN", "CHECK FOR UPDATES"), lambda: arbeit(update_ausfuehren, TR("Suche nach Updates ...", "Checking for updates ...")), bg=C["card"])
     Wf("upd", 92, 246, b_upd)
-    b_neu = Knopf(main, "NEU STARTEN", lambda: arbeit(neu_starten, "Starte neu ..."), bg=C["card"])
+    b_neu = Knopf(main, TR("NEU STARTEN", "RESTART"), lambda: arbeit(neu_starten, TR("Starte neu ...", "Restarting ...")), bg=C["card"])
     Wf("upd", 92 + int(b_upd.cget("width")) + 10, 246, b_neu)
-    b_stop = Knopf(main, "BEENDEN", lambda: arbeit(tracker_beenden, "Beende Tracker ..."), bg=C["card"])
+    b_stop = Knopf(main, TR("BEENDEN", "STOP"), lambda: arbeit(tracker_beenden, TR("Beende Tracker ...", "Stopping tracker ...")), bg=C["card"])
     Wf("upd", 92 + int(b_upd.cget("width")) + int(b_neu.cget("width")) + 20, 246, b_stop)
     alle = (b_start, b_neu, b_upd, b_stop)
 
@@ -928,18 +951,18 @@ def mit_fenster():
         c["autoupdate"] = st["auto"]
         config_schreiben(c)
     autoupdate.trace_add("write", auto_geaendert)
-    Wf("upd", 90, 316, tk.Checkbutton(main, text="Beim Neustart automatisch nach Updates suchen", variable=autoupdate, bg=C["card"], fg=C["mute"],
+    Wf("upd", 90, 316, tk.Checkbutton(main, text=TR("Beim Neustart automatisch nach Updates suchen", "Check for updates automatically on restart"), variable=autoupdate, bg=C["card"], fg=C["mute"],
                                       selectcolor=C["soft"], activebackground=C["card"], activeforeground=C["ink"], font=(FONT, 10),
                                       highlightthickness=0, bd=0))
     autowin = tk.BooleanVar(value=autostart_aktiv())
     def autowin_geaendert(*a):
         if not autostart_setzen(bool(autowin.get())):
             autowin.set(autostart_aktiv())
-            melden("Autostart konnte nicht geändert werden (nur unter Windows möglich).")
+            melden(TR("Autostart konnte nicht geändert werden (nur unter Windows möglich).", "Could not change autostart (Windows only)."))
         else:
-            melden("Autostart aktiviert. Der Launcher startet mit Windows und öffnet den Tracker im Hintergrund." if autowin.get() else "Autostart deaktiviert.")
+            melden(TR("Autostart aktiviert. Der Launcher startet mit Windows und öffnet den Tracker im Hintergrund.", "Autostart enabled. The launcher starts with Windows and runs the tracker in the background.") if autowin.get() else TR("Autostart deaktiviert.", "Autostart disabled."))
     autowin.trace_add("write", autowin_geaendert)
-    Wf("upd", 90, 346, tk.Checkbutton(main, text="Mit Windows starten (Tracker läuft dann im Hintergrund)", variable=autowin, bg=C["card"], fg=C["mute"],
+    Wf("upd", 90, 346, tk.Checkbutton(main, text=TR("Mit Windows starten (Tracker läuft dann im Hintergrund)", "Start with Windows (tracker then runs in the background)"), variable=autowin, bg=C["card"], fg=C["mute"],
                                       selectcolor=C["soft"], activebackground=C["card"], activeforeground=C["ink"], font=(FONT, 10),
                                       highlightthickness=0, bd=0, state="normal" if os.name == "nt" else "disabled"))
     traywahl = tk.BooleanVar(value=st["tray"])
@@ -949,18 +972,18 @@ def mit_fenster():
         c["tray"] = st["tray"]
         config_schreiben(c)
     traywahl.trace_add("write", tray_geaendert)
-    Wf("upd", 90, 376, tk.Checkbutton(main, text="Beim Schließen (X) in den Infobereich neben der Uhr minimieren", variable=traywahl, bg=C["card"], fg=C["mute"],
+    Wf("upd", 90, 376, tk.Checkbutton(main, text=TR("Beim Schließen (X) in den Infobereich neben der Uhr minimieren", "Minimize to the notification area next to the clock when closing (X)"), variable=traywahl, bg=C["card"], fg=C["mute"],
                                       selectcolor=C["soft"], activebackground=C["card"], activeforeground=C["ink"], font=(FONT, 10),
                                       highlightthickness=0, bd=0, state="normal" if os.name == "nt" else "disabled"))
-    k_prot = Knopf(main, "PROTOKOLL", lambda: ordner_oeffnen(DATA) if not os.path.exists(LOG) else
+    k_prot = Knopf(main, TR("PROTOKOLL", "LOG"), lambda: ordner_oeffnen(DATA) if not os.path.exists(LOG) else
                    (os.startfile(LOG) if os.name == "nt" else None), klein=True, bg=C["card"])
     Wf("upd", 92, 418, k_prot)
-    Wf("upd", 92 + int(k_prot.cget("width")) + 10, 418, Knopf(main, "DATENORDNER", lambda: ordner_oeffnen(DATA), klein=True, bg=C["card"]))
+    Wf("upd", 92 + int(k_prot.cget("width")) + 10, 418, Knopf(main, TR("DATENORDNER", "DATA FOLDER"), lambda: ordner_oeffnen(DATA), klein=True, bg=C["card"]))
 
-    menue.add_command(label="Neu starten", command=lambda: arbeit(neu_starten, "Starte neu ..."))
-    menue.add_command(label="Nach Update suchen", command=lambda: arbeit(update_ausfuehren, "Suche nach Updates ..."))
+    menue.add_command(label=TR("Neu starten", "Restart"), command=lambda: arbeit(neu_starten, TR("Starte neu ...", "Restarting ...")))
+    menue.add_command(label=TR("Nach Update suchen", "Check for updates"), command=lambda: arbeit(update_ausfuehren, TR("Suche nach Updates ...", "Checking for updates ...")))
     menue.add_separator()
-    menue.add_command(label="Tracker beenden", command=lambda: arbeit(tracker_beenden, "Beende Tracker ..."))
+    menue.add_command(label=TR("Tracker beenden", "Stop tracker"), command=lambda: arbeit(tracker_beenden, TR("Beende Tracker ...", "Stopping tracker ...")))
 
     # ---------------- linke Leiste
     logo = tk.Canvas(side, width=96, height=84, bg=C["side"], highlightthickness=0, bd=0)
@@ -974,34 +997,47 @@ def mit_fenster():
             main.itemconfigure("p_" + sname, state="normal" if sname == name else "hidden")
         for k, nv in navs.items():
             nv.setze(k == name)
-    for key, icon, label, cmd in (("play", "▶", "START", lambda: zeige_seite("play")),
+    for key, icon, label, cmd in (("play", "▶", TR("START", "START"), lambda: zeige_seite("play")),
                                   ("upd", "⬇", "UPDATE", lambda: zeige_seite("upd")),
                                   ("chat", "💬", "CHAT", lambda: webbrowser.open(chat_url))):
         nv = Nav(side, icon, label, cmd)
         nv.pack(pady=2)
         navs[key] = nv
-    Nav(side, "⚙", "DATEN", lambda: ordner_oeffnen(DATA)).pack(side="bottom", pady=(0, 10))
+    Nav(side, "⚙", TR("DATEN", "DATA"), lambda: ordner_oeffnen(DATA)).pack(side="bottom", pady=(0, 10))
+    def sprache_wechseln():
+        """Speichert die andere Sprache und startet den Launcher neu, damit alle Texte neu aufgebaut werden."""
+        c = config_lesen()
+        c["lang"] = "de" if TR("de", "en") == "en" else "en"
+        config_schreiben(c)
+        try:
+            subprocess.Popen([python_exe(), os.path.abspath(__file__)] + ARGS, cwd=HIER, close_fds=True,
+                             creationflags=(0x00000008 | 0x00000200) if os.name == "nt" else 0)
+        except Exception as e:
+            melden("%s: %s" % (TR("Neustart fehlgeschlagen", "Restart failed"), e))
+            return
+        ganz_schliessen()
+    Nav(side, "🌐", TR("ENGLISH", "DEUTSCH"), sprache_wechseln).pack(side="bottom", pady=2)
     zeige_seite("play")
 
     # --- Status regelmaessig aktualisieren (im Hintergrund, Anzeige im Fenster)
     def zeige():
         if st["laeuft"]:
             punkt.itemconfigure(kreis, fill=C["good"])
-            t_tracker.configure(text="LÄUFT · PORT %d" % PORT)
+            t_tracker.configure(text=TR("LÄUFT · PORT %d", "RUNNING · PORT %d") % PORT)
         else:
             punkt.itemconfigure(kreis, fill=C["mute"])
-            t_tracker.configure(text="GESTOPPT")
-        inst = (st["installiert"] or "unbekannt")[:7]
+            t_tracker.configure(text=TR("GESTOPPT", "STOPPED"))
+        inst = (st["installiert"] or TR("unbekannt", "unknown"))[:7]
         neu = (st["neueste"] or "")[:7]
-        t_version.configure(text="Installiert: " + inst)
+        t_version.configure(text=TR("Installiert: ", "Installed: ") + inst)
         if st["veraltet"]:
-            t_version2.configure(text="Update geladen, Neustart nötig", fg=C["warn"])
+            t_version2.configure(text=TR("Update geladen, Neustart nötig", "Update downloaded, restart required"), fg=C["warn"])
         elif st["neueste"] and st["installiert"] != st["neueste"]:
-            t_version2.configure(text="Update verfügbar (%s)" % neu, fg=C["warn"])
+            t_version2.configure(text=TR("Update verfügbar (%s)", "Update available (%s)") % neu, fg=C["warn"])
         elif st["neueste"]:
-            t_version2.configure(text="Aktuell", fg=C["good"])
+            t_version2.configure(text=TR("Aktuell", "Up to date"), fg=C["good"])
         else:
-            t_version2.configure(text="GitHub nicht erreichbar", fg=C["mute"])
+            t_version2.configure(text=TR("GitHub nicht erreichbar", "GitHub not reachable"), fg=C["mute"])
         if not st["busy"]:
             sperren(False)
 
@@ -1014,8 +1050,8 @@ def mit_fenster():
                     st["neueste"] = sha
                     if tray and tray.ok and st["installiert"] and sha != st["installiert"] and st.get("gemeldet") != sha:
                         st["gemeldet"] = sha
-                        ui(lambda: (tray.tooltip("RoK Tracker - Update verfügbar"),
-                                    tray.hinweis("RoK Tracker", "Ein Update ist verfügbar. Klick auf das Symbol, dann auf Update.")))
+                        ui(lambda: (tray.tooltip(TR("RoK Tracker - Update verfügbar", "RoK Tracker - update available")),
+                                    tray.hinweis("RoK Tracker", TR("Ein Update ist verfügbar. Klick auf das Symbol, dann auf Update.", "An update is available. Click the icon, then Update."))))
             ui(zeige)
         threading.Thread(target=lauf, daemon=True).start()
 
@@ -1064,10 +1100,10 @@ def mit_fenster():
             if st["auto"]:
                 update_ausfuehren()
             ok, fehler = tracker_starten()
-            melden("Tracker läuft im Hintergrund." if ok else "Start fehlgeschlagen. " + fehler)
-        root.after(800, lambda: arbeit(leise, "Starte Tracker ..."))
+            melden(TR("Tracker läuft im Hintergrund.", "Tracker is running in the background.") if ok else TR("Start fehlgeschlagen. ", "Start failed. ") + fehler)
+        root.after(800, lambda: arbeit(leise, TR("Starte Tracker ...", "Starting tracker ...")))
     elif st["auto"]:
-        root.after(600, lambda: arbeit(update_ausfuehren, "Suche nach Updates ..."))
+        root.after(600, lambda: arbeit(update_ausfuehren, TR("Suche nach Updates ...", "Checking for updates ...")))
     root.mainloop()
 
 def ohne_fenster():
@@ -1078,7 +1114,7 @@ def ohne_fenster():
     if ok and not AUTOSTART:
         browser_oeffnen()
     else:
-        log("Start fehlgeschlagen: " + fehler)
+        log("Start failed: " + fehler)
 
 if __name__ == "__main__":
     try:
@@ -1090,7 +1126,7 @@ if __name__ == "__main__":
         try:
             mit_fenster()
         except Exception:
-            log("Fenster konnte nicht gebaut werden: " + traceback.format_exc())
+            log("Could not build the window: " + traceback.format_exc())
             ohne_fenster()
     else:
         ohne_fenster()
