@@ -2429,7 +2429,13 @@ thead th.n{left:0;z-index:3}
 td.avg{background:var(--soft)}
 .rk{color:var(--mute);font-size:.75rem;margin-left:6px}
 tbody tr:hover td{background:var(--soft)}
-@media (max-width:600px){h1{font-size:1.3rem}.panel{padding:12px}}
+#cards,.sm{display:none}
+.card{border:1px solid var(--line);border-radius:12px;background:var(--card);padding:10px 12px}
+.card .h{display:flex;align-items:baseline;gap:8px}.card .h .r{color:var(--mute);font-size:.8rem;min-width:1.8em}.card .h b{flex:1;min-width:0;overflow-wrap:anywhere}.card .h .a{font-weight:600;white-space:nowrap}
+.card dl{display:grid;grid-template-columns:1fr 1fr;gap:6px 12px;margin:8px 0 0}.card dl div{min-width:0}.card dt{color:var(--mute);font-size:.72rem}.card dd{margin:0;font-variant-numeric:tabular-nums}
+.card dl .on dt{color:var(--acc)}
+.sm{gap:8px;align-items:center}.sm select,.sm button{font:inherit;color:var(--ink);background:var(--soft);border:1px solid var(--line);border-radius:10px;padding:8px 10px;min-width:0}.sm select{flex:1}
+@media (max-width:700px){.wrap{display:none}#cards{display:flex;flex-direction:column;gap:8px}.sm{display:flex}h1{font-size:1.3rem}.panel{padding:12px}input{width:100%;font-size:16px}.bar{gap:6px}.panel .chips{flex-wrap:nowrap;overflow-x:auto;margin:0 -12px;padding:2px 12px 6px;-webkit-overflow-scrolling:touch}.chip{white-space:nowrap;flex:none;padding:7px 12px}}
 .chips{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
 .chip{font:inherit;font-size:.85rem;color:var(--ink);background:var(--soft);border:1px solid var(--line);border-radius:999px;padding:5px 12px;cursor:pointer}
 .chip[aria-pressed="false"]{color:var(--mute);text-decoration:line-through;background:transparent}
@@ -2441,7 +2447,9 @@ tbody tr:hover td{background:var(--soft)}
 <section class="panel">
 <div class="chips" id="chips" role="group" aria-label="@@cl@@"></div>
 <div class="bar"><input id="q" type="search" placeholder="@@search@@" aria-label="@@search@@"><span class="note" id="info"></span></div>
+<div class="sm"><select id="sel" aria-label="Sort"></select><button type="button" id="dirb" aria-label="Sort direction"></button></div>
 <div class="wrap"><table id="t"></table></div>
+<div id="cards"></div>
 <p class="note">@@note@@</p>
 </section>
 </main>
@@ -2472,6 +2480,9 @@ function render(){
  document.getElementById('t').innerHTML='<thead><tr><th class="t">#</th><th class="t n">@@name@@</th>'+th('avg','@@avg@@')+vis.map(c=>th(c[0],c[1])).join('')+'</tr></thead><tbody>'+
  rows.map((m,i)=>`<tr><td class="r">${i+1}</td><td class="n">${esc(m.n)}</td><td class="avg">${m.a==null?'–':dec.format(m.a)+'<span class="rk">#'+m.p+'</span>'}</td>`+vis.map(c=>{const x=m.c[c[0]];return x?`<td>${x[1]==null?'–':fmt.format(x[1])}<span class="rk">#${x[0]}</span></td>`:'<td>–</td>'}).join('')+'</tr>').join('')+'</tbody>';
  document.getElementById('info').textContent=rows.length+' / '+DATA.length;
+ const sel=document.getElementById('sel');sel.innerHTML=[['avg','@@avg@@']].concat(vis.map(c=>[c[0],c[1]])).map(c=>`<option value="${c[0]}"${c[0]===sort?' selected':''}>${c[1]}</option>`).join('');
+ document.getElementById('dirb').textContent=dir<0?'▼':'▲';
+ document.getElementById('cards').innerHTML=rows.map((m,i)=>`<div class="card"><div class="h"><span class="r">${i+1}</span><b>${esc(m.n)}</b><span class="a"><small class="rk" style="margin:0 6px 0 0">@@avg@@</small>${m.a==null?'–':dec.format(m.a)+'<span class="rk">#'+m.p+'</span>'}</span></div><dl>`+vis.map(c=>{const x=m.c[c[0]];return `<div class="${sort===c[0]?'on':''}"><dt>${c[1]}</dt><dd>${x?(x[1]==null?'–':fmt.format(x[1]))+'<span class="rk">#'+x[0]+'</span>':'–'}</dd></div>`}).join('')+'</dl></div>').join('');
  document.querySelectorAll('.chip').forEach(b=>b.setAttribute('aria-pressed',on.has(b.dataset.k)));
 }
 document.getElementById('cnt').textContent=DATA.length;
@@ -2479,6 +2490,8 @@ const sortBy=th=>{if(!th)return;const k=th.dataset.k;if(!k)return;if(sort===k)di
 document.getElementById('t').addEventListener('click',e=>sortBy(e.target.closest('th')));
 document.getElementById('t').addEventListener('keydown',e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();sortBy(e.target.closest('th'))}});
 document.getElementById('chips').addEventListener('click',e=>{const b=e.target.closest('.chip');if(!b)return;const k=b.dataset.k;on.has(k)?on.delete(k):on.add(k);render()});
+document.getElementById('sel').onchange=e=>{sort=e.target.value;dir=sort==='avg'?1:-1;render()};
+document.getElementById('dirb').onclick=()=>{dir=-dir;render()};
 document.getElementById('q').oninput=e=>{q=e.target.value.trim().toLowerCase();render()};
 chips();render();
 </script>
