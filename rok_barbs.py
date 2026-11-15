@@ -723,6 +723,25 @@ class DB:
                     longest=max((len(v) for v in series.values()), default=0),
                     days=sorted(days.values(), key=lambda d: d["day"], reverse=True)[:31])
 
+    def loot_per_ap(self, d_from, d_to, account=""):
+        """Beute der Barbaren-Chains (nur Barbaren bis zum eingestellten Level) im Zeitraum und die dafuer verbrauchten AP."""
+        cfg = self.chain_cfg()
+        cs = [c for c in self.chains(account) if d_from <= c["day"] <= d_to]
+        tot = {}
+        ids = [c["mail_id"] for c in cs]
+        for i in range(0, len(ids), 400):
+            part = ids[i:i + 400]
+            for r in self.q("SELECT item_id, SUM(qty) qty FROM loot WHERE src='b' AND src_id IN (SELECT id FROM battles WHERE "
+                            "role='solo' AND foe_kind!='fort' AND foe_lvl<=? AND mail_id IN (%s)) GROUP BY item_id" % ",".join("?" * len(part)),
+                            (cfg["maxlvl"],) + tuple(part)):
+                tot[r["item_id"]] = tot.get(r["item_id"], 0) + r["qty"]
+        loot = []
+        for iid, qty in sorted(tot.items(), key=lambda x: -x[1]):
+            it = ITEMS.get(iid)
+            loot.append(dict(item_id=iid, qty=qty, name=self.iname(iid), kind=it["kind"] if it else None,
+                             total=qty * it["unit"] if it else None))
+        return dict(ap=sum(c["ap"] for c in cs), chains=len(cs), barbs=sum(c["n"] for c in cs), loot=loot, maxlvl=cfg["maxlvl"])
+
     def quick(self, account=""):
         """Daten fuer die rechte Schnellzugriff-Spalte: Feed, 14-Tage-Verlauf, seltene Drops, Status."""
         if account == "main":
@@ -1111,6 +1130,7 @@ button:focus-visible,select:focus-visible,input:focus-visible,summary:focus-visi
 .kc .ic{grid-row:1/3;display:grid;place-items:center;width:42px;height:42px;border-radius:12px;background:var(--accsoft);font-style:normal;font-size:1.25rem}
 .kc b{font-size:1.4rem}.kc span{overflow-wrap:anywhere}
 .cnt{color:var(--mute);font-size:.82rem}.cnt:empty{display:none}
+.lap{margin-top:18px}.laph{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;margin-bottom:8px}.laph h3{margin:0}
 .loot{display:grid;grid-template-columns:repeat(auto-fill,minmax(236px,1fr));gap:12px}
 .l{display:grid;grid-template-columns:52px 1fr;column-gap:12px;align-items:center;border:1px solid var(--line);background:var(--soft);border-radius:14px;padding:12px 14px}
 .l i{grid-row:1/3;display:grid;place-items:center;width:52px;height:52px;border-radius:12px;background:var(--accsoft);font-style:normal;font-size:1.7rem}
@@ -1191,7 +1211,7 @@ tr.flash td,details.flash{animation:fl 2.6s ease-out}
 <button role="tab" data-t="dt">Pro Tag</button>
 <button role="tab" data-t="nm" id="nmsec">Namen eintragen <span class="cnt" id="c_nm"></span></button>
 </nav>
-<div class="pane" id="p_loot"><div class="loot" id="loot"></div><p class="note" id="lootnote"></p></div>
+<div class="pane" id="p_loot"><div class="loot" id="loot"></div><p class="note" id="lootnote"></p><div class="lap" id="lap"></div></div>
 <div class="pane" id="p_ft"><div id="ft"></div></div>
 <div class="pane" id="p_bt"><div class="chbox" id="chbox"></div><div id="bt"></div></div>
 <div class="pane" id="p_pv"><p class="note">Zusammengehörende Berichte stehen in einer Zeile. Ark of Osiris steht getrennt im eigenen Reiter und ist hier nicht mitgezählt.</p><div id="pv"></div></div>
@@ -1302,6 +1322,20 @@ $('p_nm').addEventListener('click',async e=>{const btn=e.target.closest('button'
  const r=await fetch('/api/name',{method:'POST',body:JSON.stringify(body)}).then(r=>r.json());
  q('span').textContent=r.ok?'gespeichert':'Fehler: '+r.error;if(r.ok){nmSig='';lastSig='';load()}});
 let mainApplied=false,lastMain='';
+const lootBig=L=>{const sum=k=>L.filter(x=>x.kind===k).reduce((n,x)=>n+x.total,0);
+ return [['Training-Speedups',sum('speed_training'),'Min','speed_training'],['Universal-Speedups',sum('speed_universal'),'Min','speed_universal'],['Heilungs-Speedups',sum('speed_healing'),'Min','speed_healing'],
+  ['Holz',sum('wood'),'','wood'],['Stein',sum('stone'),'','stone'],['Gold',sum('gold'),'','gold'],['Edelsteine',sum('gems'),'','gems'],['XP aus Büchern',sum('xp_books'),'','xp_books'],
+  ['Ressourcenpakete',sum('packs'),'Stück','packs'],['Aktionspunkte (Notfall)',sum('ap'),'AP','ap'],['Mais',sum('food'),'','food']]
+  .concat(L.filter(x=>x.kind==='other').map(x=>[x.name,x.qty,'×','item_'+x.item_id])).filter(x=>x[1]>0)};
+const lootHtml=(big,k,none)=>big.length?big.map(x=>{const v=x[1]*k;return`<div class="l" tabindex="0" data-tip="${esc(TIPS[x[3]]||x[0])}"><i><img src="/icon/${x[3]}" alt="" onerror="icoFb(this,'${slug(x[0])}','${LI[x[0]]||'🎁'}')"></i><b>${k===1||v>=100?f(Math.round(v)):(Math.round(v*10)/10).toLocaleString(LOC)} ${x[2]}</b><small>${esc(x[0])}</small></div>`}).join(''):`<span class="note">${none}</span>`;
+let lapPer='7';try{lapPer=localStorage.getItem('roklap')||'7'}catch(e){}
+let lapSig='';
+async function lapLoad(force){const n=lapPer==='all'?null:+lapPer,to=iso(new Date()),from=n===null?'0000-01-01':iso(new Date(Date.now()-(n-1)*864e5)),acc=$('acc').value;
+ const c=await fetch(`/api/lootap?from=${from}&to=${to}&account=${acc}`).then(r=>r.json());const sig=JSON.stringify([c,lapPer]);if(sig===lapSig&&!force)return;lapSig=sig;
+ const el=$('lap');if(el.contains(document.activeElement)&&document.activeElement.tagName==='SELECT'&&!force)return;
+ el.innerHTML=`<div class="laph"><h3>Beute pro 100 AP</h3><select id="lapsel" aria-label="Zeitraum">${[['1','Heute'],['7','Letzte 7 Tage'],['30','Letzte 30 Tage'],['all','Gesamt']].map(o=>`<option value="${o[0]}"${o[0]===lapPer?' selected':''}>${o[1]}</option>`).join('')}</select></div>`+
+  (c.ap?`<div class="loot">${lootHtml(lootBig(c.loot),100/c.ap,'Keine Beute im gewählten Zeitraum.')}</div><p class="note">${LANG==='en'?`Basis: ${f(c.ap)} AP for ${f(c.chains)} chains with ${f(c.barbs)} barbarians (only barbarians up to lvl ${c.maxlvl}, AP after the chain reduction).`.replace('Basis','Based on'):`Basis: ${f(c.ap)} AP für ${f(c.chains)} Chains mit ${f(c.barbs)} Barbaren (nur Barbaren bis Lvl ${c.maxlvl}, AP nach der Chain-Reduktion).`}</p>`:`<p class="note">Im gewählten Zeitraum gibt es keine Barbaren-Chains.</p>`)}
+$('lap').addEventListener('change',e=>{if(e.target.id==='lapsel'){lapPer=e.target.value;try{localStorage.setItem('roklap',lapPer)}catch(x){}lapLoad(true)}});
 async function load(){const[a,b]=range();
  localStorage.setItem('rokbarbs',JSON.stringify({range:$('range').value,d1:$('d1').value,d2:$('d2').value}));
  const [s,st]=await Promise.all([fetch(`/api/stats?from=${a}&to=${b}&account=${$('acc').value}`).then(r=>r.json()),fetch('/api/status').then(r=>r.json())]);
@@ -1322,14 +1356,11 @@ async function load(){const[a,b]=range();
   kpi('Leicht verwundet (solo)',f(t.hurt))+kpi('Schwer verwundet (solo)',f(t.severe),'bad')+
   (pt.n?kpi('Spielerkämpfe',f(pt.n))+kpi('Kill Points',f(pt.kp_gained))+kpi('Kill Count (Gegner schwer verwundet)',f(pt.enemy_severe))+kpi('Eigene schwer verwundet',f(pt.own_severe),'bad')+kpi('Trade (schwer verwundet)',tr(pt.enemy_severe,pt.own_severe),trc(pt.enemy_severe,pt.own_severe)):'');
  $('kpinote').textContent='Zahlen zu Truppen und Verlusten aus Rallys gelten für alle Teilnehmer zusammen und sind hier nicht eingerechnet.';
- const sum=k=>s.loot.filter(x=>x.kind===k).reduce((n,x)=>n+x.total,0);
- const big=[['Training-Speedups',sum('speed_training'),'Min','speed_training'],['Universal-Speedups',sum('speed_universal'),'Min','speed_universal'],['Heilungs-Speedups',sum('speed_healing'),'Min','speed_healing'],
-  ['Holz',sum('wood'),'','wood'],['Stein',sum('stone'),'','stone'],['Gold',sum('gold'),'','gold'],['Edelsteine',sum('gems'),'','gems'],['XP aus Büchern',sum('xp_books'),'','xp_books'],
-  ['Ressourcenpakete',sum('packs'),'Stück','packs'],['Aktionspunkte (Notfall)',sum('ap'),'AP','ap'],['Mais',sum('food'),'','food']]
-  .concat(s.loot.filter(x=>x.kind==='other').map(x=>[x.name,x.qty,'×','item_'+x.item_id])).filter(x=>x[1]>0);
- $('loot').innerHTML=big.length?big.map(x=>`<div class="l" tabindex="0" data-tip="${esc(TIPS[x[3]]||x[0])}"><i><img src="/icon/${x[3]}" alt="" onerror="icoFb(this,'${slug(x[0])}','${LI[x[0]]||'🎁'}')"></i><b>${f(x[1])} ${x[2]}</b><small>${esc(x[0])}</small></div>`).join(''):'<span class="note">Keine Beute im gewählten Zeitraum.</span>';
+ const big=lootBig(s.loot);
+ $('loot').innerHTML=lootHtml(big,1,'Keine Beute im gewählten Zeitraum.');
  const ignIds=new Set(s.unknown.ignored.map(x=>x.id)),unk=s.loot.filter(x=>x.kind===null&&!ignIds.has(x.item_id));
  renderNames(s.unknown);
+ lapLoad().catch(()=>{});
  $('lootnote').textContent=unk.length?'Noch nicht benannt: '+unk.map(x=>`${x.name} (${f(x.qty)}×)`).join(', '):'';
  // Festungen (jeder Festungs-Kampf, auch beigetretene Rallys)
  $('c_ft').textContent=s.forts.length||'';
@@ -1400,7 +1431,7 @@ $('pfile').onchange=async e=>{let n=0,err='';for(const fl of e.target.files){try
 const EN=[
 [`Barbaren-Tracker`,`Barbarian Tracker`],[`Heute`,`Today`],[`Gestern`,`Yesterday`],[`Letzte 7 Tage`,`Last 7 days`],[`Letzte 30 Tage`,`Last 30 days`],
 [`Dieser Monat`,`This month`],[`Alles`,`All time`],[`Zeitraum wählen`,`Custom range`],[`von`,`from`],[`bis`,`to`],[`und`,`and`],
-[`Allianz-Tracker`,`Alliance Tracker`],[`Zum Loot-Tracker`,`Back to loot tracker`],[`Loot-Tracker`,`Loot tracker`],[`Barb-Chaining`,`Barb chaining`],[`Eine Chain ist ein Angriff, in dem du mehrere Barbaren hintereinander besiegst. Es zählen nur normale Barbaren bis zum eingestellten Level, höhere NPCs (zum Beispiel Lvl 60) sind ausgenommen. Eine neue Serie beginnt, wenn du länger als die eingestellte Pause nicht angreifst oder bei einem Bericht „Neustart“ markierst. Die AP je Chain sinken in einer Serie.`,`A chain is one attack in which you defeat several barbarians in a row. Only normal barbarians up to the set level count, higher NPCs (for example Lvl 60) are excluded. A new series starts when you do not attack for longer than the set pause or mark a report as "restart". The AP per chain decrease within a series.`],[`Pause für neue Serie (Min)`,`Pause for new series (min)`],[`AP erste Chain`,`AP first chain`],[`AP-Reduktion je Chain`,`AP reduction per chain`],[`Mindest-AP`,`Minimum AP`],[`Max. Barbaren-Level`,`Max barbarian level`],[`Serien`,`Series`],[`Chains`,`Chains`],[`Ø Chains pro Serie`,`Avg chains per series`],[`Längste Serie (Chains)`,`Longest series (chains)`],[`Barbaren gekillt`,`Barbarians killed`],[`Ø Barbaren pro Chain`,`Avg barbarians per chain`],[`AP verbraucht`,`AP used`],[`AP pro Barbar`,`AP per barbarian`],[`Ø Barbaren pro Chain`,`Avg barbarians per chain`],[`Als Neustart markieren`,`Mark as restart`],[`Neustart-Markierung entfernen`,`Remove restart mark`],[`Sprache`,`Language`],[`Seiten`,`Pages`],[`Ansicht`,`View`],[`Breite`,`Width`],[`Ausrichtung`,`Alignment`],[`Schmal`,`Narrow`],[`Breit`,`Wide`],[`Voll`,`Full`],[`Links`,`Left`],[`Mitte`,`Center`],[`Rechts`,`Right`],[`Allianz-Ranking`,`Alliance ranking`],[`Member-Rangliste`,`Member ranking`],[`Mitglieder`,`members`],
+[`Allianz-Tracker`,`Alliance Tracker`],[`Zum Loot-Tracker`,`Back to loot tracker`],[`Loot-Tracker`,`Loot tracker`],[`Beute pro 100 AP`,`Loot per 100 AP`],[`Letzte 7 Tage`,`Last 7 days`],[`Letzte 30 Tage`,`Last 30 days`],[`Im gewählten Zeitraum gibt es keine Barbaren-Chains.`,`There are no barbarian chains in the selected period.`],[`Barb-Chaining`,`Barb chaining`],[`Eine Chain ist ein Angriff, in dem du mehrere Barbaren hintereinander besiegst. Es zählen nur normale Barbaren bis zum eingestellten Level, höhere NPCs (zum Beispiel Lvl 60) sind ausgenommen. Eine neue Serie beginnt, wenn du länger als die eingestellte Pause nicht angreifst oder bei einem Bericht „Neustart“ markierst. Die AP je Chain sinken in einer Serie.`,`A chain is one attack in which you defeat several barbarians in a row. Only normal barbarians up to the set level count, higher NPCs (for example Lvl 60) are excluded. A new series starts when you do not attack for longer than the set pause or mark a report as "restart". The AP per chain decrease within a series.`],[`Pause für neue Serie (Min)`,`Pause for new series (min)`],[`AP erste Chain`,`AP first chain`],[`AP-Reduktion je Chain`,`AP reduction per chain`],[`Mindest-AP`,`Minimum AP`],[`Max. Barbaren-Level`,`Max barbarian level`],[`Serien`,`Series`],[`Chains`,`Chains`],[`Ø Chains pro Serie`,`Avg chains per series`],[`Längste Serie (Chains)`,`Longest series (chains)`],[`Barbaren gekillt`,`Barbarians killed`],[`Ø Barbaren pro Chain`,`Avg barbarians per chain`],[`AP verbraucht`,`AP used`],[`AP pro Barbar`,`AP per barbarian`],[`Ø Barbaren pro Chain`,`Avg barbarians per chain`],[`Als Neustart markieren`,`Mark as restart`],[`Neustart-Markierung entfernen`,`Remove restart mark`],[`Sprache`,`Language`],[`Seiten`,`Pages`],[`Ansicht`,`View`],[`Breite`,`Width`],[`Ausrichtung`,`Alignment`],[`Schmal`,`Narrow`],[`Breit`,`Wide`],[`Voll`,`Full`],[`Links`,`Left`],[`Mitte`,`Center`],[`Rechts`,`Right`],[`Allianz-Ranking`,`Alliance ranking`],[`Member-Rangliste`,`Member ranking`],[`Mitglieder`,`members`],
 [`Klick auf eine Spaltenüberschrift sortiert die Liste. Grün und rot zeigen die Veränderung seit dem vorherigen Stand. Ranglisten ohne Resource Assistance und Armory Contributions.`,`Click a column header to sort the list. Green and red show the change since the previous snapshot. Rankings without Resource Assistance and Armory Contributions.`],
 [`Ø Rang`,`Avg rank`],[`Durchschnitt der Plätze in den eingeschalteten Kategorien, niedriger ist besser`,`Average of the ranks in the categories that are on, lower is better`],
 [`Klick auf eine Kategorie über der Tabelle schaltet sie aus, mit der Maus ziehen ändert die Reihenfolge der Spalten. Die Einstellungen werden gespeichert. Eine ausgeschaltete Kategorie wird ausgeblendet und zählt nicht zum Ø Rang. Ø Rang ist der Durchschnitt der Plätze in den eingeschalteten Kategorien, niedriger ist besser. Die Zahl dahinter ist der Platz in dieser Durchschnittswertung.`,`Click a category above the table to switch it off, drag it with the mouse to change the column order. The settings are saved. A switched-off category is hidden and does not count toward the avg rank. Avg rank is the average of the ranks in the categories that are on, lower is better. The number after it is the position in that average ranking.`],
@@ -1711,6 +1742,10 @@ def make_handler(db, watcher):
                 self.send_header("Content-Length", str(len(data)))
                 self.end_headers()
                 self.wfile.write(data)
+            elif u.path == "/api/lootap":
+                q = parse_qs(u.query)
+                self.send(json.dumps(db.loot_per_ap(q.get("from", ["0000-01-01"])[0], q.get("to", ["9999-12-31"])[0],
+                                                    q.get("account", [""])[0])), "application/json")
             elif u.path == "/api/quick":
                 self.send(json.dumps(db.quick(parse_qs(u.query).get("account", ["main"])[0])), "application/json")
             elif u.path == "/api/alliance":
