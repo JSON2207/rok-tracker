@@ -953,7 +953,11 @@ class DB:
         order += [k for k in keys if k not in order]
         off = [k for k in d.get("off", []) if k in keys]
         srt = d.get("sort") if d.get("sort") in keys + ["avg_all"] else "avg_all"
-        return dict(order=order, off=off, sort=srt, dir=-1 if d.get("dir") == -1 else 1)
+        try:
+            req = max(0, min(10 ** 8, int(d.get("mobreq", 1000))))
+        except (TypeError, ValueError):
+            req = 1000
+        return dict(order=order, off=off, sort=srt, dir=-1 if d.get("dir") == -1 else 1, mobreq=req, mobonly=bool(d.get("mobonly")))
 
     def set_alliance_ui(self, d):
         cur = self.alliance_ui()
@@ -966,6 +970,10 @@ class DB:
             cur["sort"] = d["sort"]
         if d.get("dir") in (1, -1):
             cur["dir"] = d["dir"]
+        if d.get("mobreq") is not None:
+            cur["mobreq"] = d["mobreq"]
+        if "mobonly" in d:
+            cur["mobonly"] = bool(d["mobonly"])
         self.set_setting("alliance_ui", json.dumps(cur))
         return self.alliance_ui()
 
@@ -1931,7 +1939,7 @@ const EN=[
 [`Datei unvollständig`,`File incomplete`],
 [`Alle Einträge dieser Seite löschen und auf den Anfangszustand zurücksetzen?`,`Delete all entries on this page and reset to the initial state?`],[`Items insgesamt`,`Total items`],
 [`AP-Verbrauch`,`AP usage`],[`Barbaren-Beute insgesamt`,`Total barbarian loot`],[`Festungs-Beute insgesamt`,`Total fort loot`],[`Sonstige Beute`,`Other loot`],[`AP pro Festung`,`AP per fort`],[`AP gesamt`,`AP total`],[`Barbaren-AP sind geschätzt (Chain-Einstellungen im Tab Barbarenkämpfe), Festungen zählen auch beigetretene Rallys.`,`Barbarian AP are estimated (chain settings in the Barbarian fights tab), forts also include joined rallies.`],
-[`Arten`,`types`],[`Vergleich mit`,`Compare with`],[`Liste`,`List`],[`Platz vorher #`,`Previously #`],[`Neue Liste`,`New list`],[`Liste löschen`,`Delete list`],[`Aktuelle Liste`,`Current list`],[`Vorheriger Stand`,`Previous snapshot`],[`Diesen Stand löschen`,`Delete this snapshot`],
+[`Arten`,`types`],[`Vergleich mit`,`Compare with`],[`Liste`,`List`],[`Mindestpunkte`,`Minimum points`],[`Fehlt`,`Missing`],[`Platz vorher #`,`Previously #`],[`Neue Liste`,`New list`],[`Liste löschen`,`Delete list`],[`Aktuelle Liste`,`Current list`],[`Vorheriger Stand`,`Previous snapshot`],[`Diesen Stand löschen`,`Delete this snapshot`],
 [`Speedups:`,`Speedups:`],[`Heilung`,`Healing`],
 ];
 const ENM=new Map(EN.map(([a,b])=>[a,b]));
@@ -1972,7 +1980,9 @@ ALLIANCE_PAGE = r"""<!doctype html><html lang="de"><head><meta charset="utf-8">
 a.btn{font:inherit;color:var(--ink);background:var(--soft);border:1px solid var(--line);border-radius:10px;padding:7px 12px;text-decoration:none}a.btn:hover{border-color:var(--acc)}
 #achips{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:12px}.chip{font:inherit;font-size:.85rem;color:var(--ink);background:var(--soft);border:1px solid var(--line);border-radius:999px;padding:5px 12px;cursor:pointer}.chip[aria-pressed="false"]{color:var(--mute);text-decoration:line-through;background:transparent}.chip[aria-pressed="true"]{border-color:var(--acc)}
 .inact{border:1px solid var(--line);border-radius:16px;background:var(--card);padding:14px 16px;margin-bottom:14px}.inact h2{margin:0;font-size:1.05rem}.ih{display:flex;flex-wrap:wrap;gap:10px;justify-content:space-between;align-items:center}.ib{display:flex;gap:8px}.ilist{display:flex;flex-wrap:wrap;gap:8px;margin-top:10px}.ip{display:flex;gap:8px;align-items:center;border:1px solid var(--line);background:var(--soft);border-radius:12px;padding:6px 10px}.ip b{font-weight:600}.ip span{color:var(--mute);font-size:.85rem}.ip .x{font:inherit;border:0;background:transparent;color:var(--mute);cursor:pointer;padding:0 2px}.ip.hot span{color:#e5645a}#iform{display:flex;gap:8px;flex-wrap:wrap;margin-top:10px}#iform input{font:inherit;color:var(--ink);background:var(--soft);border:1px solid var(--line);border-radius:10px;padding:6px 10px}#idy{width:5.5em}
-#al th,#al td{padding:9px 12px}.snapbar{display:flex;flex-wrap:wrap;gap:12px;align-items:center;margin-bottom:12px}.snapbar label{display:flex;gap:6px;align-items:center;color:var(--mute);font-size:.9rem}.snapbar select{font:inherit;color:var(--ink);background:var(--soft);border:1px solid var(--line);border-radius:10px;padding:6px 10px}
+#al th,#al td{padding:9px 12px}
+.mreq{align-items:center;flex-wrap:wrap}.mreq label{display:flex;gap:6px;align-items:center;color:var(--mute);font-size:.9rem}.mreq input[type=number]{width:7em;font:inherit;color:var(--ink);background:var(--soft);border:1px solid var(--line);border-radius:10px;padding:6px 10px}.mwrap{max-height:460px;overflow:auto;margin-top:8px}
+#mtab{width:100%}#mtab th,#mtab td{padding:7px 12px;text-align:right}#mtab td.n,#mtab th.n{text-align:left}#mtab td.r{color:var(--mute);width:3em}#mtab tr.low td{background:rgba(229,100,90,.13);color:var(--bad,#f87171)}#mtab tr.low td.r{color:var(--bad,#f87171)}#mtab .mm{font-size:.78rem;opacity:.85;margin-left:6px}.snapbar{display:flex;flex-wrap:wrap;gap:12px;align-items:center;margin-bottom:12px}.snapbar label{display:flex;gap:6px;align-items:center;color:var(--mute);font-size:.9rem}.snapbar select{font:inherit;color:var(--ink);background:var(--soft);border:1px solid var(--line);border-radius:10px;padding:6px 10px}
 .ra{font-size:.72rem;font-weight:600;margin-left:5px;white-space:nowrap}.ra.good{color:var(--good,#4ade80)}.ra.bad{color:var(--bad,#f87171)}
 .tg{font-size:.7rem;border-radius:999px;padding:1px 7px;margin-left:6px;border:1px solid var(--line);color:var(--mute);white-space:nowrap}.tg.nat{color:var(--acc);border-color:var(--acc)}#al td.r{color:var(--mute);width:2.5em;text-align:right}#al td.n{text-align:left}
 </style></head><body><main>
@@ -1983,6 +1993,9 @@ document.addEventListener("click",e=>{const y=e.target.closest(".seg button");if
 <section class="inact" id="inact"><div class="ih"><div><h2 id="ihT"></h2><div class="note" id="ihS"></div></div><div class="ib"><button type="button" id="iadd"></button><button type="button" id="iclr"></button></div></div>
 <form id="iform" hidden><input id="inm" maxlength="40" required><input id="idy" type="number" min="3" max="999" value="4"><button type="submit" id="iok"></button></form>
 <div id="ilist" class="ilist"></div></section>
+<section class="inact mobs" id="mobsec"><div class="ih"><div><h2 id="mhT"></h2><div class="note" id="mhS"></div></div>
+<div class="ib mreq"><label><span id="mrL"></span> <input id="mreq" type="number" min="0" step="100" value="1000"></label><label class="mchk"><input type="checkbox" id="monly"> <span id="moL"></span></label><button type="button" id="mcp"></button></div></div>
+<div class="note" id="msum"></div><div class="wrap mwrap"><table id="mtab"></table></div></section>
 <div class="pane" style="margin-top:0"><div class="snapbar"><label>Liste <select id="alst"></select></label><button type="button" id="anew">Neue Liste</button><button type="button" id="adl" hidden>Liste löschen</button><label>Stand <select id="asel"></select></label><label>Vergleich mit <select id="abase"></select></label><button type="button" id="adel">Diesen Stand löschen</button></div><div class="chips" id="achips" role="group" aria-label="Kategorien im Durchschnitt"></div><div class="nmbar"><input id="asearch" type="search" placeholder="Mitglied suchen …"> <span class="note" id="ainfo"></span> <span class="note" id="amsg"></span></div>
 <div class="wrap"><table id="al"></table></div>
 <p class="note">Klick auf eine Spaltenüberschrift sortiert die Liste. Grün und rot zeigen die Veränderung seit dem vorherigen Stand. Ranglisten ohne Resource Assistance und Armory Contributions.</p>
@@ -2006,8 +2019,24 @@ $('iclr').onclick=()=>{INA.members=[];inSave()};
 $('iform').onsubmit=e=>{e.preventDefault();const n=$('inm').value.trim(),d=Math.max(3,+$('idy').value||4);if(!n)return;INA.members=INA.members.filter(x=>x.name!==n).concat([{name:n,days:d}]);$('inm').value='';inSave()};
 $('ilist').onclick=e=>{const b=e.target.closest('.x');if(!b)return;INA.members=INA.members.filter(x=>x.name!==b.dataset.n);inSave()};
 fetch('/api/inactive').then(r=>r.json()).then(d=>{INA=d;inRender()}).catch(()=>{});
+function mobRender(a){const ms=(a.members||[]).filter(m=>m.c.mob&&m.c.mob.v!=null).sort((x,y)=>(x.c.mob.r||1e9)-(y.c.mob.r||1e9)||y.c.mob.v-x.c.mob.v);
+ const u=a.ui||{},req=+u.mobreq>=0?+u.mobreq:1000;if(document.activeElement!==$('mreq'))$('mreq').value=req;$('monly').checked=!!u.mobonly;
+ const R=+$('mreq').value>=0&&$('mreq').value!==''?+$('mreq').value:req,low=ms.filter(m=>m.c.mob.v<R);
+ $('mhT').textContent=LL('Alliance Mobilization','Alliance Mobilization');$('mrL').textContent=LL('Mindestpunkte','Minimum points');$('moL').textContent=LL('nur darunter anzeigen','show only those below');$('mcp').textContent=LL('Namen kopieren','Copy names');
+ const cd=a.sel?(a.snaps||[]).length?dm(a.sel):'':'';
+ $('mhS').textContent=ms.length?(cd?LL('Stand ','As of ')+cd+' · ':'')+LL('Persönliche Beiträge, rot = Anforderung nicht erreicht','Personal contribution, red = requirement not met'):LL('Noch keine Mobilisierungsdaten in diesem Stand.','No mobilization data in this snapshot yet.');
+ $('msum').textContent=ms.length?(LL('Anforderung ','Requirement ')+f(R)+' · '+low.length+' / '+ms.length+LL(' darunter',' below')+' · '+(ms.length-low.length)+LL(' erfüllt',' met')):'';
+ $('mcp').disabled=!low.length;$('mtab').innerHTML=ms.length?`<tr><th class="n">#</th><th class="n">Name</th><th>${LL('Punkte','Points')}</th><th>${LL('Fehlt','Missing')}</th></tr>`+ms.filter(m=>!$('monly').checked||m.c.mob.v<R).map(m=>{const x=m.c.mob,lw=x.v<R;
+  return `<tr class="${lw?'low':''}"><td class="r">${x.r!=null?x.r:'–'}</td><td class="n">${esc(m.name)}</td><td>${f(x.v)}${x.d?`<span class="mm">${x.d>0?'+':''}${f(x.d)}</span>`:''}</td><td>${lw?'−'+f(R-x.v):'✓'}</td></tr>`}).join(''):'';
+ mobLow=low.map(m=>m.name)}
+let mobLow=[];
+$('mreq').onchange=$('mreq').oninput=()=>{if(lastAl){lastAl.ui.mobreq=Math.max(0,+$('mreq').value||0);mobRender(lastAl)}clearTimeout(mobT);mobT=setTimeout(()=>fetch('/api/alliance_ui',{method:'POST',body:JSON.stringify({mobreq:Math.max(0,+$('mreq').value||0)})}).then(r=>r.json()).then(r=>{if(r.ok&&lastAl)lastAl.ui.mobonly=r.ui.mobonly}).catch(()=>{}),400)};
+let mobT=0;
+$('monly').onchange=()=>{if(lastAl){lastAl.ui.mobonly=$('monly').checked;mobRender(lastAl)}fetch('/api/alliance_ui',{method:'POST',body:JSON.stringify({mobonly:$('monly').checked})}).catch(()=>{})};
+$('mcp').onclick=()=>{const t=mobLow.join(', ');const ok=()=>{$('amsg').textContent=LL(mobLow.length+' Namen kopiert.',mobLow.length+' names copied.')};
+ (navigator.clipboard?navigator.clipboard.writeText(t):Promise.reject()).then(ok).catch(()=>{const ta=document.createElement('textarea');ta.value=t;document.body.appendChild(ta);ta.select();try{document.execCommand('copy');ok()}catch(e){}ta.remove()})};
 let lastAl=null,lastSig='',alSort='power',alDir=-1,alQ='',alOn=null;const alOpen=new Set();
-function renderAlliance(a){lastAl=a;if(!a)return;try{inRender()}catch(e){}const cats=a.cats,ms=a.members;
+function renderAlliance(a){lastAl=a;if(!a)return;try{inRender()}catch(e){}try{mobRender(a)}catch(e){}const cats=a.cats,ms=a.members;
  const newest=a.sel||Object.values(a.latest||{}).sort().pop();
  $('asub').textContent=newest?LL('Member-Rangliste · Stand ','Member ranking · as of ')+dm(newest):LL('Member-Rangliste','Member ranking');
  const sn=a.snaps||[];$('asel').innerHTML=sn.slice().reverse().map(d=>`<option value="${d}"${d===a.sel?' selected':''}>${dm(d)}</option>`).join('');
