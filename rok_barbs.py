@@ -1001,7 +1001,7 @@ class DB:
             self.c.commit()
         return n
 
-    def alliance_stats(self, sel=None, base=None, lst=None):
+    def alliance_stats(self, sel=None, base=None, lst=None, blst=None):
         """sel = gewaehlter Stand (Tag oder 'Tag HH:MM'), base = Vergleichsstand (leer: jeweils der vorherige Stand).
         Native = Mitglieder des ersten getrackten Standes; alle anderen bekommen das Datum des ersten Auftauchens (first)."""
         if lst:
@@ -1011,8 +1011,20 @@ class DB:
         snaps = sorted({r["day"] for r in rows})
         if sel not in snaps:
             sel = snaps[-1] if snaps else None
-        if base not in snaps or (sel and base >= sel):
+        blst = blst or ""
+        brows = None
+        if blst != (lst or ""):                                 # Vergleich mit einer anderen Liste
+            brows = self.q("SELECT day, cat, name, rank, value FROM alliance_arch WHERE lst=? ORDER BY day", (blst,)) if blst else \
+                self.q("SELECT day, cat, name, rank, value FROM alliance ORDER BY day")
+            if base not in {r["day"] for r in brows}:
+                base, brows = None, None
+        elif base not in snaps or (sel and base >= sel):
             base = None
+        bmap = {}
+        if brows is not None:
+            for r in brows:
+                if r["day"] <= base:
+                    bmap[(r["cat"], r["name"])] = (r["day"], r["value"], r["rank"])
         first, days, members = {}, {}, {}
         for r in rows:
             first.setdefault(r["name"], r["day"])
@@ -1030,15 +1042,19 @@ class DB:
                 if last[0] != latest[cat]:                      # in der gewaehlten Liste nicht aufgefuehrt
                     m["c"][cat] = dict(v=None, r=None, d=None, day=latest[cat], seen=last[0])
                     continue
-                if base:
+                if brows is not None:
+                    prev = bmap.get((cat, m["name"]))
+                elif base:
                     prev = next((h for h in reversed(hist[:-1]) if h[0] <= base and h[1] is not None), None)
                 else:
                     prev = next((h for h in reversed(hist[:-1]) if h[1] is not None), None)
                 m["c"][cat] = dict(v=last[1], r=last[2], day=last[0], pd=prev[0] if prev else None,
-                                   d=(last[1] - prev[1]) if prev and last[1] is not None else None)
+                                   d=(last[1] - prev[1]) if prev and last[1] is not None and prev[1] is not None else None,
+                                   pr=prev[2] if prev else None)
         ui = self.alliance_ui()
         names = dict(ALLIANCE_CATS)
-        return dict(cats=[dict(key=k, label=names[k]) for k in ui["order"]], ui=ui, latest=latest, snaps=snaps, sel=sel, base=base, lists=self.alliance_lists(), lst=lst or "",
+        return dict(cats=[dict(key=k, label=names[k]) for k in ui["order"]], ui=ui, latest=latest, snaps=snaps, sel=sel, base=base, blst=blst if brows is not None else "", lists=self.alliance_lists(), lst=lst or "",
+                    allsnaps=dict([("", sorted({r["day"] for r in self.q("SELECT day FROM alliance")}))] + [(n, sorted({r["day"] for r in self.q("SELECT day FROM alliance_arch WHERE lst=?", (n,))})) for n in self.alliance_lists()]),
                     days={c: sorted(d) for c, d in days.items()}, members=sorted(members.values(), key=lambda m: m["name"].lower()))
 
     def profile_stats(self, d_from, d_to, account=""):
@@ -1915,7 +1931,7 @@ const EN=[
 [`Datei unvollständig`,`File incomplete`],
 [`Alle Einträge dieser Seite löschen und auf den Anfangszustand zurücksetzen?`,`Delete all entries on this page and reset to the initial state?`],[`Items insgesamt`,`Total items`],
 [`AP-Verbrauch`,`AP usage`],[`Barbaren-Beute insgesamt`,`Total barbarian loot`],[`Festungs-Beute insgesamt`,`Total fort loot`],[`Sonstige Beute`,`Other loot`],[`AP pro Festung`,`AP per fort`],[`AP gesamt`,`AP total`],[`Barbaren-AP sind geschätzt (Chain-Einstellungen im Tab Barbarenkämpfe), Festungen zählen auch beigetretene Rallys.`,`Barbarian AP are estimated (chain settings in the Barbarian fights tab), forts also include joined rallies.`],
-[`Arten`,`types`],[`Vergleich mit`,`Compare with`],[`Liste`,`List`],[`Neue Liste`,`New list`],[`Liste löschen`,`Delete list`],[`Aktuelle Liste`,`Current list`],[`Vorheriger Stand`,`Previous snapshot`],[`Diesen Stand löschen`,`Delete this snapshot`],
+[`Arten`,`types`],[`Vergleich mit`,`Compare with`],[`Liste`,`List`],[`Platz vorher #`,`Previously #`],[`Neue Liste`,`New list`],[`Liste löschen`,`Delete list`],[`Aktuelle Liste`,`Current list`],[`Vorheriger Stand`,`Previous snapshot`],[`Diesen Stand löschen`,`Delete this snapshot`],
 [`Speedups:`,`Speedups:`],[`Heilung`,`Healing`],
 ];
 const ENM=new Map(EN.map(([a,b])=>[a,b]));
@@ -1957,6 +1973,7 @@ a.btn{font:inherit;color:var(--ink);background:var(--soft);border:1px solid var(
 #achips{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:12px}.chip{font:inherit;font-size:.85rem;color:var(--ink);background:var(--soft);border:1px solid var(--line);border-radius:999px;padding:5px 12px;cursor:pointer}.chip[aria-pressed="false"]{color:var(--mute);text-decoration:line-through;background:transparent}.chip[aria-pressed="true"]{border-color:var(--acc)}
 .inact{border:1px solid var(--line);border-radius:16px;background:var(--card);padding:14px 16px;margin-bottom:14px}.inact h2{margin:0;font-size:1.05rem}.ih{display:flex;flex-wrap:wrap;gap:10px;justify-content:space-between;align-items:center}.ib{display:flex;gap:8px}.ilist{display:flex;flex-wrap:wrap;gap:8px;margin-top:10px}.ip{display:flex;gap:8px;align-items:center;border:1px solid var(--line);background:var(--soft);border-radius:12px;padding:6px 10px}.ip b{font-weight:600}.ip span{color:var(--mute);font-size:.85rem}.ip .x{font:inherit;border:0;background:transparent;color:var(--mute);cursor:pointer;padding:0 2px}.ip.hot span{color:#e5645a}#iform{display:flex;gap:8px;flex-wrap:wrap;margin-top:10px}#iform input{font:inherit;color:var(--ink);background:var(--soft);border:1px solid var(--line);border-radius:10px;padding:6px 10px}#idy{width:5.5em}
 #al th,#al td{padding:9px 12px}.snapbar{display:flex;flex-wrap:wrap;gap:12px;align-items:center;margin-bottom:12px}.snapbar label{display:flex;gap:6px;align-items:center;color:var(--mute);font-size:.9rem}.snapbar select{font:inherit;color:var(--ink);background:var(--soft);border:1px solid var(--line);border-radius:10px;padding:6px 10px}
+.ra{font-size:.72rem;font-weight:600;margin-left:5px;white-space:nowrap}.ra.good{color:var(--good,#4ade80)}.ra.bad{color:var(--bad,#f87171)}
 .tg{font-size:.7rem;border-radius:999px;padding:1px 7px;margin-left:6px;border:1px solid var(--line);color:var(--mute);white-space:nowrap}.tg.nat{color:var(--acc);border-color:var(--acc)}#al td.r{color:var(--mute);width:2.5em;text-align:right}#al td.n{text-align:left}
 </style></head><body><main>
 <button type="button" id="mbtn" class="mbtn" aria-label="Menü" aria-expanded="true" title="Menü">☰</button><aside id="sb" class="sb" aria-label="Menü"><div class="sbh"><span class="sbt">RoK&nbsp;Tracker</span><button type="button" id="sbx" class="mbtn" aria-label="Menü schließen" title="Menü schließen">⇤</button></div><nav class="sbn"><div class="sbl">Seiten</div><a href="/" data-p="/" data-k="loot"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l8 4v5c0 4.5-3.2 7.8-8 9-4.8-1.2-8-4.5-8-9V7z"/><path d="M9 12l2 2 4-4"/></svg><span>Loot-Tracker</span></a><a href="/allianz" data-p="/allianz" data-k="ali"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20V10M10 20V4M16 20v-8M22 20H2"/></svg><span>Allianz-Ranking</span></a><a href="/kvk1" data-p="/kvk1" data-k="kvk"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M14.5 17.5L3 6V3h3l11.5 11.5M13 19l6-6M16 16l4 4M19 21l2-2M14.5 6.5L18 3h3v3l-3.5 3.5M5 14l4 4M7 17l-3 3M3 19l2 2"/></svg><span>KVK1</span></a><a href="/kvk2" data-p="/kvk2" data-k="kvk2"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3a14 14 0 0 1 0 18M12 3a14 14 0 0 0 0 18"/></svg><span>KVK2</span></a><a href="/woche" data-p="/woche" data-k="wb"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="17" rx="2"/><path d="M3 9h18M8 2v4M16 2v4M8 14h3M13 14h3M8 17h3"/></svg><span>Wochenbericht</span></a><a href="/kalender" data-p="/kalender" data-k="kal"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg><span>Event-Kalender</span></a><a href="/settings" data-p="/settings" data-k="set"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.9l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.9-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1-1.5 1.7 1.7 0 0 0-1.9.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.9 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1 1.7 1.7 0 0 0-.3-1.9l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.9.3h0a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5h0a1.7 1.7 0 0 0 1.9-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.9v0a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg><span>Einstellungen</span><b class="sbb" id="sbbadge" hidden></b></a><div class="sbdiv" data-k="d1"></div><div class="sbdiv" data-k="d2"></div><div class="sbstat" data-k="prof"><div class="sbgh0">Profil</div><a href="/#profil"><span>Profil</span></a><a href="/#tag"><span>Pro Tag</span></a></div></nav></aside><div id="sbov" class="sbov"></div><script>try{var th=localStorage.getItem("roktheme");if(th)document.documentElement.dataset.theme=th}catch(e){}window.sbOrd=function(){var A=["loot","ali","kvk","kvk2","wb","kal"],o=A.slice();try{var v=JSON.parse(localStorage.getItem("roksbo")||"null");if(v&&v.length){v=v.filter(function(x){return A.indexOf(x)>=0});o=v.concat(A.filter(function(x){return v.indexOf(x)<0}))}}catch(e){}var m={d1:6,prof:7,d2:8,set:9};o.forEach(function(k,i){m[k]=i});document.querySelectorAll("#sb [data-k]").forEach(function(e){e.style.order=m[e.dataset.k]})};sbOrd();window.sbUnk=function(){fetch("/api/unk").then(r=>r.json()).then(u=>{var b=document.getElementById("sbbadge");b.textContent=u.n;b.hidden=!u.n;try{var R=JSON.parse(localStorage.getItem("rokrem")||"{}"),el=document.getElementById("sbrem"),hr=(u.now-u.last)/3600;if(R.on&&u.last&&hr>=(R.h||12)&&localStorage.getItem("rokremx")!=String(u.last)){if(!el){el=document.createElement("div");el.id="sbrem";el.style.cssText="position:fixed;top:12px;left:50%;transform:translateX(-50%);z-index:80;padding:9px 14px;border-radius:12px;background:var(--card);color:var(--ink);border:1px solid var(--warn);box-shadow:0 6px 24px rgba(0,0,0,.25);font-size:.9rem;display:flex;gap:10px;align-items:center";document.body.appendChild(el)}el.innerHTML="<span>⏰ Seit "+(hr<48?Math.floor(hr)+" Std":Math.floor(hr/24)+" Tagen")+" keine neuen Berichte.</span>";var x=document.createElement("button");x.textContent="Ausblenden";x.onclick=function(){try{localStorage.setItem("rokremx",String(u.last))}catch(e){}el.remove()};el.appendChild(x)}else if(el)el.remove()}catch(e){}}).catch(function(){})};sbUnk();setInterval(sbUnk,30000)</script><script>(function(){const b=document.getElementById("mbtn"),x=document.getElementById("sbx"),ov=document.getElementById("sbov"),n=document.getElementById("sb"),R=document.documentElement,B=document.body;n.querySelectorAll("a[data-p]").forEach(a=>{if(a.dataset.p===(location.pathname.replace(/\/+$/,"")||"/"))a.className="cur"});let V={w:"1600",a:"c"},O=window.innerWidth>=1100;try{V=Object.assign(V,JSON.parse(localStorage.getItem("rokview")||"{}"));const o=localStorage.getItem("roksb");if(o!==null)O=o==="1"}catch(e){}const ap=()=>{R.style.setProperty("--mw",V.w==="100%"?"100%":V.w+"px");R.style.setProperty("--ml",V.a==="l"?"0":"auto");R.style.setProperty("--mr",V.a==="r"?"0":"auto");document.querySelectorAll("#mw button").forEach(y=>y.classList.toggle("on",y.dataset.v===V.w));document.querySelectorAll("#ma button").forEach(y=>y.classList.toggle("on",y.dataset.v===V.a))};const so=v=>{O=v;B.classList.toggle("sbopen",O);b.setAttribute("aria-expanded",O);try{localStorage.setItem("roksb",O?"1":"0")}catch(e){}};document.addEventListener("DOMContentLoaded",ap);
@@ -1994,7 +2011,10 @@ function renderAlliance(a){lastAl=a;if(!a)return;try{inRender()}catch(e){}const 
  const newest=a.sel||Object.values(a.latest||{}).sort().pop();
  $('asub').textContent=newest?LL('Member-Rangliste · Stand ','Member ranking · as of ')+dm(newest):LL('Member-Rangliste','Member ranking');
  const sn=a.snaps||[];$('asel').innerHTML=sn.slice().reverse().map(d=>`<option value="${d}"${d===a.sel?' selected':''}>${dm(d)}</option>`).join('');
- $('abase').innerHTML=`<option value="">${LL('Vorheriger Stand','Previous snapshot')}</option>`+sn.filter(d=>d<a.sel).reverse().map(d=>`<option value="${d}"${d===a.base?' selected':''}>${dm(d)}</option>`).join('');
+ {const al=a.allsnaps||{},cl=a.lst||'',cur=(a.base?(a.blst||'')+'\n'+a.base:'');let h=`<option value="">${LL('Vorheriger Stand','Previous snapshot')}</option>`;
+  Object.keys(al).sort((x,y)=>x===''?-1:y===''?1:0).forEach(n=>{const ds=al[n].filter(d=>n!==cl||d<a.sel).reverse();if(!ds.length)return;
+   h+=`<optgroup label="${esc(n||LL('Aktuelle Liste','Current list'))}">`+ds.map(d=>{const v=n+'\n'+d;return `<option value="${esc(v)}"${v===cur?' selected':''}>${dm(d)}</option>`}).join('')+'</optgroup>'});
+  $('abase').innerHTML=h}
  const ls=a.lists||[];$('alst').innerHTML=`<option value="">${LL('Aktuelle Liste','Current list')}</option>`+ls.map(n=>`<option value="${esc(n)}"${n===a.lst?' selected':''}>${esc(n)}</option>`).join('');
  const arch=!!a.lst;$('adl').hidden=!arch;$('anew').hidden=arch;$('adel').hidden=arch||!sn.length;$('anew').textContent=LL('Neue Liste','New list');$('adl').textContent=LL('Liste löschen','Delete list');
  $('adel').hidden=arch||!sn.length;$('adel').textContent=LL('Diesen Stand löschen','Delete this snapshot');
@@ -2006,18 +2026,21 @@ function renderAlliance(a){lastAl=a;if(!a)return;try{inRender()}catch(e){}const 
   const avg=(m,ex)=>{const r=vc.filter(c=>!ex.includes(c.key)).map(c=>m.c[c.key]&&m.c[c.key].r).filter(v=>v!=null);return r.length?r.reduce((x,y)=>x+y,0)/r.length:null};
   ms.forEach(m=>{m.a={};AV.forEach(([k,,ex])=>m.a[k]=avg(m,ex))});
   ms.forEach(m=>m.ap={});AV.forEach(([k])=>{const o=ms.filter(m=>m.a[k]!=null).map(m=>m.a[k]).sort((x,y)=>x-y);ms.forEach(m=>{m.ap[k]=m.a[k]==null?null:o.indexOf(m.a[k])+1})});
+  ms.forEach(m=>{const r=vc.map(c=>m.c[c.key]&&m.c[c.key].v!=null?m.c[c.key].pr:null).filter(v=>v!=null);m.pa=r.length?r.reduce((x,y)=>x+y,0)/r.length:null});
+  {const o=ms.filter(m=>m.pa!=null).map(m=>m.pa).sort((x,y)=>x-y);ms.forEach(m=>{m.bp=m.pa==null?null:o.indexOf(m.pa)+1})}
+  const arr=(n,o)=>n==null||o==null||n===o?'':`<span class="ra ${o>n?'good':'bad'}" title="${LL('Platz vorher #','Previously #')}${o}">${o>n?'▲':'▼'}${Math.abs(o-n)}</span>`;
   const q=alQ.trim().toLowerCase(),val=(m,k)=>{if(k.startsWith('avg_'))return m.a[k];const x=m.c[k];return x&&x.v!=null?x.v:null};
   const acell=(m,k)=>m.a[k]==null?'<td>–</td>':`<td>${m.a[k].toFixed(1).replace('.',LANG==='en'?'.':',')}<span class="rk">#${m.ap[k]}</span></td>`;
  const rows=ms.filter(m=>!q||m.name.toLowerCase().includes(q));
  rows.sort((x,y)=>{const a1=val(x,alSort),b1=val(y,alSort);if(a1==null&&b1==null)return x.name.localeCompare(y.name);if(a1==null)return 1;if(b1==null)return -1;return (a1-b1)*alDir||x.name.localeCompare(y.name)});
  const dl=x=>x&&x.d!=null&&x.d!==0?`<span class="dl ${x.d>0?'good':'bad'}">${(x.d>0?'+':'')+f(x.d)}</span>`:'';
  const cell=(m,k)=>{const x=m.c[k];if(!x)return '<td>–</td>';if(x.v==null&&x.seen)return `<td class="note" title="Nicht mehr in der Liste, zuletzt gesehen ${dm(x.seen)}">–</td>`;
-  return `<td>${x.v==null?'–':f(x.v)}${x.r!=null?`<span class="rk">#${x.r}</span>`:''}${dl(x)}</td>`};
+  return `<td>${x.v==null?'–':f(x.v)}${x.r!=null?`<span class="rk">#${x.r}</span>`:''}${arr(x.r,x.pr)}${dl(x)}</td>`};
  const hist=m=>`<tr class="det"><td colspan="${vc.length+3}"><div class="hist">${cats.filter(c=>m.h[c.key]).map(c=>{const h=m.h[c.key].slice().reverse();
    return `<div><h3>${c.label}</h3><table><tr><th>Tag</th><th>Wert</th><th>Rang</th><th>Veränderung</th></tr>${h.map((r,i)=>{const p=h[i+1],d=p&&p[1]!=null&&r[1]!=null?r[1]-p[1]:null;
      return `<tr><td>${dm(r[0])}</td><td>${r[1]==null?'–':f(r[1])}</td><td>${r[2]==null?'–':'#'+r[2]}</td><td class="${d>0?'good':d<0?'bad':''}">${d==null?'–':(d>0?'+':'')+f(d)}</td></tr>`}).join('')}</table></div>`}).join('')}</div></td></tr>`;
  $('al').innerHTML=ms.length?`<tr><th class="t">#</th><th class="t">Name</th>${AV.map(([k,l])=>`<th data-k="${k}" class="${alSort===k?'on':''}" title="Durchschnitt der Plätze in den eingeschalteten Kategorien, niedriger ist besser">${l}${alSort===k?(alDir<0?' ▼':' ▲'):''}</th>`).join('')}${vc.map(c=>`<th data-k="${c.key}" class="${alSort===c.key?'on':''}">${c.label}${alSort===c.key?(alDir<0?' ▼':' ▲'):''}</th>`).join('')}</tr>`+
-  rows.map((m,i)=>`<tr class="m" data-n="${esc(m.name)}"><td class="r">${i+1}</td><td class="n nm">${alOpen.has(m.name)?'▾':'▸'} ${esc(m.name)}${(a.snaps||[]).length>1?(m.native?`<span class="tg nat" title="${LL('Im ersten getrackten Stand dabei','Present in the first tracked snapshot')}">Native</span>`:`<span class="tg" title="${LL('Zum ersten Mal getrackt am ','First tracked on ')}${dm(m.first)}">${LL('neu ','new ')}${dm(m.first)}</span>`):''}</td>${AV.map(([k])=>acell(m,k)).join('')}${vc.map(c=>cell(m,c.key)).join('')}</tr>${alOpen.has(m.name)?hist(m):''}`).join(''):
+  rows.map((m,i)=>`<tr class="m" data-n="${esc(m.name)}"><td class="r">${i+1}</td><td class="n nm">${alOpen.has(m.name)?'▾':'▸'} ${esc(m.name)}${arr(m.ap.avg_all,m.bp)}${(a.snaps||[]).length>1?(m.native?`<span class="tg nat" title="${LL('Im ersten getrackten Stand dabei','Present in the first tracked snapshot')}">Native</span>`:`<span class="tg" title="${LL('Zum ersten Mal getrackt am ','First tracked on ')}${dm(m.first)}">${LL('neu ','new ')}${dm(m.first)}</span>`):''}</td>${AV.map(([k])=>acell(m,k)).join('')}${vc.map(c=>cell(m,c.key)).join('')}</tr>${alOpen.has(m.name)?hist(m):''}`).join(''):
   '<tr><td class="note">Noch keine Allianz-Daten. Schick mir Screenshots der Ranglisten, ich erstelle dir die Datei zum Einfügen.</td></tr>';
  $('ainfo').textContent=ms.length?`${rows.length} / ${ms.length} Mitglieder`:''}
 $('al').addEventListener('click',e=>{const th=e.target.closest('th[data-k]');if(th){if(alSort===th.dataset.k)alDir=-alDir;else{alSort=th.dataset.k;alDir=alSort.startsWith('avg_')?1:-1}saveUi();return renderAlliance(lastAl)}
@@ -2031,18 +2054,18 @@ $('achips').addEventListener('drop',e=>{const t=e.target.closest('.chip');if(!t|
 $('abtn').onclick=()=>$('afile').click();
 $('aexp').href='/allianz/export?lang='+LANG;
 $('afile').onchange=async e=>{let n=0,err='';for(const fl of e.target.files){try{const r=await fetch('/api/alliance',{method:'POST',body:await fl.text()}).then(r=>r.json());if(r.ok)n+=r.n;else err=r.error}catch(x){err=String(x)}}
- $('amsg').textContent=err?'Fehler: '+err:n+' Eintrag/Einträge übernommen.';e.target.value='';alLst='';alSel='';alBase='';lastSig='';load()};
-let alSel='',alBase='',alLst='';
-$('alst').onchange=()=>{alLst=$('alst').value;alSel='';alBase='';lastSig='';load()};
+ $('amsg').textContent=err?'Fehler: '+err:n+' Eintrag/Einträge übernommen.';e.target.value='';alLst='';alSel='';alBase='';alBlst='';lastSig='';load()};
+let alSel='',alBase='',alLst='',alBlst='';
+$('alst').onchange=()=>{alLst=$('alst').value;alSel='';alBase='';alBlst='';alBlst='';lastSig='';load()};
 $('anew').onclick=async()=>{if(!lastAl||!lastAl.sel)return;const wk=(d=>{const t=new Date(Date.UTC(+d[0],+d[1]-1,+d[2]));const n=t.getUTCDay()||7;t.setUTCDate(t.getUTCDate()+4-n);const y=t.getUTCFullYear();return [Math.ceil(((t-Date.UTC(y,0,1))/864e5+1)/7),y]})(lastAl.sel.slice(0,10).split('-'));
  const nm=window.prompt(LL('Die aktuelle Liste wird unter diesem Namen gespeichert, danach beginnt eine neue, leere Liste:','The current list is saved under this name, then a new empty list starts:'),LL('Woche ','Week ')+wk[0]+' '+wk[1]);if(nm===null)return;
- const r=await fetch('/api/alliance_newlist',{method:'POST',body:JSON.stringify({name:nm})}).then(r=>r.json());$('amsg').textContent=r.ok?LL('Gespeichert als „'+r.name+'“. Neue Liste ist leer.','Saved as "'+r.name+'". New list is empty.'):LL('Fehler: ','Error: ')+r.error;alSel='';alBase='';lastSig='';load()};
-$('adl').onclick=async()=>{if(!alLst||!window.confirm(LL('Liste „'+alLst+'“ endgültig löschen?','Delete list "'+alLst+'" permanently?')))return;await fetch('/api/alliance_dellist',{method:'POST',body:JSON.stringify({name:alLst})});alLst='';alSel='';alBase='';lastSig='';load()};
-$('asel').onchange=()=>{alSel=$('asel').value;if(alBase>=alSel)alBase='';lastSig='';load()};
-$('abase').onchange=()=>{alBase=$('abase').value;lastSig='';load()};
+ const r=await fetch('/api/alliance_newlist',{method:'POST',body:JSON.stringify({name:nm})}).then(r=>r.json());$('amsg').textContent=r.ok?LL('Gespeichert als „'+r.name+'“. Neue Liste ist leer.','Saved as "'+r.name+'". New list is empty.'):LL('Fehler: ','Error: ')+r.error;alSel='';alBase='';alBlst='';lastSig='';load()};
+$('adl').onclick=async()=>{if(!alLst||!window.confirm(LL('Liste „'+alLst+'“ endgültig löschen?','Delete list "'+alLst+'" permanently?')))return;await fetch('/api/alliance_dellist',{method:'POST',body:JSON.stringify({name:alLst})});alLst='';alSel='';alBase='';alBlst='';lastSig='';load()};
+$('asel').onchange=()=>{alSel=$('asel').value;if(alBlst===alLst&&alBase>=alSel){alBase='';alBlst=''}lastSig='';load()};
+$('abase').onchange=()=>{const v=$('abase').value.split('\n');alBlst=v.length>1?v[0]:'';alBase=v.length>1?v[1]:'';lastSig='';load()};
 $('adel').onclick=async()=>{if(!lastAl||!lastAl.sel)return;if(!window.confirm(LL('Diesen Stand ('+dm(lastAl.sel)+') endgültig löschen?','Delete this snapshot ('+dm(lastAl.sel)+') permanently?')))return;
- await fetch('/api/alliance_del',{method:'POST',body:JSON.stringify({day:lastAl.sel})});alSel='';alBase='';lastSig='';load()};
-async function load(){try{const a=await fetch('/api/alliance?sel='+encodeURIComponent(alSel)+'&base='+encodeURIComponent(alBase)+'&lst='+encodeURIComponent(alLst)).then(r=>r.json());const sig=JSON.stringify(a);if(sig===lastSig)return;lastSig=sig;renderAlliance(a)}catch(e){}}
+ await fetch('/api/alliance_del',{method:'POST',body:JSON.stringify({day:lastAl.sel})});alSel='';alBase='';alBlst='';lastSig='';load()};
+async function load(){try{const a=await fetch('/api/alliance?sel='+encodeURIComponent(alSel)+'&base='+encodeURIComponent(alBase)+'&lst='+encodeURIComponent(alLst)+'&blst='+encodeURIComponent(alBlst)).then(r=>r.json());const sig=JSON.stringify(a);if(sig===lastSig)return;lastSig=sig;renderAlliance(a)}catch(e){}}
 load();setInterval(load,4000);
 """ + _I18N + r"""</script></body></html>"""
 
@@ -2750,7 +2773,7 @@ def make_handler(db, watcher):
                 self.send(json.dumps(db.quick(parse_qs(u.query).get("account", ["main"])[0])), "application/json")
             elif u.path == "/api/alliance":
                 q = parse_qs(u.query)
-                self.send(json.dumps(db.alliance_stats(q.get("sel", [""])[0] or None, q.get("base", [""])[0] or None, q.get("lst", [""])[0] or None)), "application/json")
+                self.send(json.dumps(db.alliance_stats(q.get("sel", [""])[0] or None, q.get("base", [""])[0] or None, q.get("lst", [""])[0] or None, q.get("blst", [""])[0] or None)), "application/json")
             elif u.path == "/api/stats":
                 q = parse_qs(u.query)
                 self.send(json.dumps(db.stats(q.get("from", ["0000-01-01"])[0], q.get("to", ["9999-12-31"])[0],
