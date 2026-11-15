@@ -1377,7 +1377,7 @@ document.addEventListener("click",e=>{const y=e.target.closest(".seg button");if
 <button role="tab" data-t="dt">Pro Tag</button>
 <button role="tab" data-t="nm" id="nmsec">Namen eintragen <span class="cnt" id="c_nm"></span></button>
 </nav>
-<div class="pane" id="p_loot"><div id="apbox"></div><div class="tu"><label>Zeit anzeigen in <select id="tunit"><option value="min">Minuten</option><option value="h">Stunden</option><option value="d">Tagen</option></select></label></div><div class="loot" id="loot"></div><p class="note" id="lootnote"></p><div class="lap" id="lap"></div></div>
+<div class="pane" id="p_loot"><div id="apbox"></div><div id="ittot"></div><div class="tu"><label>Zeit anzeigen in <select id="tunit"><option value="min">Minuten</option><option value="h">Stunden</option><option value="d">Tagen</option></select></label></div><div class="loot" id="loot"></div><p class="note" id="lootnote"></p><div class="lap" id="lap"></div></div>
 <div class="pane" id="p_ft"><div id="ft"></div></div>
 <div class="pane" id="p_bt"><div class="chbox" id="chbox"></div><div id="bt"></div></div>
 <div class="pane" id="p_pv"><p class="note">Zusammengehörende Berichte stehen in einer Zeile. Ark of Osiris steht getrennt im eigenen Reiter und ist hier nicht mitgezählt.</p><div id="pv"></div></div>
@@ -1473,10 +1473,10 @@ const EMO={speed_training:'⏩',speed_universal:'⏱️',speed_healing:'💊',wo
 const mi=x=>`<img class="mi" src="/icon/${IK.has(x.kind)?x.kind:'item_'+x.id}" alt="" onerror="icoFb(this,'${slug(x.name)}','${EMO[x.kind]||'🎁'}')">`;
 const chipsH=l=>l.length?l.slice().sort((a,b)=>(b.unk?1:0)-(a.unk?1:0)).slice(0,4).map(x=>`<span class="ch${x.unk?' unk':''}"${x.unk?` data-item="${x.id}" title="Noch nicht benannt. Klicken zum Benennen."`:''}>${mi(x)}${f(x.qty)}× ${esc(x.name)}${x.unk?' <b class="qm">?</b>':''}</span>`).join('')+(l.length>4?`<span class="ch">+${l.length-4} weitere</span>`:''):'keine Beute';
 const chips=l=>l.length?l.slice(0,3).map(x=>f(x.qty)+'× '+x.name).join(', ')+(l.length>3?` (+${l.length-3} weitere)`:''):'keine Beute';
-const ftTotal=(fl,un)=>{const m=new Map();fl.forEach(x=>(x.loot||[]).forEach(i=>{const k=i.id||i.name,o=m.get(k);if(o){o.qty+=i.qty;if(i.total!=null)o.total=(o.total||0)+i.total}else m.set(k,Object.assign({},i))}));const l=[...m.values()].sort((a,b)=>b.qty-a.qty),n=l.reduce((a,x)=>a+x.qty,0);
+const ftTotal=(l,nrep)=>{l=l.slice().sort((a,b)=>b.qty-a.qty);const n=l.reduce((a,x)=>a+x.qty,0);
  if(!l.length)return'';const sp={};l.forEach(x=>{if(/^speed_/.test(x.kind||'')&&x.total!=null)sp[x.kind]=(sp[x.kind]||0)+x.total});const SN={speed_training:'Training',speed_universal:'Universal',speed_healing:'Heilung'},sk=Object.keys(sp),st=sk.reduce((a,k)=>a+sp[k],0),dh=m=>{const d=Math.floor(m/1440),h=Math.floor(m%1440/60);return (d?d+' d ':'')+h+' h'};
  const spl=sk.length?`<p class="spd"><b>Speedups: ${f(st)} Min</b> <span class="note">(${dh(st)})</span> ${sk.map(k=>`<span class="ch">${SN[k]} ${f(sp[k])} Min</span>`).join(' ')}</p>`:'';
- return`<details class="rep fttot" open><summary><b>Items insgesamt: ${f(n)}</b><span class="note">${f(l.length)} Arten · ${f(fl.length)} ${un||'Festungen'}</span></summary><div class="rb">${spl}${lootList(l)}</div></details>`};
+ return`<details class="rep fttot" open><summary><b>Items insgesamt: ${f(n)}</b><span class="note">${f(l.length)} Arten · ${f(nrep)} Berichte</span></summary><div class="rb">${spl}${lootList(l)}</div></details>`};
 const lootList=l=>l.length?`<ul class="ll">${l.map(x=>`<li${x.unk?` class="unk" data-item="${x.id}" title="Noch nicht benannt. Klicken zum Benennen."`:''}>${mi(x)}<b>${f(x.qty)}×</b> ${esc(x.name)}${x.total!=null&&x.total!==x.qty?` <span class="note">= ${f(x.total)}${SUF[x.kind]||''}</span>`:''}${x.unk?' <b class="qm">?</b><small>noch nicht benannt</small>':''}</li>`).join('')}</ul>`:'<p class="note">Keine Beute in diesem Bericht.</p>';
 const facts=a=>`<dl class="fa">${a.map(([k,v,c])=>`<div><dt>${k}</dt><dd class="${c||''}">${v}</dd></div>`).join('')}</dl>`;
 const rep=(k,head,body)=>`<details class="rep" data-k="${k}"${openRep.has(k)?' open':''}><summary>${head}</summary><div class="rb">${body}</div></details>`;
@@ -1582,9 +1582,10 @@ async function load(){const[a,b]=range();
   <div class="apr"><span class="dot f"></span>Festungen <b>${f(au.fort_total)} AP</b> <span class="note">${f(au.forts)} × ${f(au.fort_ap)}</span></div>
   ${au.days.length>1?`<div class="wrap"><table><tr><th>Tag</th><th>Barbaren</th><th>Festungen</th><th>Gesamt</th></tr>${au.days.map(d=>`<tr><td>${dm(d.day)}</td><td>${f(d.barbs)}</td><td>${f(d.forts)}</td><td><b>${f(d.total)}</b></td></tr>`).join('')}</table></div>`:''}
   <p class="note">Barbaren-AP sind geschätzt (Chain-Einstellungen im Tab Barbarenkämpfe), Festungen zählen auch beigetretene Rallys.</p></div>`;
+ $('ittot').innerHTML=ftTotal(s.loot.map(x=>({id:x.item_id,name:x.name,qty:x.qty,total:x.total,kind:x.kind,unk:x.kind===null&&!s.unknown.ignored.some(i=>i.id===x.item_id)})),(s.totals.battles||0)+s.forts.length);
  $('apfort').onchange=async e=>{await fetch('/api/chaincfg',{method:'POST',body:JSON.stringify({fort_ap:+e.target.value})});lastSig='';load()};
  $('c_ft').textContent=s.forts.length||'';
- $('ft').innerHTML=ftTotal(s.forts)+s.forts.map(x=>rep('f'+x.key,
+ $('ft').innerHTML=s.forts.map(x=>rep('f'+x.key,
    `<span class="tm">${x.time}</span>${x.role?role[x.role]:''}<b>Barbarenfestung${x.level?' Lvl '+x.level:''}</b><span class="note">${x.pct==null?'':'Anteil '+x.pct+' %'}${x.tier==null?'':', Tier '+x.tier}</span><span class="sm">${chipsH(x.loot)}</span>`,
    facts([['Position',x.x==null?'–':`${x.x} / ${x.y}`],['Dein Schadensanteil',x.pct==null?'–':x.pct+' %'],['Tier',x.tier==null?'–':x.tier],['Teilnehmer',x.parts||'–'],['Kommandant',esc(x.hero)||'–']])+
    (x.level==null?'<p class="note">Zu dieser Festung gibt es keine Belohnungs-Mail im Ordner, deshalb fehlen Level, Position und Beute.</p>':'')+
@@ -1592,7 +1593,7 @@ async function load(){const[a,b]=range();
  // Barbarenkämpfe (ein Bericht = eine Zeile, die Runden/Gegner stehen darin)
  $('c_bt').textContent=s.battles.length?(s.battles.length>=200?'letzte 200':s.battles.length):'';
  renderChain(s.chain);
- $('bt').innerHTML=ftTotal(s.battles,'Berichte')+s.battles.map(x=>{const so=x.role==='solo',t=x.totals;
+ $('bt').innerHTML=s.battles.map(x=>{const so=x.role==='solo',t=x.totals;
   return rep('b'+x.mail_id,
    `<span class="tm">${x.time}</span>${role[x.role]}<b>${esc(x.title)}</b><span class="note">${esc(x.hero)}</span>${x.ck?`<span class="tag">${x.cnew?'Neustart · ':''}Chain ${x.ck} · ${x.ap} AP</span>`:''}<span class="sm">${chipsH(x.loot)}</span>`,
    facts(so?[['Gegner im Bericht',x.n],['Gegner-Truppen',f(t.foe_troops)],['Leicht verwundet',f(t.hurt)],['Schwer verwundet',f(t.severe),'bad'],['Kommandanten-XP',f(t.xp)]]
