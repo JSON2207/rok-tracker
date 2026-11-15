@@ -1456,6 +1456,8 @@ const EMO={speed_training:'⏩',speed_universal:'⏱️',speed_healing:'💊',wo
 const mi=x=>`<img class="mi" src="/icon/${IK.has(x.kind)?x.kind:'item_'+x.id}" alt="" onerror="icoFb(this,'${slug(x.name)}','${EMO[x.kind]||'🎁'}')">`;
 const chipsH=l=>l.length?l.slice().sort((a,b)=>(b.unk?1:0)-(a.unk?1:0)).slice(0,4).map(x=>`<span class="ch${x.unk?' unk':''}"${x.unk?` data-item="${x.id}" title="Noch nicht benannt. Klicken zum Benennen."`:''}>${mi(x)}${f(x.qty)}× ${esc(x.name)}${x.unk?' <b class="qm">?</b>':''}</span>`).join('')+(l.length>4?`<span class="ch">+${l.length-4} weitere</span>`:''):'keine Beute';
 const chips=l=>l.length?l.slice(0,3).map(x=>f(x.qty)+'× '+x.name).join(', ')+(l.length>3?` (+${l.length-3} weitere)`:''):'keine Beute';
+const ftTotal=fl=>{const m=new Map();fl.forEach(x=>(x.loot||[]).forEach(i=>{const k=i.id||i.name,o=m.get(k);if(o)o.qty+=i.qty;else m.set(k,Object.assign({},i,{total:null}))}));const l=[...m.values()].sort((a,b)=>b.qty-a.qty),n=l.reduce((a,x)=>a+x.qty,0);
+ if(!l.length)return'';return`<details class="rep fttot" open><summary><b>Items insgesamt: ${f(n)}</b><span class="note">${f(l.length)} Arten · ${f(fl.length)} Festungen</span></summary><div class="rb">${lootList(l)}</div></details>`};
 const lootList=l=>l.length?`<ul class="ll">${l.map(x=>`<li${x.unk?` class="unk" data-item="${x.id}" title="Noch nicht benannt. Klicken zum Benennen."`:''}>${mi(x)}<b>${f(x.qty)}×</b> ${esc(x.name)}${x.total!=null&&x.total!==x.qty?` <span class="note">= ${f(x.total)}${SUF[x.kind]||''}</span>`:''}${x.unk?' <b class="qm">?</b><small>noch nicht benannt</small>':''}</li>`).join('')}</ul>`:'<p class="note">Keine Beute in diesem Bericht.</p>';
 const facts=a=>`<dl class="fa">${a.map(([k,v,c])=>`<div><dt>${k}</dt><dd class="${c||''}">${v}</dd></div>`).join('')}</dl>`;
 const rep=(k,head,body)=>`<details class="rep" data-k="${k}"${openRep.has(k)?' open':''}><summary>${head}</summary><div class="rb">${body}</div></details>`;
@@ -1554,7 +1556,7 @@ async function load(){const[a,b]=range();
  $('lootnote').textContent=unk.length?'Noch nicht benannt: '+unk.map(x=>`${x.name} (${f(x.qty)}×)`).join(', '):'';
  // Festungen (jeder Festungs-Kampf, auch beigetretene Rallys)
  $('c_ft').textContent=s.forts.length||'';
- $('ft').innerHTML=s.forts.map(x=>rep('f'+x.key,
+ $('ft').innerHTML=ftTotal(s.forts)+s.forts.map(x=>rep('f'+x.key,
    `<span class="tm">${x.time}</span>${x.role?role[x.role]:''}<b>Barbarenfestung${x.level?' Lvl '+x.level:''}</b><span class="note">${x.pct==null?'':'Anteil '+x.pct+' %'}${x.tier==null?'':', Tier '+x.tier}</span><span class="sm">${chipsH(x.loot)}</span>`,
    facts([['Position',x.x==null?'–':`${x.x} / ${x.y}`],['Dein Schadensanteil',x.pct==null?'–':x.pct+' %'],['Tier',x.tier==null?'–':x.tier],['Teilnehmer',x.parts||'–'],['Kommandant',esc(x.hero)||'–']])+
    (x.level==null?'<p class="note">Zu dieser Festung gibt es keine Belohnungs-Mail im Ordner, deshalb fehlen Level, Position und Beute.</p>':'')+
@@ -1820,7 +1822,8 @@ const EN=[
 [`Es fehlen Bereiche`,`Missing sections`],
 [`ungültige Account-ID`,`invalid account ID`],
 [`Datei unvollständig`,`File incomplete`],
-[`Alle Einträge dieser Seite löschen und auf den Anfangszustand zurücksetzen?`,`Delete all entries on this page and reset to the initial state?`],
+[`Alle Einträge dieser Seite löschen und auf den Anfangszustand zurücksetzen?`,`Delete all entries on this page and reset to the initial state?`],[`Items insgesamt`,`Total items`],
+[`Arten`,`types`],
 ];
 const ENM=new Map(EN.map(([a,b])=>[a,b]));
 const ENRE=new RegExp('(?<![\\p{L}\\p{N}])(?:'+EN.map(x=>x[0]).sort((a,b)=>b.length-a.length).map(s=>s.replace(/[.*+?^${}()|[\]\\]/g,'\\$&')).join('|')+')(?![\\p{L}\\p{N}])','giu');
