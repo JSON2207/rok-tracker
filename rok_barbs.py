@@ -645,7 +645,7 @@ class DB:
             self.c.commit()
         return n
 
-    CHAIN_DEF = dict(gap=10, base=50, step=2, min=40)
+    CHAIN_DEF = dict(gap=10, base=50, step=2, min=40, maxlvl=25)
 
     def chain_cfg(self):
         """Barb-Chaining: Pause (Min) bis zur neuen Serie, AP der ersten Chain, Reduktion je Chain, Minimum."""
@@ -654,12 +654,12 @@ class DB:
         except ValueError:
             d = {}
         out = dict(self.CHAIN_DEF)
-        for k, hi in (("gap", 1440), ("base", 1000), ("step", 100), ("min", 1000)):
+        for k, hi in (("gap", 1440), ("base", 1000), ("step", 100), ("min", 1000), ("maxlvl", 100)):
             try:
                 v = int(d.get(k, out[k]))
             except (TypeError, ValueError):
                 continue
-            if 0 <= v <= hi and not (k in ("gap", "base", "min") and v == 0):
+            if 0 <= v <= hi and not (k in ("gap", "base", "min", "maxlvl") and v == 0):
                 out[k] = v
         return out
 
@@ -685,8 +685,8 @@ class DB:
         Neue Serie: erste Chain, Pause laenger als der Grenzwert oder von Hand markiert. AP je Chain sinken in der Serie."""
         cfg, resets = self.chain_cfg(), self.chain_resets()
         rows = self.q("SELECT mail_id, account, MIN(ts) ts, MIN(day) day, COUNT(*) n, MIN(start) start FROM battles "
-                      "WHERE role='solo' AND foe_kind!='fort'" + (" AND account=?" if account else "") +
-                      " GROUP BY mail_id ORDER BY account, MIN(ts)", (account,) if account else ())
+                      "WHERE role='solo' AND foe_kind!='fort' AND foe_lvl<=?" + (" AND account=?" if account else "") +
+                      " GROUP BY mail_id ORDER BY account, MIN(ts)", (cfg["maxlvl"],) + ((account,) if account else ()))
         prev_acc = prev_end = None
         k = sid = 0
         for r in rows:
@@ -1254,8 +1254,8 @@ const tbl=(h,rows)=>`<div class="wrap"><table><tr>${h.map(x=>`<th>${x}</th>`).jo
 function renderChain(c){const el=$('chbox');if(!c){el.innerHTML='';return}
  if(el.contains(document.activeElement)&&document.activeElement.tagName==='INPUT')return;
  const r1=x=>(Math.round(x*10)/10).toLocaleString(LOC),g=c.cfg;
- el.innerHTML=`<h3>Barb-Chaining</h3><p class="note">Eine Chain ist ein Angriff, in dem du mehrere Barbaren hintereinander besiegst. Eine neue Serie beginnt, wenn du länger als die eingestellte Pause nicht angreifst oder bei einem Bericht „Neustart“ markierst. Die AP je Chain sinken in einer Serie.</p>
- <div class="chin"><label>Pause für neue Serie (Min)<input type="number" min="1" data-c="gap" value="${g.gap}"></label><label>AP erste Chain<input type="number" min="1" data-c="base" value="${g.base}"></label><label>AP-Reduktion je Chain<input type="number" min="0" data-c="step" value="${g.step}"></label><label>Mindest-AP<input type="number" min="1" data-c="min" value="${g.min}"></label></div>
+ el.innerHTML=`<h3>Barb-Chaining</h3><p class="note">Eine Chain ist ein Angriff, in dem du mehrere Barbaren hintereinander besiegst. Es zählen nur normale Barbaren bis zum eingestellten Level, höhere NPCs (zum Beispiel Lvl 60) sind ausgenommen. Eine neue Serie beginnt, wenn du länger als die eingestellte Pause nicht angreifst oder bei einem Bericht „Neustart“ markierst. Die AP je Chain sinken in einer Serie.</p>
+ <div class="chin"><label>Pause für neue Serie (Min)<input type="number" min="1" data-c="gap" value="${g.gap}"></label><label>AP erste Chain<input type="number" min="1" data-c="base" value="${g.base}"></label><label>AP-Reduktion je Chain<input type="number" min="0" data-c="step" value="${g.step}"></label><label>Mindest-AP<input type="number" min="1" data-c="min" value="${g.min}"></label><label>Max. Barbaren-Level<input type="number" min="1" data-c="maxlvl" value="${g.maxlvl}"></label></div>
  <div class="grid">${kpi('Serien',f(c.series))+kpi('Chains',f(c.chains))+kpi('Ø Chains pro Serie',c.series?r1(c.chains/c.series):'–')+kpi('Längste Serie (Chains)',f(c.longest))+kpi('Barbaren gekillt',f(c.barbs))+kpi('Ø Barbaren pro Chain',c.chains?r1(c.barbs/c.chains):'–')+kpi('AP verbraucht',f(c.ap))+kpi('AP pro Barbar',c.barbs?r1(c.ap/c.barbs):'–')}</div>
  ${c.days.length?tbl(['Tag','Serien','Chains','Barbaren','Ø Barbaren pro Chain','AP'],c.days.map(d=>`<tr><td>${dm(d.day)}</td><td>${f(d.series)}</td><td>${f(d.chains)}</td><td>${f(d.barbs)}</td><td>${r1(d.barbs/d.chains)}</td><td>${f(d.ap)}</td></tr>`)):''}`}
 $('chbox').addEventListener('change',async e=>{const i=e.target.closest('input[data-c]');if(!i)return;const d={};$('chbox').querySelectorAll('input[data-c]').forEach(x=>{if(+x.value>0)d[x.dataset.c]=+x.value});
@@ -1393,7 +1393,7 @@ $('pfile').onchange=async e=>{let n=0,err='';for(const fl of e.target.files){try
 const EN=[
 [`Barbaren-Tracker`,`Barbarian Tracker`],[`Heute`,`Today`],[`Gestern`,`Yesterday`],[`Letzte 7 Tage`,`Last 7 days`],[`Letzte 30 Tage`,`Last 30 days`],
 [`Dieser Monat`,`This month`],[`Alles`,`All time`],[`Zeitraum wählen`,`Custom range`],[`von`,`from`],[`bis`,`to`],[`und`,`and`],
-[`Allianz-Tracker`,`Alliance Tracker`],[`Zum Loot-Tracker`,`Back to loot tracker`],[`Loot-Tracker`,`Loot tracker`],[`Barb-Chaining`,`Barb chaining`],[`Eine Chain ist ein Angriff, in dem du mehrere Barbaren hintereinander besiegst. Eine neue Serie beginnt, wenn du länger als die eingestellte Pause nicht angreifst oder bei einem Bericht „Neustart“ markierst. Die AP je Chain sinken in einer Serie.`,`A chain is one attack in which you defeat several barbarians in a row. A new series starts when you do not attack for longer than the set pause or mark a report as "restart". The AP per chain decrease within a series.`],[`Pause für neue Serie (Min)`,`Pause for new series (min)`],[`AP erste Chain`,`AP first chain`],[`AP-Reduktion je Chain`,`AP reduction per chain`],[`Mindest-AP`,`Minimum AP`],[`Serien`,`Series`],[`Chains`,`Chains`],[`Ø Chains pro Serie`,`Avg chains per series`],[`Längste Serie (Chains)`,`Longest series (chains)`],[`Barbaren gekillt`,`Barbarians killed`],[`Ø Barbaren pro Chain`,`Avg barbarians per chain`],[`AP verbraucht`,`AP used`],[`AP pro Barbar`,`AP per barbarian`],[`Ø Barbaren pro Chain`,`Avg barbarians per chain`],[`Als Neustart markieren`,`Mark as restart`],[`Neustart-Markierung entfernen`,`Remove restart mark`],[`Sprache`,`Language`],[`Seiten`,`Pages`],[`Ansicht`,`View`],[`Breite`,`Width`],[`Ausrichtung`,`Alignment`],[`Schmal`,`Narrow`],[`Breit`,`Wide`],[`Voll`,`Full`],[`Links`,`Left`],[`Mitte`,`Center`],[`Rechts`,`Right`],[`Allianz-Ranking`,`Alliance ranking`],[`Member-Rangliste`,`Member ranking`],[`Mitglieder`,`members`],
+[`Allianz-Tracker`,`Alliance Tracker`],[`Zum Loot-Tracker`,`Back to loot tracker`],[`Loot-Tracker`,`Loot tracker`],[`Barb-Chaining`,`Barb chaining`],[`Eine Chain ist ein Angriff, in dem du mehrere Barbaren hintereinander besiegst. Es zählen nur normale Barbaren bis zum eingestellten Level, höhere NPCs (zum Beispiel Lvl 60) sind ausgenommen. Eine neue Serie beginnt, wenn du länger als die eingestellte Pause nicht angreifst oder bei einem Bericht „Neustart“ markierst. Die AP je Chain sinken in einer Serie.`,`A chain is one attack in which you defeat several barbarians in a row. Only normal barbarians up to the set level count, higher NPCs (for example Lvl 60) are excluded. A new series starts when you do not attack for longer than the set pause or mark a report as "restart". The AP per chain decrease within a series.`],[`Pause für neue Serie (Min)`,`Pause for new series (min)`],[`AP erste Chain`,`AP first chain`],[`AP-Reduktion je Chain`,`AP reduction per chain`],[`Mindest-AP`,`Minimum AP`],[`Max. Barbaren-Level`,`Max barbarian level`],[`Serien`,`Series`],[`Chains`,`Chains`],[`Ø Chains pro Serie`,`Avg chains per series`],[`Längste Serie (Chains)`,`Longest series (chains)`],[`Barbaren gekillt`,`Barbarians killed`],[`Ø Barbaren pro Chain`,`Avg barbarians per chain`],[`AP verbraucht`,`AP used`],[`AP pro Barbar`,`AP per barbarian`],[`Ø Barbaren pro Chain`,`Avg barbarians per chain`],[`Als Neustart markieren`,`Mark as restart`],[`Neustart-Markierung entfernen`,`Remove restart mark`],[`Sprache`,`Language`],[`Seiten`,`Pages`],[`Ansicht`,`View`],[`Breite`,`Width`],[`Ausrichtung`,`Alignment`],[`Schmal`,`Narrow`],[`Breit`,`Wide`],[`Voll`,`Full`],[`Links`,`Left`],[`Mitte`,`Center`],[`Rechts`,`Right`],[`Allianz-Ranking`,`Alliance ranking`],[`Member-Rangliste`,`Member ranking`],[`Mitglieder`,`members`],
 [`Klick auf eine Spaltenüberschrift sortiert die Liste. Grün und rot zeigen die Veränderung seit dem vorherigen Stand. Ranglisten ohne Resource Assistance und Armory Contributions.`,`Click a column header to sort the list. Green and red show the change since the previous snapshot. Rankings without Resource Assistance and Armory Contributions.`],
 [`Ø Rang`,`Avg rank`],[`Durchschnitt der Plätze in den eingeschalteten Kategorien, niedriger ist besser`,`Average of the ranks in the categories that are on, lower is better`],
 [`Klick auf eine Kategorie über der Tabelle schaltet sie aus, mit der Maus ziehen ändert die Reihenfolge der Spalten. Die Einstellungen werden gespeichert. Eine ausgeschaltete Kategorie wird ausgeblendet und zählt nicht zum Ø Rang. Ø Rang ist der Durchschnitt der Plätze in den eingeschalteten Kategorien, niedriger ist besser. Die Zahl dahinter ist der Platz in dieser Durchschnittswertung.`,`Click a category above the table to switch it off, drag it with the mouse to change the column order. The settings are saved. A switched-off category is hidden and does not count toward the avg rank. Avg rank is the average of the ranks in the categories that are on, lower is better. The number after it is the position in that average ranking.`],
