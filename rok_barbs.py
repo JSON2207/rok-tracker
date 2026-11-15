@@ -1034,6 +1034,11 @@ class DB:
             it = ITEMS.get(r["item_id"])
             r["name"], r["kind"] = self.iname(r["item_id"]), it["kind"] if it else None
             r["total"] = r["qty"] * it["unit"] if it else None
+        loot_src = {}
+        for r in self.q("SELECT src, item_id, SUM(qty) qty FROM loot WHERE " + w + " GROUP BY src, item_id ORDER BY qty DESC", a):
+            it = ITEMS.get(r["item_id"])
+            loot_src.setdefault(r["src"], []).append(dict(item_id=r["item_id"], qty=r["qty"], name=self.iname(r["item_id"]),
+                                                         kind=it["kind"] if it else None, total=r["qty"] * it["unit"] if it else None))
         L = self.loot_of
         battles = self.report_battles(wb, a, fmt)
         chain = self.chain_stats(d_from, d_to, account)
@@ -1063,7 +1068,7 @@ class DB:
                 d.setdefault(key, 0)
         accounts = self.q("SELECT account, MAX(acc_name) acc_name FROM reports WHERE account!='' GROUP BY account ORDER BY MAX(ts) DESC")
         return dict(unknown=self.unknown(), totals=tot, pvp_totals=pv, aoo_totals=po, aoo=aoos, profile=self.profile_stats(d_from, d_to, account), main_account=self.get_setting("main_account"), avatars=self.avatars(),
-                    apuse=self.ap_usage(chain, forts), profile_fields=PROFILE_FIELDS, chain=chain, loot=loot, battles=battles, forts=forts, pvp=pvps,
+                    apuse=self.ap_usage(chain, forts), loot_src=loot_src, profile_fields=PROFILE_FIELDS, chain=chain, loot=loot, battles=battles, forts=forts, pvp=pvps,
                     accounts=accounts, days=sorted(days.values(), key=lambda d: d["day"], reverse=True)[:90])
 
 # ---------------------------------------------------------------- Ordner-Überwachung
@@ -1309,6 +1314,7 @@ summary{cursor:pointer;list-style:none;display:flex;align-items:baseline;gap:10p
 summary::-webkit-details-marker{display:none}
 summary::before{content:"▸";color:var(--mute);width:1em;flex:none;transition:transform .12s}
 details[open]>summary::before{transform:rotate(90deg)}
+.ittwo{display:grid;grid-template-columns:1fr 1fr;gap:12px;align-items:start;margin-bottom:9px}.ittwo>div{min-width:0}@media(max-width:800px){.ittwo{grid-template-columns:1fr}}
 .apc{border:1px solid var(--line);border-radius:14px;padding:12px 16px;margin-bottom:14px;background:var(--card)}.aph{display:flex;flex-wrap:wrap;gap:8px;justify-content:space-between;align-items:center}.aph h3{margin:0}.aph input{width:5em;font:inherit;color:var(--ink);background:var(--soft);border:1px solid var(--line);border-radius:8px;padding:4px 8px}
 .apt b{font-size:1.8rem;font-variant-numeric:tabular-nums}.apb{display:flex;height:10px;border-radius:6px;overflow:hidden;background:var(--soft);margin:8px 0}.apb i{display:block;height:100%}.apb i.b,.dot.b{background:var(--acc)}.apb i.f,.dot.f{background:var(--warn)}
 .apr{display:flex;gap:8px;align-items:baseline;margin:3px 0}.dot{display:inline-block;width:10px;height:10px;border-radius:50%}
@@ -1473,10 +1479,10 @@ const EMO={speed_training:'⏩',speed_universal:'⏱️',speed_healing:'💊',wo
 const mi=x=>`<img class="mi" src="/icon/${IK.has(x.kind)?x.kind:'item_'+x.id}" alt="" onerror="icoFb(this,'${slug(x.name)}','${EMO[x.kind]||'🎁'}')">`;
 const chipsH=l=>l.length?l.slice().sort((a,b)=>(b.unk?1:0)-(a.unk?1:0)).slice(0,4).map(x=>`<span class="ch${x.unk?' unk':''}"${x.unk?` data-item="${x.id}" title="Noch nicht benannt. Klicken zum Benennen."`:''}>${mi(x)}${f(x.qty)}× ${esc(x.name)}${x.unk?' <b class="qm">?</b>':''}</span>`).join('')+(l.length>4?`<span class="ch">+${l.length-4} weitere</span>`:''):'keine Beute';
 const chips=l=>l.length?l.slice(0,3).map(x=>f(x.qty)+'× '+x.name).join(', ')+(l.length>3?` (+${l.length-3} weitere)`:''):'keine Beute';
-const ftTotal=(l,nrep)=>{l=l.slice().sort((a,b)=>b.qty-a.qty);const n=l.reduce((a,x)=>a+x.qty,0);
+const ftTotal=(l,nrep,ttl,un)=>{l=l.slice().sort((a,b)=>b.qty-a.qty);const n=l.reduce((a,x)=>a+x.qty,0);
  if(!l.length)return'';const sp={};l.forEach(x=>{if(/^speed_/.test(x.kind||'')&&x.total!=null)sp[x.kind]=(sp[x.kind]||0)+x.total});const SN={speed_training:'Training',speed_universal:'Universal',speed_healing:'Heilung'},sk=Object.keys(sp),st=sk.reduce((a,k)=>a+sp[k],0),dh=m=>{const d=Math.floor(m/1440),h=Math.floor(m%1440/60);return (d?d+' d ':'')+h+' h'};
  const spl=sk.length?`<p class="spd"><b>Speedups: ${f(st)} Min</b> <span class="note">(${dh(st)})</span> ${sk.map(k=>`<span class="ch">${SN[k]} ${f(sp[k])} Min</span>`).join(' ')}</p>`:'';
- return`<details class="rep fttot" open><summary><b>Items insgesamt: ${f(n)}</b><span class="note">${f(l.length)} Arten · ${f(nrep)} Berichte</span></summary><div class="rb">${spl}${lootList(l)}</div></details>`};
+ return`<details class="rep fttot" open><summary><b>${ttl||'Items insgesamt'}: ${f(n)}</b><span class="note">${f(l.length)} Arten${nrep==null?'':' · '+f(nrep)+' '+(un||'Berichte')}</span></summary><div class="rb">${spl}${lootList(l)}</div></details>`};
 const lootList=l=>l.length?`<ul class="ll">${l.map(x=>`<li${x.unk?` class="unk" data-item="${x.id}" title="Noch nicht benannt. Klicken zum Benennen."`:''}>${mi(x)}<b>${f(x.qty)}×</b> ${esc(x.name)}${x.total!=null&&x.total!==x.qty?` <span class="note">= ${f(x.total)}${SUF[x.kind]||''}</span>`:''}${x.unk?' <b class="qm">?</b><small>noch nicht benannt</small>':''}</li>`).join('')}</ul>`:'<p class="note">Keine Beute in diesem Bericht.</p>';
 const facts=a=>`<dl class="fa">${a.map(([k,v,c])=>`<div><dt>${k}</dt><dd class="${c||''}">${v}</dd></div>`).join('')}</dl>`;
 const rep=(k,head,body)=>`<details class="rep" data-k="${k}"${openRep.has(k)?' open':''}><summary>${head}</summary><div class="rb">${body}</div></details>`;
@@ -1582,7 +1588,8 @@ async function load(){const[a,b]=range();
   <div class="apr"><span class="dot f"></span>Festungen <b>${f(au.fort_total)} AP</b> <span class="note">${f(au.forts)} × ${f(au.fort_ap)}</span></div>
   ${au.days.length>1?`<div class="wrap"><table><tr><th>Tag</th><th>Barbaren</th><th>Festungen</th><th>Gesamt</th></tr>${au.days.map(d=>`<tr><td>${dm(d.day)}</td><td>${f(d.barbs)}</td><td>${f(d.forts)}</td><td><b>${f(d.total)}</b></td></tr>`).join('')}</table></div>`:''}
   <p class="note">Barbaren-AP sind geschätzt (Chain-Einstellungen im Tab Barbarenkämpfe), Festungen zählen auch beigetretene Rallys.</p></div>`;
- $('ittot').innerHTML=ftTotal(s.loot.map(x=>({id:x.item_id,name:x.name,qty:x.qty,total:x.total,kind:x.kind,unk:x.kind===null&&!s.unknown.ignored.some(i=>i.id===x.item_id)})),(s.totals.battles||0)+s.forts.length);
+ const lsm=k=>(s.loot_src[k]||[]).map(x=>({id:x.item_id,name:x.name,qty:x.qty,total:x.total,kind:x.kind,unk:x.kind===null&&!s.unknown.ignored.some(i=>i.id===x.item_id)}));
+ $('ittot').innerHTML='<div class="ittwo"><div>'+ftTotal(lsm('b'),s.totals.battles||0,'Barbaren-Beute insgesamt')+'</div><div>'+ftTotal(lsm('f'),s.forts.length,'Festungs-Beute insgesamt','Festungen')+'</div></div>'+ftTotal(lsm('o'),null,'Sonstige Beute');
  $('apfort').onchange=async e=>{await fetch('/api/chaincfg',{method:'POST',body:JSON.stringify({fort_ap:+e.target.value})});lastSig='';load()};
  $('c_ft').textContent=s.forts.length||'';
  $('ft').innerHTML=s.forts.map(x=>rep('f'+x.key,
@@ -1852,7 +1859,7 @@ const EN=[
 [`ungültige Account-ID`,`invalid account ID`],
 [`Datei unvollständig`,`File incomplete`],
 [`Alle Einträge dieser Seite löschen und auf den Anfangszustand zurücksetzen?`,`Delete all entries on this page and reset to the initial state?`],[`Items insgesamt`,`Total items`],
-[`AP-Verbrauch`,`AP usage`],[`AP pro Festung`,`AP per fort`],[`AP gesamt`,`AP total`],[`Barbaren-AP sind geschätzt (Chain-Einstellungen im Tab Barbarenkämpfe), Festungen zählen auch beigetretene Rallys.`,`Barbarian AP are estimated (chain settings in the Barbarian fights tab), forts also include joined rallies.`],
+[`AP-Verbrauch`,`AP usage`],[`Barbaren-Beute insgesamt`,`Total barbarian loot`],[`Festungs-Beute insgesamt`,`Total fort loot`],[`Sonstige Beute`,`Other loot`],[`AP pro Festung`,`AP per fort`],[`AP gesamt`,`AP total`],[`Barbaren-AP sind geschätzt (Chain-Einstellungen im Tab Barbarenkämpfe), Festungen zählen auch beigetretene Rallys.`,`Barbarian AP are estimated (chain settings in the Barbarian fights tab), forts also include joined rallies.`],
 [`Arten`,`types`],
 [`Speedups:`,`Speedups:`],[`Heilung`,`Healing`],
 ];
