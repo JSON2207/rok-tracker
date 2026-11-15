@@ -2210,7 +2210,7 @@ details.ks summary{cursor:pointer}details.ks textarea{width:100%;min-height:220p
 <section class="wh"><div><h1 id="t1"></h1><div class="sub" id="s1"></div></div><div class="nav"><span class="note" id="msg"></span></div></section>
 <section class="ks"><div class="kg" id="sum"></div></section>
 <section class="ks"><h2 id="h2"></h2><p class="note" id="n2"></p><div class="tw" id="tb"></div></section>
-<section class="ks"><h2 id="h3"></h2><p class="note" id="n3"></p><form class="cf" id="f" autocomplete="off"><label id="l1"><input id="fi" required inputmode="numeric"></label><label id="l2"><input id="fp"></label><label id="l3"><input id="fk"></label><label id="l4"><input id="fd"></label><label id="l5"><input id="fn"></label><button type="submit" id="fa"></button></form></section>
+<section class="ks"><h2 id="h3"></h2><p class="note" id="n3"></p><form class="cf" id="f" autocomplete="off"><label id="l1"><input id="fi" required inputmode="numeric"></label><label id="l2"><input id="fp"></label><label id="l3"><input id="fk"></label><label id="l4"><input id="fd"></label><label id="l5"><input id="fn"></label><label id="l6"><input id="fg" maxlength="1"></label><label id="l7"><input id="fr" inputmode="numeric"></label><button type="submit" id="fa"></button></form></section>
 <details class="ks" id="ed"><summary><b id="h4"></b></summary><p class="note" id="n4"></p><textarea id="kj" spellcheck="false"></textarea><p><button id="ks" type="button"></button> <button id="kr" type="button"></button></p></details>
 @@QP@@
 <script>
@@ -2227,29 +2227,29 @@ function score(){const K=D.kingdoms,mx=k=>Math.max(0,...K.map(x=>+x[k]||0));cons
 function draw(){if(!D)return;
  $('t1').textContent='KVK2';document.title='KVK2';
  $('s1').textContent=L('Die Matchmaking-Kingdoms im Vergleich. Zahlen trägst du selbst ein oder schickst mir Screenshots.','The matchmaking kingdoms compared. You enter the numbers yourself or send me screenshots.')+(D.season?' · '+D.season:'');
- const R=score().sort((a,b)=>{const x=S.col==='id'?a.id-b.id:(+a[S.col]||0)-(+b[S.col]||0);return x*S.dir||a.id-b.id}),me=R.find(x=>x.id===D.me),others=R.filter(x=>x.id!==D.me&&x.str>0),by=[...R].sort((a,b)=>b.str-a.str),rk=me?by.findIndex(x=>x.id===me.id)+1:0;
+ const R=score().sort((a,b)=>{const x=S.col==='id'?a.id-b.id:S.col==='group'?String(a.group||'Z').localeCompare(String(b.group||'Z')):S.col==='rank'?(a.rank||1e9)-(b.rank||1e9):(+a[S.col]||0)-(+b[S.col]||0);return x*S.dir||a.id-b.id}),me=R.find(x=>x.id===D.me),others=R.filter(x=>x.id!==D.me&&x.str>0),by=[...R].sort((a,b)=>b.str-a.str),rk=me?by.findIndex(x=>x.id===me.id)+1:0;
  const avg=others.length?others.reduce((a,x)=>a+x.str,0)/others.length:0,top=others.slice().sort((a,b)=>b.str-a.str)[0];
  $('sum').innerHTML=`<div class="k"><b>${me&&me.str>0?'#'+rk+' / '+by.filter(x=>x.str>0).length:'–'}</b><span>${L('Rang deines Kingdoms (Stärke)','Rank of your kingdom (strength)')} · #${D.me}</span></div>
  <div class="k"><b>${top?'#'+top.id:'–'}</b><span>${L('Stärkster Gegner','Strongest opponent')}${top?' · '+top.str.toFixed(0)+' / 100':''}</span></div>
  <div class="k"><b>${others.length?avg.toFixed(0)+' / 100':'–'}</b><span>${L('Ø Gegner','Opponent average')}${me&&me.str>0&&others.length?' · '+(me.str>=avg?'+':'')+(me.str-avg).toFixed(0)+' '+L('für dich','for you'):''}</span></div>
  <div class="k"><b>${R.length}</b><span>${L('Kingdoms in der Liste','Kingdoms in the list')}</span></div>`;
  $('h2').textContent=L('Kingdom-Vergleich','Kingdom comparison');$('n2').textContent=L('Stärke = Durchschnitt aus Power, Kill Points und Deads im Verhältnis zum jeweils größten Kingdom (100 = überall vorn). Klick auf eine Spaltenüberschrift sortiert.','Strength = average of power, kill points and deads relative to the largest kingdom in each column (100 = ahead everywhere). Click a column header to sort.');
- const H=[['id','Kingdom','lf'],['power','Power'],['kp','Kill Points'],['deads','Deads'],['players',L('Spieler','Players')],['str',L('Stärke','Strength')]];
- $('tb').innerHTML=`<table><tr>${H.map(h=>`<th class="${h[2]||''}" data-c="${h[0]}">${h[1]}${S.col===h[0]?(S.dir<0?' ▼':' ▲'):''}</th>`).join('')}<th></th></tr>${R.map(x=>`<tr class="${x.id===D.me?'me':''}"><td>#${x.id}${x.id===D.me?' ★':''}</td><td title="${f(x.power)}">${x.power?short(x.power):'–'}</td><td title="${f(x.kp)}">${x.kp?short(x.kp):'–'}</td><td title="${f(x.deads)}">${x.deads?short(x.deads):'–'}</td><td>${x.players?f(x.players):'–'}</td><td><div class="sb2" title="${x.str.toFixed(1)}"><i style="width:${Math.min(100,x.str)}%"></i></div></td><td class="lf"><button type="button" data-e="${x.id}">${L('Bearbeiten','Edit')}</button> <button type="button" data-m="${x.id}" title="${L('Als mein Kingdom markieren','Mark as my kingdom')}">★</button> <button type="button" data-d="${x.id}">${L('Löschen','Delete')}</button></td></tr>`).join('')}</table>`;
+ const H=[['rank',L('Rang','Rank')],['id','Kingdom','lf'],['group',L('Gruppe','Group')],['power','Power'],['kp','Kill Points'],['deads','Deads'],['ch25','CH25'],['str',L('Stärke','Strength')]];
+ $('tb').innerHTML=`<table><tr>${H.map(h=>`<th class="${h[2]||''}" data-c="${h[0]}">${h[1]}${S.col===h[0]?(S.dir<0?' ▼':' ▲'):''}</th>`).join('')}<th></th></tr>${R.map(x=>`<tr class="${x.id===D.me?'me':''}"><td>${x.rank?x.rank:'–'}</td><td class="lf">#${x.id}${x.id===D.me?' ★':''}</td><td>${esc(x.group)||'–'}</td><td title="${f(x.power)}">${x.power?short(x.power):'–'}</td><td title="${f(x.kp)}">${x.kp?short(x.kp):'–'}</td><td title="${f(x.deads)}">${x.deads?short(x.deads):'–'}</td><td>${x.ch25?f(x.ch25):'–'}</td><td><div class="sb2" title="${x.str.toFixed(1)}"><i style="width:${Math.min(100,x.str)}%"></i></div></td><td class="lf"><button type="button" data-e="${x.id}">${L('Bearbeiten','Edit')}</button> <button type="button" data-m="${x.id}" title="${L('Als mein Kingdom markieren','Mark as my kingdom')}">★</button> <button type="button" data-d="${x.id}">${L('Löschen','Delete')}</button></td></tr>`).join('')}</table>`;
  $('h3').textContent=L('Kingdom hinzufügen oder ändern','Add or change a kingdom');$('n3').textContent=L('Gleiche Kingdom-Nummer überschreibt den Eintrag. Zahlen gehen auch als 1,2M, 350K oder 1.200.000.','The same kingdom number overwrites the entry. Numbers also work as 1.2M, 350K or 1,200,000.');
  const lab=(id,t)=>{const l=$(id),i=l.querySelector('input');l.textContent='';l.append(t,i)};
- lab('l1',L('Kingdom-Nr.','Kingdom no.'));lab('l2','Power');lab('l3','Kill Points');lab('l4','Deads');lab('l5',L('Spieler','Players'));$('fa').textContent=L('Speichern','Save');
+ lab('l1',L('Kingdom-Nr.','Kingdom no.'));lab('l2','Power');lab('l3','Kill Points');lab('l4','Deads');lab('l5','CH25');lab('l6',L('Gruppe (A/B/C)','Group (A/B/C)'));lab('l7',L('Rang','Rank'));$('fa').textContent=L('Speichern','Save');
  $('h4').textContent=L('Daten bearbeiten (JSON)','Edit data (JSON)');$('n4').textContent=L('Alle Werte dieser Seite als JSON. Ändere sie oder füge eine komplette Liste ein und speichere.','All values of this page as JSON. Change them or paste a complete list and save.');
  $('ks').textContent=L('Speichern','Save');$('kr').textContent=L('Zurücksetzen','Reset');
  if(document.activeElement!==$('kj'))$('kj').value=JSON.stringify(D,null,1)}
 async function ld(){try{D=await fetch('/api/kvk2').then(r=>r.json());draw()}catch(e){}}
 async function sv(body){const r=await fetch('/api/kvk2',{method:'POST',body}).then(r=>r.json()).catch(e=>({ok:false,error:String(e)}));$('msg').textContent=r.ok?L('gespeichert','saved'):L('Fehler: ','Error: ')+r.error;if(r.ok){D=r.data;$('kj').value='';draw()}return r.ok}
-$('tb').onclick=e=>{const th=e.target.closest('th[data-c]');if(th){const c=th.dataset.c;S.dir=S.col===c?-S.dir:(c==='id'?1:-1);S.col=c;try{localStorage.setItem('rokk2',JSON.stringify(S))}catch(x){}draw();return}
+$('tb').onclick=e=>{const th=e.target.closest('th[data-c]');if(th){const c=th.dataset.c;S.dir=S.col===c?-S.dir:(['id','rank','group'].includes(c)?1:-1);S.col=c;try{localStorage.setItem('rokk2',JSON.stringify(S))}catch(x){}draw();return}
  const b=e.target.closest('button');if(!b)return;
  if(b.dataset.d){D.kingdoms=D.kingdoms.filter(x=>x.id!==+b.dataset.d);sv(JSON.stringify(D))}
  else if(b.dataset.m){D.me=+b.dataset.m;sv(JSON.stringify(D))}
- else if(b.dataset.e){const x=D.kingdoms.find(k=>k.id===+b.dataset.e);if(x){$('fi').value=x.id;$('fp').value=x.power||'';$('fk').value=x.kp||'';$('fd').value=x.deads||'';$('fn').value=x.players||'';$('fi').focus()}}};
-$('f').onsubmit=e=>{e.preventDefault();const id=pn($('fi').value);if(!id)return;const x={id,power:pn($('fp').value),kp:pn($('fk').value),deads:pn($('fd').value),players:pn($('fn').value)};
+ else if(b.dataset.e){const x=D.kingdoms.find(k=>k.id===+b.dataset.e);if(x){$('fi').value=x.id;$('fp').value=x.power||'';$('fk').value=x.kp||'';$('fd').value=x.deads||'';$('fn').value=x.ch25||'';$('fg').value=x.group||'';$('fr').value=x.rank||'';$('fi').focus()}}};
+$('f').onsubmit=e=>{e.preventDefault();const id=pn($('fi').value);if(!id)return;const x={id,power:pn($('fp').value),kp:pn($('fk').value),deads:pn($('fd').value),ch25:pn($('fn').value),group:$('fg').value.trim().toUpperCase().slice(0,1),rank:pn($('fr').value)};
  D.kingdoms=D.kingdoms.filter(k=>k.id!==id).concat(x);sv(JSON.stringify(D)).then(ok=>{if(ok)$('f').reset()})};
 $('ks').onclick=()=>{const v=$('kj').value.trim();if(v)sv(v)};
 $('kr').onclick=()=>{if(confirm(tx('Alle Einträge dieser Seite löschen und auf den Anfangszustand zurücksetzen?')))sv(JSON.stringify({reset:1}))};
@@ -2279,8 +2279,19 @@ KVK1_DEFAULT = {
            "heal": {"food": 505692450, "wood": 484035130, "stone": 33426072, "gold": 34331240}},
 }
 
-KVK2_DEFAULT = {"season": "", "me": 4123,
-               "kingdoms": [{"id": i, "power": 0, "kp": 0, "deads": 0, "players": 0} for i in range(4113, 4129)]}
+# (Kingdom, Gruppe, Rang, Power, Kill Points, Deads, CH25) aus dem Leaderboard-Screenshot
+KVK2_SEED = [
+    (4113, "C", 124, 6812745133, 15995332776, 188352597, 269), (4114, "C", 132, 6581656508, 16264779002, 188907230, 254),
+    (4115, "C", 137, 6457844135, 9661859677, 122914983, 256), (4116, "C", 130, 6702473003, 12472590639, 112606195, 234),
+    (4117, "B", 61, 8209002340, 25680565012, 233272154, 300), (4118, "A", 12, 11311597289, 89936642236, 393051756, 300),
+    (4119, "B", 88, 7676345287, 20050516438, 174834662, 286), (4120, "C", 142, 6287374813, 12252868055, 178663472, 251),
+    (4121, "A", 20, 10968506753, 49369342324, 273333106, 300), (4122, "C", 134, 6561240205, 11366224533, 143471525, 272),
+    (4123, "A", 35, 9073593572, 35826596041, 189024498, 296), (4124, "C", 153, 5734829911, 11565989702, 125708191, 175),
+    (4125, "C", 128, 6707514026, 10638016845, 109873171, 270), (4126, "A", 17, 11053146484, 79261001448, 318794739, 300),
+    (4127, "C", 139, 6401735524, 16764207274, 170173245, 242), (4128, "C", 147, 6119413509, 7427116956, 109597666, 266),
+]
+KVK2_DEFAULT = {"season": "", "me": 4123, "kingdoms": [
+    {"id": i, "group": g, "rank": r, "power": p, "kp": k, "deads": d, "ch25": c} for i, g, r, p, k, d, c in KVK2_SEED]}
 
 
 def kvk2_clean(d):
@@ -2294,10 +2305,27 @@ def kvk2_clean(d):
         i = int(x.get("id") or 0)
         if i <= 0:
             continue
-        out.append({"id": i, **{k: max(0, int(x.get(k) or 0)) for k in ("power", "kp", "deads", "players")}})
+        out.append({"id": i, "group": str(x.get("group") or "")[:1].upper(),
+                    **{k: max(0, int(x.get(k) or 0)) for k in ("rank", "power", "kp", "deads", "ch25")}})
     ids = {x["id"] for x in out}
     me = int(d.get("me") or 0)
     return {"season": str(d.get("season") or "")[:60], "me": me if me in ids else (out[0]["id"] if out else 0), "kingdoms": out}
+
+
+def kvk2_load(db):
+    """Gespeicherte Daten; leere Eintraege der vorbelegten Kingdoms werden aus dem Screenshot-Stand gefuellt."""
+    try:
+        d = kvk2_clean(json.loads(db.get_setting("kvk2", "") or "null") or KVK2_DEFAULT)
+    except Exception:
+        return KVK2_DEFAULT
+    have = {x["id"]: x for x in d["kingdoms"]}
+    for seed in KVK2_DEFAULT["kingdoms"]:
+        x = have.get(seed["id"])
+        if x is None:
+            d["kingdoms"].append(dict(seed))
+        elif not (x["power"] or x["kp"] or x["deads"]):
+            x.update(seed)
+    return d
 
 
 EXPORT_TPL = r"""<!doctype html>
@@ -2445,11 +2473,7 @@ def make_handler(db, watcher):
             elif u.path in ("/kvk2", "/kvk2/"):
                 self.send(KVK2_PAGE, "text/html")
             elif u.path == "/api/kvk2":
-                try:
-                    d = kvk2_clean(json.loads(db.get_setting("kvk2", "") or "null") or KVK2_DEFAULT)
-                except Exception:
-                    d = KVK2_DEFAULT
-                self.send(json.dumps(d), "application/json")
+                self.send(json.dumps(kvk2_load(db)), "application/json")
             elif u.path in ("/kvk1", "/kvk1/"):
                 self.send(KVK_PAGE, "text/html")
             elif u.path == "/api/kvk1":
