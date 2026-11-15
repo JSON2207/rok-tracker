@@ -2279,7 +2279,8 @@ KVK1_DEFAULT = {
            "heal": {"food": 505692450, "wood": 484035130, "stone": 33426072, "gold": 34331240}},
 }
 
-KVK2_DEFAULT = {"season": "", "me": 4123, "kingdoms": [{"id": 4123, "power": 0, "kp": 0, "deads": 0, "players": 0}]}
+KVK2_DEFAULT = {"season": "", "me": 4123,
+               "kingdoms": [{"id": i, "power": 0, "kp": 0, "deads": 0, "players": 0} for i in range(4113, 4129)]}
 
 
 def kvk2_clean(d):
