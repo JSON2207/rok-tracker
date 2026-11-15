@@ -646,6 +646,10 @@ class DB:
             for s in snaps:
                 day = str(s["date"])[:10]
                 datetime.strptime(day, "%Y-%m-%d")
+                tm = str(s.get("time") or (str(s["date"])[11:16] if len(str(s["date"])) > 10 else "")).strip()
+                if tm:                                          # mehrere Staende pro Tag: "YYYY-MM-DD HH:MM"
+                    datetime.strptime(tm, "%H:%M")
+                    day += " " + tm
                 for cat, rows in (s.get("categories") or {}).items():
                     if cat not in valid:
                         raise ValueError("Unbekannte Kategorie: %s" % cat)
@@ -964,26 +968,47 @@ class DB:
         self.set_setting("alliance_ui", json.dumps(cur))
         return self.alliance_ui()
 
-    def alliance_stats(self):
+    def alliance_del(self, day):
+        with self.lock:
+            n = self.c.execute("DELETE FROM alliance WHERE day=?", (day,)).rowcount
+            self.c.commit()
+        return n
+
+    def alliance_stats(self, sel=None, base=None):
+        """sel = gewaehlter Stand (Tag oder 'Tag HH:MM'), base = Vergleichsstand (leer: jeweils der vorherige Stand).
+        Native = Mitglieder des ersten getrackten Standes; alle anderen bekommen das Datum des ersten Auftauchens (first)."""
         rows = self.q("SELECT day, cat, name, rank, value FROM alliance ORDER BY day")
-        days, members = {}, {}
+        snaps = sorted({r["day"] for r in rows})
+        if sel not in snaps:
+            sel = snaps[-1] if snaps else None
+        if base not in snaps or (sel and base >= sel):
+            base = None
+        first, days, members = {}, {}, {}
         for r in rows:
+            first.setdefault(r["name"], r["day"])
+            if sel and r["day"] > sel:
+                continue
             days.setdefault(r["cat"], set()).add(r["day"])
             m = members.setdefault(r["name"], {"name": r["name"], "c": {}, "h": {}})
             m["h"].setdefault(r["cat"], []).append([r["day"], r["value"], r["rank"]])
         latest = {c: max(d) for c, d in days.items()}
         for m in members.values():
+            m["first"] = first[m["name"]]
+            m["native"] = first[m["name"]] == snaps[0]
             for cat, hist in list(m["h"].items()):
                 last = hist[-1]
-                if last[0] != latest[cat]:                      # in der neuesten Liste nicht mehr aufgefuehrt
+                if last[0] != latest[cat]:                      # in der gewaehlten Liste nicht aufgefuehrt
                     m["c"][cat] = dict(v=None, r=None, d=None, day=latest[cat], seen=last[0])
                     continue
-                prev = next((h for h in reversed(hist[:-1]) if h[1] is not None), None)
+                if base:
+                    prev = next((h for h in reversed(hist[:-1]) if h[0] <= base and h[1] is not None), None)
+                else:
+                    prev = next((h for h in reversed(hist[:-1]) if h[1] is not None), None)
                 m["c"][cat] = dict(v=last[1], r=last[2], day=last[0], pd=prev[0] if prev else None,
                                    d=(last[1] - prev[1]) if prev and last[1] is not None else None)
         ui = self.alliance_ui()
         names = dict(ALLIANCE_CATS)
-        return dict(cats=[dict(key=k, label=names[k]) for k in ui["order"]], ui=ui, latest=latest,
+        return dict(cats=[dict(key=k, label=names[k]) for k in ui["order"]], ui=ui, latest=latest, snaps=snaps, sel=sel, base=base,
                     days={c: sorted(d) for c, d in days.items()}, members=sorted(members.values(), key=lambda m: m["name"].lower()))
 
     def profile_stats(self, d_from, d_to, account=""):
@@ -1860,7 +1885,7 @@ const EN=[
 [`Datei unvollständig`,`File incomplete`],
 [`Alle Einträge dieser Seite löschen und auf den Anfangszustand zurücksetzen?`,`Delete all entries on this page and reset to the initial state?`],[`Items insgesamt`,`Total items`],
 [`AP-Verbrauch`,`AP usage`],[`Barbaren-Beute insgesamt`,`Total barbarian loot`],[`Festungs-Beute insgesamt`,`Total fort loot`],[`Sonstige Beute`,`Other loot`],[`AP pro Festung`,`AP per fort`],[`AP gesamt`,`AP total`],[`Barbaren-AP sind geschätzt (Chain-Einstellungen im Tab Barbarenkämpfe), Festungen zählen auch beigetretene Rallys.`,`Barbarian AP are estimated (chain settings in the Barbarian fights tab), forts also include joined rallies.`],
-[`Arten`,`types`],
+[`Arten`,`types`],[`Vergleich mit`,`Compare with`],[`Vorheriger Stand`,`Previous snapshot`],[`Diesen Stand löschen`,`Delete this snapshot`],
 [`Speedups:`,`Speedups:`],[`Heilung`,`Healing`],
 ];
 const ENM=new Map(EN.map(([a,b])=>[a,b]));
@@ -1901,7 +1926,8 @@ ALLIANCE_PAGE = r"""<!doctype html><html lang="de"><head><meta charset="utf-8">
 a.btn{font:inherit;color:var(--ink);background:var(--soft);border:1px solid var(--line);border-radius:10px;padding:7px 12px;text-decoration:none}a.btn:hover{border-color:var(--acc)}
 #achips{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:12px}.chip{font:inherit;font-size:.85rem;color:var(--ink);background:var(--soft);border:1px solid var(--line);border-radius:999px;padding:5px 12px;cursor:pointer}.chip[aria-pressed="false"]{color:var(--mute);text-decoration:line-through;background:transparent}.chip[aria-pressed="true"]{border-color:var(--acc)}
 .inact{border:1px solid var(--line);border-radius:16px;background:var(--card);padding:14px 16px;margin-bottom:14px}.inact h2{margin:0;font-size:1.05rem}.ih{display:flex;flex-wrap:wrap;gap:10px;justify-content:space-between;align-items:center}.ib{display:flex;gap:8px}.ilist{display:flex;flex-wrap:wrap;gap:8px;margin-top:10px}.ip{display:flex;gap:8px;align-items:center;border:1px solid var(--line);background:var(--soft);border-radius:12px;padding:6px 10px}.ip b{font-weight:600}.ip span{color:var(--mute);font-size:.85rem}.ip .x{font:inherit;border:0;background:transparent;color:var(--mute);cursor:pointer;padding:0 2px}.ip.hot span{color:#e5645a}#iform{display:flex;gap:8px;flex-wrap:wrap;margin-top:10px}#iform input{font:inherit;color:var(--ink);background:var(--soft);border:1px solid var(--line);border-radius:10px;padding:6px 10px}#idy{width:5.5em}
-#al th,#al td{padding:9px 12px}#al td.r{color:var(--mute);width:2.5em;text-align:right}#al td.n{text-align:left}
+#al th,#al td{padding:9px 12px}.snapbar{display:flex;flex-wrap:wrap;gap:12px;align-items:center;margin-bottom:12px}.snapbar label{display:flex;gap:6px;align-items:center;color:var(--mute);font-size:.9rem}.snapbar select{font:inherit;color:var(--ink);background:var(--soft);border:1px solid var(--line);border-radius:10px;padding:6px 10px}
+.tg{font-size:.7rem;border-radius:999px;padding:1px 7px;margin-left:6px;border:1px solid var(--line);color:var(--mute);white-space:nowrap}.tg.nat{color:var(--acc);border-color:var(--acc)}#al td.r{color:var(--mute);width:2.5em;text-align:right}#al td.n{text-align:left}
 </style></head><body><main>
 <button type="button" id="mbtn" class="mbtn" aria-label="Menü" aria-expanded="true" title="Menü">☰</button><aside id="sb" class="sb" aria-label="Menü"><div class="sbh"><span class="sbt">RoK&nbsp;Tracker</span><button type="button" id="sbx" class="mbtn" aria-label="Menü schließen" title="Menü schließen">⇤</button></div><nav class="sbn"><div class="sbl">Seiten</div><a href="/" data-p="/" data-k="loot"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l8 4v5c0 4.5-3.2 7.8-8 9-4.8-1.2-8-4.5-8-9V7z"/><path d="M9 12l2 2 4-4"/></svg><span>Loot-Tracker</span></a><a href="/allianz" data-p="/allianz" data-k="ali"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20V10M10 20V4M16 20v-8M22 20H2"/></svg><span>Allianz-Ranking</span></a><a href="/kvk1" data-p="/kvk1" data-k="kvk"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M14.5 17.5L3 6V3h3l11.5 11.5M13 19l6-6M16 16l4 4M19 21l2-2M14.5 6.5L18 3h3v3l-3.5 3.5M5 14l4 4M7 17l-3 3M3 19l2 2"/></svg><span>KVK1</span></a><a href="/kvk2" data-p="/kvk2" data-k="kvk2"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3a14 14 0 0 1 0 18M12 3a14 14 0 0 0 0 18"/></svg><span>KVK2</span></a><a href="/woche" data-p="/woche" data-k="wb"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="17" rx="2"/><path d="M3 9h18M8 2v4M16 2v4M8 14h3M13 14h3M8 17h3"/></svg><span>Wochenbericht</span></a><a href="/kalender" data-p="/kalender" data-k="kal"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg><span>Event-Kalender</span></a><a href="/settings" data-p="/settings" data-k="set"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.9l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.9-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1-1.5 1.7 1.7 0 0 0-1.9.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.9 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1 1.7 1.7 0 0 0-.3-1.9l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.9.3h0a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5h0a1.7 1.7 0 0 0 1.9-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.9v0a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg><span>Einstellungen</span><b class="sbb" id="sbbadge" hidden></b></a><div class="sbdiv" data-k="d1"></div><div class="sbdiv" data-k="d2"></div><div class="sbstat" data-k="prof"><div class="sbgh0">Profil</div><a href="/#profil"><span>Profil</span></a><a href="/#tag"><span>Pro Tag</span></a></div></nav></aside><div id="sbov" class="sbov"></div><script>try{var th=localStorage.getItem("roktheme");if(th)document.documentElement.dataset.theme=th}catch(e){}window.sbOrd=function(){var A=["loot","ali","kvk","kvk2","wb","kal"],o=A.slice();try{var v=JSON.parse(localStorage.getItem("roksbo")||"null");if(v&&v.length){v=v.filter(function(x){return A.indexOf(x)>=0});o=v.concat(A.filter(function(x){return v.indexOf(x)<0}))}}catch(e){}var m={d1:6,prof:7,d2:8,set:9};o.forEach(function(k,i){m[k]=i});document.querySelectorAll("#sb [data-k]").forEach(function(e){e.style.order=m[e.dataset.k]})};sbOrd();window.sbUnk=function(){fetch("/api/unk").then(r=>r.json()).then(u=>{var b=document.getElementById("sbbadge");b.textContent=u.n;b.hidden=!u.n;try{var R=JSON.parse(localStorage.getItem("rokrem")||"{}"),el=document.getElementById("sbrem"),hr=(u.now-u.last)/3600;if(R.on&&u.last&&hr>=(R.h||12)&&localStorage.getItem("rokremx")!=String(u.last)){if(!el){el=document.createElement("div");el.id="sbrem";el.style.cssText="position:fixed;top:12px;left:50%;transform:translateX(-50%);z-index:80;padding:9px 14px;border-radius:12px;background:var(--card);color:var(--ink);border:1px solid var(--warn);box-shadow:0 6px 24px rgba(0,0,0,.25);font-size:.9rem;display:flex;gap:10px;align-items:center";document.body.appendChild(el)}el.innerHTML="<span>⏰ Seit "+(hr<48?Math.floor(hr)+" Std":Math.floor(hr/24)+" Tagen")+" keine neuen Berichte.</span>";var x=document.createElement("button");x.textContent="Ausblenden";x.onclick=function(){try{localStorage.setItem("rokremx",String(u.last))}catch(e){}el.remove()};el.appendChild(x)}else if(el)el.remove()}catch(e){}}).catch(function(){})};sbUnk();setInterval(sbUnk,30000)</script><script>(function(){const b=document.getElementById("mbtn"),x=document.getElementById("sbx"),ov=document.getElementById("sbov"),n=document.getElementById("sb"),R=document.documentElement,B=document.body;n.querySelectorAll("a[data-p]").forEach(a=>{if(a.dataset.p===(location.pathname.replace(/\/+$/,"")||"/"))a.className="cur"});let V={w:"1600",a:"c"},O=window.innerWidth>=1100;try{V=Object.assign(V,JSON.parse(localStorage.getItem("rokview")||"{}"));const o=localStorage.getItem("roksb");if(o!==null)O=o==="1"}catch(e){}const ap=()=>{R.style.setProperty("--mw",V.w==="100%"?"100%":V.w+"px");R.style.setProperty("--ml",V.a==="l"?"0":"auto");R.style.setProperty("--mr",V.a==="r"?"0":"auto");document.querySelectorAll("#mw button").forEach(y=>y.classList.toggle("on",y.dataset.v===V.w));document.querySelectorAll("#ma button").forEach(y=>y.classList.toggle("on",y.dataset.v===V.a))};const so=v=>{O=v;B.classList.toggle("sbopen",O);b.setAttribute("aria-expanded",O);try{localStorage.setItem("roksb",O?"1":"0")}catch(e){}};document.addEventListener("DOMContentLoaded",ap);
 document.addEventListener("click",e=>{const y=e.target.closest(".seg button");if(!y||!y.parentNode.id.match(/^m[wa]$/))return;if(y.parentNode.id==="mw")V.w=y.dataset.v;else V.a=y.dataset.v;try{localStorage.setItem("rokview",JSON.stringify(V))}catch(e){}ap()});ap();B.classList.toggle("sbopen",O);b.onclick=()=>so(!O);x.onclick=()=>so(false);ov.onclick=()=>so(false);document.addEventListener("keydown",e=>{if(e.key==="Escape"&&window.innerWidth<1100)so(false)})})()</script>@@QP@@
@@ -1910,7 +1936,7 @@ document.addEventListener("click",e=>{const y=e.target.closest(".seg button");if
 <section class="inact" id="inact"><div class="ih"><div><h2 id="ihT"></h2><div class="note" id="ihS"></div></div><div class="ib"><button type="button" id="iadd"></button><button type="button" id="iclr"></button></div></div>
 <form id="iform" hidden><input id="inm" maxlength="40" required><input id="idy" type="number" min="3" max="999" value="4"><button type="submit" id="iok"></button></form>
 <div id="ilist" class="ilist"></div></section>
-<div class="pane" style="margin-top:0"><div class="chips" id="achips" role="group" aria-label="Kategorien im Durchschnitt"></div><div class="nmbar"><input id="asearch" type="search" placeholder="Mitglied suchen …"> <span class="note" id="ainfo"></span> <span class="note" id="amsg"></span></div>
+<div class="pane" style="margin-top:0"><div class="snapbar"><label>Stand <select id="asel"></select></label><label>Vergleich mit <select id="abase"></select></label><button type="button" id="adel">Diesen Stand löschen</button></div><div class="chips" id="achips" role="group" aria-label="Kategorien im Durchschnitt"></div><div class="nmbar"><input id="asearch" type="search" placeholder="Mitglied suchen …"> <span class="note" id="ainfo"></span> <span class="note" id="amsg"></span></div>
 <div class="wrap"><table id="al"></table></div>
 <p class="note">Klick auf eine Spaltenüberschrift sortiert die Liste. Grün und rot zeigen die Veränderung seit dem vorherigen Stand. Ranglisten ohne Resource Assistance und Armory Contributions.</p>
 <p class="note">Klick auf eine Kategorie über der Tabelle schaltet sie aus, mit der Maus ziehen ändert die Reihenfolge der Spalten. Die Einstellungen werden gespeichert. Eine ausgeschaltete Kategorie wird ausgeblendet und zählt nicht zum Ø Rang. Ø Rang ist der Durchschnitt der Plätze in den eingeschalteten Kategorien, niedriger ist besser. Die Zahl dahinter ist der Platz in dieser Durchschnittswertung.</p></div>
@@ -1919,7 +1945,8 @@ let LANG='de';try{LANG=localStorage.getItem('roklang')==='en'?'en':'de'}catch(e)
 const LOC=LANG==='en'?'en-US':'de-DE',$=id=>document.getElementById(id),f=n=>Number(n).toLocaleString(LOC);
 const esc=s=>String(s==null?'':s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
 const MON=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
-const dm=d=>LANG==='en'?(p=>p.length===3?+p[2]+' '+MON[+p[1]-1]+' '+p[0]:d)(d.split('-')):d.split('-').reverse().join('.');
+const dm0=d=>LANG==='en'?(p=>p.length===3?+p[2]+' '+MON[+p[1]-1]+' '+p[0]:d)(d.split('-')):d.split('-').reverse().join('.');
+const dm=d=>{const q=String(d).split(' ');return dm0(q[0])+(q[1]?' '+q[1]:'')};
 function saveUi(){if(!lastAl)return;fetch('/api/alliance_ui',{method:'POST',body:JSON.stringify({order:lastAl.cats.map(c=>c.key),off:lastAl.cats.map(c=>c.key).filter(k=>!alOn.has(k)),sort:alSort,dir:alDir})}).catch(()=>{})}
 const LL=(d,e)=>LANG==='en'?e:d;let INA={asof:'',members:[]};
 function inRender(){const m=INA.members,n=(lastAl&&lastAl.members||[]).length;$('ihT').textContent=LL('Inaktivitätsbericht','Inactivity Report');
@@ -1934,8 +1961,11 @@ $('ilist').onclick=e=>{const b=e.target.closest('.x');if(!b)return;INA.members=I
 fetch('/api/inactive').then(r=>r.json()).then(d=>{INA=d;inRender()}).catch(()=>{});
 let lastAl=null,lastSig='',alSort='power',alDir=-1,alQ='',alOn=null;const alOpen=new Set();
 function renderAlliance(a){lastAl=a;if(!a)return;try{inRender()}catch(e){}const cats=a.cats,ms=a.members;
- const newest=Object.values(a.latest||{}).sort().pop();
- $('asub').textContent=newest?'Member-Rangliste · Stand '+dm(newest):'Member-Rangliste';
+ const newest=a.sel||Object.values(a.latest||{}).sort().pop();
+ $('asub').textContent=newest?LL('Member-Rangliste · Stand ','Member ranking · as of ')+dm(newest):LL('Member-Rangliste','Member ranking');
+ const sn=a.snaps||[];$('asel').innerHTML=sn.slice().reverse().map(d=>`<option value="${d}"${d===a.sel?' selected':''}>${dm(d)}</option>`).join('');
+ $('abase').innerHTML=`<option value="">${LL('Vorheriger Stand','Previous snapshot')}</option>`+sn.filter(d=>d<a.sel).reverse().map(d=>`<option value="${d}"${d===a.base?' selected':''}>${dm(d)}</option>`).join('');
+ $('adel').hidden=!sn.length;$('adel').textContent=LL('Diesen Stand löschen','Delete this snapshot');
  const AV=[['avg_all','Ø Rang',[]]];
   if(alOn===null){const u=a.ui||{};alOn=new Set(cats.map(c=>c.key).filter(k=>!(u.off||[]).includes(k)));
    if(u.sort&&(u.sort==='avg_all'||cats.some(c=>c.key===u.sort))){alSort=u.sort;alDir=u.dir||(u.sort==='avg_all'?1:-1)}}
@@ -1955,7 +1985,7 @@ function renderAlliance(a){lastAl=a;if(!a)return;try{inRender()}catch(e){}const 
    return `<div><h3>${c.label}</h3><table><tr><th>Tag</th><th>Wert</th><th>Rang</th><th>Veränderung</th></tr>${h.map((r,i)=>{const p=h[i+1],d=p&&p[1]!=null&&r[1]!=null?r[1]-p[1]:null;
      return `<tr><td>${dm(r[0])}</td><td>${r[1]==null?'–':f(r[1])}</td><td>${r[2]==null?'–':'#'+r[2]}</td><td class="${d>0?'good':d<0?'bad':''}">${d==null?'–':(d>0?'+':'')+f(d)}</td></tr>`}).join('')}</table></div>`}).join('')}</div></td></tr>`;
  $('al').innerHTML=ms.length?`<tr><th class="t">#</th><th class="t">Name</th>${AV.map(([k,l])=>`<th data-k="${k}" class="${alSort===k?'on':''}" title="Durchschnitt der Plätze in den eingeschalteten Kategorien, niedriger ist besser">${l}${alSort===k?(alDir<0?' ▼':' ▲'):''}</th>`).join('')}${vc.map(c=>`<th data-k="${c.key}" class="${alSort===c.key?'on':''}">${c.label}${alSort===c.key?(alDir<0?' ▼':' ▲'):''}</th>`).join('')}</tr>`+
-  rows.map((m,i)=>`<tr class="m" data-n="${esc(m.name)}"><td class="r">${i+1}</td><td class="n nm">${alOpen.has(m.name)?'▾':'▸'} ${esc(m.name)}</td>${AV.map(([k])=>acell(m,k)).join('')}${vc.map(c=>cell(m,c.key)).join('')}</tr>${alOpen.has(m.name)?hist(m):''}`).join(''):
+  rows.map((m,i)=>`<tr class="m" data-n="${esc(m.name)}"><td class="r">${i+1}</td><td class="n nm">${alOpen.has(m.name)?'▾':'▸'} ${esc(m.name)}${(a.snaps||[]).length>1?(m.native?`<span class="tg nat" title="${LL('Im ersten getrackten Stand dabei','Present in the first tracked snapshot')}">Native</span>`:`<span class="tg" title="${LL('Zum ersten Mal getrackt am ','First tracked on ')}${dm(m.first)}">${LL('neu ','new ')}${dm(m.first)}</span>`):''}</td>${AV.map(([k])=>acell(m,k)).join('')}${vc.map(c=>cell(m,c.key)).join('')}</tr>${alOpen.has(m.name)?hist(m):''}`).join(''):
   '<tr><td class="note">Noch keine Allianz-Daten. Schick mir Screenshots der Ranglisten, ich erstelle dir die Datei zum Einfügen.</td></tr>';
  $('ainfo').textContent=ms.length?`${rows.length} / ${ms.length} Mitglieder`:''}
 $('al').addEventListener('click',e=>{const th=e.target.closest('th[data-k]');if(th){if(alSort===th.dataset.k)alDir=-alDir;else{alSort=th.dataset.k;alDir=alSort.startsWith('avg_')?1:-1}saveUi();return renderAlliance(lastAl)}
@@ -1970,7 +2000,12 @@ $('abtn').onclick=()=>$('afile').click();
 $('aexp').href='/allianz/export?lang='+LANG;
 $('afile').onchange=async e=>{let n=0,err='';for(const fl of e.target.files){try{const r=await fetch('/api/alliance',{method:'POST',body:await fl.text()}).then(r=>r.json());if(r.ok)n+=r.n;else err=r.error}catch(x){err=String(x)}}
  $('amsg').textContent=err?'Fehler: '+err:n+' Eintrag/Einträge übernommen.';e.target.value='';lastSig='';load()};
-async function load(){try{const a=await fetch('/api/alliance').then(r=>r.json());const sig=JSON.stringify(a);if(sig===lastSig)return;lastSig=sig;renderAlliance(a)}catch(e){}}
+let alSel='',alBase='';
+$('asel').onchange=()=>{alSel=$('asel').value;if(alBase>=alSel)alBase='';lastSig='';load()};
+$('abase').onchange=()=>{alBase=$('abase').value;lastSig='';load()};
+$('adel').onclick=async()=>{if(!lastAl||!lastAl.sel)return;if(!window.confirm(LL('Diesen Stand ('+dm(lastAl.sel)+') endgültig löschen?','Delete this snapshot ('+dm(lastAl.sel)+') permanently?')))return;
+ await fetch('/api/alliance_del',{method:'POST',body:JSON.stringify({day:lastAl.sel})});alSel='';alBase='';lastSig='';load()};
+async function load(){try{const a=await fetch('/api/alliance?sel='+encodeURIComponent(alSel)+'&base='+encodeURIComponent(alBase)).then(r=>r.json());const sig=JSON.stringify(a);if(sig===lastSig)return;lastSig=sig;renderAlliance(a)}catch(e){}}
 load();setInterval(load,4000);
 """ + _I18N + r"""</script></body></html>"""
 
@@ -2590,10 +2625,12 @@ def alliance_export_html(db, lang):
         if c:
             data.append({"n": m["name"], "c": c})
     newest = max(a["latest"].values()) if a["latest"] else ""
-    day = newest.split("-")
+    tpart = newest.split(" ")[1] if " " in newest else ""
+    day = newest.split(" ")[0].split("-")
     if len(day) == 3:
         MON = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]
         stand = "%s.%s.%s" % (day[2], day[1], day[0]) if lang == "de" else "%d %s %s" % (int(day[2]), MON[int(day[1]) - 1], day[0])
+        stand += " " + tpart if tpart else ""
     else:
         stand = "-"
     t = dict(EXPORT_TXT[lang])
@@ -2675,7 +2712,8 @@ def make_handler(db, watcher):
             elif u.path == "/api/quick":
                 self.send(json.dumps(db.quick(parse_qs(u.query).get("account", ["main"])[0])), "application/json")
             elif u.path == "/api/alliance":
-                self.send(json.dumps(db.alliance_stats()), "application/json")
+                q = parse_qs(u.query)
+                self.send(json.dumps(db.alliance_stats(q.get("sel", [""])[0] or None, q.get("base", [""])[0] or None)), "application/json")
             elif u.path == "/api/stats":
                 q = parse_qs(u.query)
                 self.send(json.dumps(db.stats(q.get("from", ["0000-01-01"])[0], q.get("to", ["9999-12-31"])[0],
@@ -2740,6 +2778,13 @@ def make_handler(db, watcher):
                     return
                 self.send(json.dumps({"ok": True}), "application/json")
                 threading.Thread(target=lambda: (time.sleep(0.4), os._exit(0)), daemon=True).start()
+                return
+            if path == "/api/alliance_del":
+                try:
+                    n = int(self.headers.get("Content-Length", 0))
+                    self.send(json.dumps({"ok": True, "n": db.alliance_del(str(json.loads(self.rfile.read(min(n, 10000))).get("day", "")))}), "application/json")
+                except Exception as e:
+                    self.send(json.dumps({"ok": False, "error": str(e)}), "application/json")
                 return
             if path == "/api/alliance":
                 try:
