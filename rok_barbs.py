@@ -1160,6 +1160,14 @@ def make_handler(db, watcher):
                 self.send_error(404)
         def do_POST(self):
             path = urlparse(self.path).path
+            if path == "/api/quit":          # vom Starter (rok_start.pyw) genutzt, um eine laufende Version zu beenden
+                org = self.headers.get("Origin")
+                if org and not org.startswith("http://127.0.0.1"):
+                    self.send(json.dumps({"ok": False}), "application/json")
+                    return
+                self.send(json.dumps({"ok": True}), "application/json")
+                threading.Thread(target=lambda: (time.sleep(0.4), os._exit(0)), daemon=True).start()
+                return
             if path == "/api/profile":
                 try:
                     n = int(self.headers.get("Content-Length", 0))
