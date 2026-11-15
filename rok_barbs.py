@@ -1318,10 +1318,10 @@ async function load(){const[a,b]=range();
   `Überwache ${st.files} Dateien (${st.imported} neu seit Start)`+(st.pending?` · Lese gerade noch ${st.pending} Dateien, neueste zuerst …`:'');
  const t=s.totals,pt=s.pvp_totals,po=s.aoo_totals;
  $('kpi').innerHTML=kpi('Solo-Berichte',f(t.solo))+kpi('Rallys',f(t.rallies))+kpi('Festungen zerstört',f(t.forts))+
-  kpi('Gegner besiegt (solo)',f(t.foes))+kpi('Barbaren-Truppen besiegt (solo)',f(t.killed))+kpi('Kommandanten-XP',f(t.xp))+
+  kpi('Barbaren besiegt (solo)',f(t.foes))+kpi('Kommandanten-XP',f(t.xp))+
   kpi('Leicht verwundet (solo)',f(t.hurt))+kpi('Schwer verwundet (solo)',f(t.severe),'bad')+
   (pt.n?kpi('Spielerkämpfe',f(pt.n))+kpi('Kill Points',f(pt.kp_gained))+kpi('Kill Count (Gegner schwer verwundet)',f(pt.enemy_severe))+kpi('Eigene schwer verwundet',f(pt.own_severe),'bad')+kpi('Trade (schwer verwundet)',tr(pt.enemy_severe,pt.own_severe),trc(pt.enemy_severe,pt.own_severe)):'');
- $('kpinote').textContent='Barbaren-Truppen = Summe der Truppenstärke aller besiegten Gegner (nicht die Anzahl). Zahlen zu Truppen und Verlusten aus Rallys gelten für alle Teilnehmer zusammen und sind hier nicht eingerechnet.';
+ $('kpinote').textContent='Zahlen zu Truppen und Verlusten aus Rallys gelten für alle Teilnehmer zusammen und sind hier nicht eingerechnet.';
  const sum=k=>s.loot.filter(x=>x.kind===k).reduce((n,x)=>n+x.total,0);
  const big=[['Training-Speedups',sum('speed_training'),'Min','speed_training'],['Universal-Speedups',sum('speed_universal'),'Min','speed_universal'],['Heilungs-Speedups',sum('speed_healing'),'Min','speed_healing'],
   ['Holz',sum('wood'),'','wood'],['Stein',sum('stone'),'','stone'],['Gold',sum('gold'),'','gold'],['Edelsteine',sum('gems'),'','gems'],['XP aus Büchern',sum('xp_books'),'','xp_books'],
@@ -1382,8 +1382,8 @@ const pvList=l=>l.map(x=>{const so=x.role==='solo',t=x.totals;
  $('hchips').innerHTML=pr?[['power','⚡','Macht'],['kill_points','⚔️','Kill Points'],['dead','💀','Tote'],['helps','🤝','Hilfen'],['gathered','🧺','Gesammelt']].filter(x=>pr.last[x[0]]!=null)
    .map(x=>`<div class="chip"><b>${x[1]} ${compact(pr.last[x[0]])}</b><span>${x[2]}${pr.delta[x[0]]?`<em class="${pr.delta[x[0]]>=0?'good':'bad'}">${dd(pr.delta[x[0]])}</em>`:''}</span></div>`).join(''):'';
  showTab(tab);
- $('dt').innerHTML='<tr><th>Tag</th><th>Solo-Berichte</th><th>Rallys</th><th>Festungen</th><th>Gegner (solo)</th><th>Barbaren-Truppen (solo)</th><th>Größter Gegner</th><th>XP</th><th>Verwundet (solo)</th><th>Spielerkampf-Berichte</th></tr>'+
-  s.days.filter(d=>d.day>=a&&d.day<=b).map(d=>`<tr><td>${dm(d.day)}</td><td>${f(d.solo)}</td><td>${f(d.rallies)}</td><td>${f(d.forts)}</td><td>${f(d.foes)}</td><td>${f(d.killed)}</td><td>${f(d.maxfoe)}</td><td>${f(d.xp)}</td><td>${f(d.hurt)}</td><td>${f(d.pvp)}</td></tr>`).join('')}
+ $('dt').innerHTML='<tr><th>Tag</th><th>Solo-Berichte</th><th>Rallys</th><th>Festungen</th><th>Barbaren (solo)</th><th>Größter Gegner</th><th>XP</th><th>Verwundet (solo)</th><th>Spielerkampf-Berichte</th></tr>'+
+  s.days.filter(d=>d.day>=a&&d.day<=b).map(d=>`<tr><td>${dm(d.day)}</td><td>${f(d.solo)}</td><td>${f(d.rallies)}</td><td>${f(d.forts)}</td><td>${f(d.foes)}</td><td>${f(d.maxfoe)}</td><td>${f(d.xp)}</td><td>${f(d.hurt)}</td><td>${f(d.pvp)}</td></tr>`).join('')}
 const avPost=async data=>{await fetch('/api/avatar',{method:'POST',body:JSON.stringify({key:window.avKey||'all',data})});lastSig='';load()};
 $('avbox').onclick=()=>$('avfile').click();$('avbox').onkeydown=e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();$('avfile').click()}};
 $('avreset').onclick=()=>avPost('');
@@ -1412,7 +1412,7 @@ const EN=[
 [`Beute`,`Loot`],[`Festungen`,`Forts`],[`Barbarenkämpfe`,`Barbarian Battles`],[`Spielerkämpfe`,`PvP Battles`],[`Profil`,`Profile`],[`Pro Tag`,`Per Day`],[`Namen eintragen`,`Enter Names`],
 [`offen`,`open`],[`weitere`,`more`],[`letzte`,`last`],
 [`Solo-Berichte`,`Solo reports`],[`Rallys`,`Rallies`],[`Festungen zerstört`,`Forts destroyed`],[`Gegner besiegt (solo)`,`Enemies defeated (solo)`],
-[`Barbaren-Truppen besiegt (solo)`,`Barbarian troops defeated (solo)`],[`Barbaren-Truppen (solo)`,`Barbarian troops (solo)`],[`Barbaren-Truppen`,`Barbarian troops`],
+[`Barbaren besiegt (solo)`,`Barbarians defeated (solo)`],[`Barbaren (solo)`,`Barbarians (solo)`],[`Zahlen zu Truppen und Verlusten aus Rallys gelten für alle Teilnehmer zusammen und sind hier nicht eingerechnet.`,`Troop and loss figures from rallies apply to all participants combined and are not included here.`],[`Barbaren-Truppen (solo)`,`Barbarian troops (solo)`],[`Barbaren-Truppen`,`Barbarian troops`],
 [`Kommandanten-XP`,`Commander XP`],[`Leicht verwundet (solo)`,`Lightly wounded (solo)`],[`Schwer verwundet (solo)`,`Severely wounded (solo)`],
 [`Kill Count (Gegner schwer verwundet)`,`Kill Count (enemy severely wounded)`],[`Kill Count (Gegner schwer)`,`Kill Count (enemy severe)`],
 [`Eigene schwer verwundet`,`Own severely wounded`],[`Eigene leicht verwundet`,`Own lightly wounded`],[`Eigene schwer`,`Own severe`],[`Eigene leicht`,`Own light`],
