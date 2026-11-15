@@ -1456,8 +1456,8 @@ const EMO={speed_training:'⏩',speed_universal:'⏱️',speed_healing:'💊',wo
 const mi=x=>`<img class="mi" src="/icon/${IK.has(x.kind)?x.kind:'item_'+x.id}" alt="" onerror="icoFb(this,'${slug(x.name)}','${EMO[x.kind]||'🎁'}')">`;
 const chipsH=l=>l.length?l.slice().sort((a,b)=>(b.unk?1:0)-(a.unk?1:0)).slice(0,4).map(x=>`<span class="ch${x.unk?' unk':''}"${x.unk?` data-item="${x.id}" title="Noch nicht benannt. Klicken zum Benennen."`:''}>${mi(x)}${f(x.qty)}× ${esc(x.name)}${x.unk?' <b class="qm">?</b>':''}</span>`).join('')+(l.length>4?`<span class="ch">+${l.length-4} weitere</span>`:''):'keine Beute';
 const chips=l=>l.length?l.slice(0,3).map(x=>f(x.qty)+'× '+x.name).join(', ')+(l.length>3?` (+${l.length-3} weitere)`:''):'keine Beute';
-const ftTotal=fl=>{const m=new Map();fl.forEach(x=>(x.loot||[]).forEach(i=>{const k=i.id||i.name,o=m.get(k);if(o)o.qty+=i.qty;else m.set(k,Object.assign({},i,{total:null}))}));const l=[...m.values()].sort((a,b)=>b.qty-a.qty),n=l.reduce((a,x)=>a+x.qty,0);
- if(!l.length)return'';return`<details class="rep fttot" open><summary><b>Items insgesamt: ${f(n)}</b><span class="note">${f(l.length)} Arten · ${f(fl.length)} Festungen</span></summary><div class="rb">${lootList(l)}</div></details>`};
+const ftTotal=(fl,un)=>{const m=new Map();fl.forEach(x=>(x.loot||[]).forEach(i=>{const k=i.id||i.name,o=m.get(k);if(o)o.qty+=i.qty;else m.set(k,Object.assign({},i,{total:null}))}));const l=[...m.values()].sort((a,b)=>b.qty-a.qty),n=l.reduce((a,x)=>a+x.qty,0);
+ if(!l.length)return'';return`<details class="rep fttot" open><summary><b>Items insgesamt: ${f(n)}</b><span class="note">${f(l.length)} Arten · ${f(fl.length)} ${un||'Festungen'}</span></summary><div class="rb">${lootList(l)}</div></details>`};
 const lootList=l=>l.length?`<ul class="ll">${l.map(x=>`<li${x.unk?` class="unk" data-item="${x.id}" title="Noch nicht benannt. Klicken zum Benennen."`:''}>${mi(x)}<b>${f(x.qty)}×</b> ${esc(x.name)}${x.total!=null&&x.total!==x.qty?` <span class="note">= ${f(x.total)}${SUF[x.kind]||''}</span>`:''}${x.unk?' <b class="qm">?</b><small>noch nicht benannt</small>':''}</li>`).join('')}</ul>`:'<p class="note">Keine Beute in diesem Bericht.</p>';
 const facts=a=>`<dl class="fa">${a.map(([k,v,c])=>`<div><dt>${k}</dt><dd class="${c||''}">${v}</dd></div>`).join('')}</dl>`;
 const rep=(k,head,body)=>`<details class="rep" data-k="${k}"${openRep.has(k)?' open':''}><summary>${head}</summary><div class="rb">${body}</div></details>`;
@@ -1564,7 +1564,7 @@ async function load(){const[a,b]=range();
  // Barbarenkämpfe (ein Bericht = eine Zeile, die Runden/Gegner stehen darin)
  $('c_bt').textContent=s.battles.length?(s.battles.length>=200?'letzte 200':s.battles.length):'';
  renderChain(s.chain);
- $('bt').innerHTML=s.battles.map(x=>{const so=x.role==='solo',t=x.totals;
+ $('bt').innerHTML=ftTotal(s.battles,'Berichte')+s.battles.map(x=>{const so=x.role==='solo',t=x.totals;
   return rep('b'+x.mail_id,
    `<span class="tm">${x.time}</span>${role[x.role]}<b>${esc(x.title)}</b><span class="note">${esc(x.hero)}</span>${x.ck?`<span class="tag">${x.cnew?'Neustart · ':''}Chain ${x.ck} · ${x.ap} AP</span>`:''}<span class="sm">${chipsH(x.loot)}</span>`,
    facts(so?[['Gegner im Bericht',x.n],['Gegner-Truppen',f(t.foe_troops)],['Leicht verwundet',f(t.hurt)],['Schwer verwundet',f(t.severe),'bad'],['Kommandanten-XP',f(t.xp)]]
