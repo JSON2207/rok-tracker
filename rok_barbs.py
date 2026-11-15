@@ -241,6 +241,7 @@ class DB:
         CREATE TABLE IF NOT EXISTS profile_log(account TEXT, day TEXT, time TEXT, name TEXT, data TEXT, PRIMARY KEY(account, day, time));
         INSERT OR IGNORE INTO profile_log SELECT account, day, '00:00', name, data FROM profile WHERE NOT EXISTS (SELECT 1 FROM profile_log l WHERE l.account=profile.account AND l.day=profile.day);
         CREATE TABLE IF NOT EXISTS alliance(day TEXT, cat TEXT, name TEXT, rank INT, value INT, PRIMARY KEY(day, cat, name));
+        CREATE TABLE IF NOT EXISTS alliance_arch(lst TEXT, day TEXT, cat TEXT, name TEXT, rank INT, value INT, PRIMARY KEY(lst, day, cat, name));
         CREATE INDEX IF NOT EXISTS ix_b ON battles(day, account);
         CREATE INDEX IF NOT EXISTS ix_f ON forts(day, account);
         CREATE INDEX IF NOT EXISTS ix_l ON loot(day, account);
@@ -974,10 +975,39 @@ class DB:
             self.c.commit()
         return n
 
-    def alliance_stats(self, sel=None, base=None):
+    def alliance_lists(self):
+        return [r["lst"] for r in self.q("SELECT lst, MAX(day) d FROM alliance_arch GROUP BY lst ORDER BY d DESC, lst")]
+
+    def alliance_newlist(self, name=""):
+        """Aktuelle Liste unter einem Namen archivieren (Standard: Woche N des neuesten Standes) und eine leere Liste beginnen."""
+        with self.lock:
+            last = self.c.execute("SELECT MAX(day) FROM alliance").fetchone()[0]
+            if not last:
+                raise ValueError("Die aktuelle Liste ist leer")
+            wk = datetime.strptime(last[:10], "%Y-%m-%d").isocalendar()
+            name = (name or "").strip()[:60] or "Woche %d %d" % (wk[1], wk[0])
+            have = {r[0] for r in self.c.execute("SELECT DISTINCT lst FROM alliance_arch")}
+            base, i = name, 2
+            while name in have:
+                name = "%s (%d)" % (base, i); i += 1
+            self.c.execute("INSERT INTO alliance_arch SELECT ?, day, cat, name, rank, value FROM alliance", (name,))
+            self.c.execute("DELETE FROM alliance")
+            self.c.commit()
+        return name
+
+    def alliance_dellist(self, name):
+        with self.lock:
+            n = self.c.execute("DELETE FROM alliance_arch WHERE lst=?", (name,)).rowcount
+            self.c.commit()
+        return n
+
+    def alliance_stats(self, sel=None, base=None, lst=None):
         """sel = gewaehlter Stand (Tag oder 'Tag HH:MM'), base = Vergleichsstand (leer: jeweils der vorherige Stand).
         Native = Mitglieder des ersten getrackten Standes; alle anderen bekommen das Datum des ersten Auftauchens (first)."""
-        rows = self.q("SELECT day, cat, name, rank, value FROM alliance ORDER BY day")
+        if lst:
+            rows = self.q("SELECT day, cat, name, rank, value FROM alliance_arch WHERE lst=? ORDER BY day", (lst,))
+        else:
+            rows = self.q("SELECT day, cat, name, rank, value FROM alliance ORDER BY day")
         snaps = sorted({r["day"] for r in rows})
         if sel not in snaps:
             sel = snaps[-1] if snaps else None
@@ -1008,7 +1038,7 @@ class DB:
                                    d=(last[1] - prev[1]) if prev and last[1] is not None else None)
         ui = self.alliance_ui()
         names = dict(ALLIANCE_CATS)
-        return dict(cats=[dict(key=k, label=names[k]) for k in ui["order"]], ui=ui, latest=latest, snaps=snaps, sel=sel, base=base,
+        return dict(cats=[dict(key=k, label=names[k]) for k in ui["order"]], ui=ui, latest=latest, snaps=snaps, sel=sel, base=base, lists=self.alliance_lists(), lst=lst or "",
                     days={c: sorted(d) for c, d in days.items()}, members=sorted(members.values(), key=lambda m: m["name"].lower()))
 
     def profile_stats(self, d_from, d_to, account=""):
@@ -1885,7 +1915,7 @@ const EN=[
 [`Datei unvollständig`,`File incomplete`],
 [`Alle Einträge dieser Seite löschen und auf den Anfangszustand zurücksetzen?`,`Delete all entries on this page and reset to the initial state?`],[`Items insgesamt`,`Total items`],
 [`AP-Verbrauch`,`AP usage`],[`Barbaren-Beute insgesamt`,`Total barbarian loot`],[`Festungs-Beute insgesamt`,`Total fort loot`],[`Sonstige Beute`,`Other loot`],[`AP pro Festung`,`AP per fort`],[`AP gesamt`,`AP total`],[`Barbaren-AP sind geschätzt (Chain-Einstellungen im Tab Barbarenkämpfe), Festungen zählen auch beigetretene Rallys.`,`Barbarian AP are estimated (chain settings in the Barbarian fights tab), forts also include joined rallies.`],
-[`Arten`,`types`],[`Vergleich mit`,`Compare with`],[`Vorheriger Stand`,`Previous snapshot`],[`Diesen Stand löschen`,`Delete this snapshot`],
+[`Arten`,`types`],[`Vergleich mit`,`Compare with`],[`Liste`,`List`],[`Neue Liste`,`New list`],[`Liste löschen`,`Delete list`],[`Aktuelle Liste`,`Current list`],[`Vorheriger Stand`,`Previous snapshot`],[`Diesen Stand löschen`,`Delete this snapshot`],
 [`Speedups:`,`Speedups:`],[`Heilung`,`Healing`],
 ];
 const ENM=new Map(EN.map(([a,b])=>[a,b]));
@@ -1936,7 +1966,7 @@ document.addEventListener("click",e=>{const y=e.target.closest(".seg button");if
 <section class="inact" id="inact"><div class="ih"><div><h2 id="ihT"></h2><div class="note" id="ihS"></div></div><div class="ib"><button type="button" id="iadd"></button><button type="button" id="iclr"></button></div></div>
 <form id="iform" hidden><input id="inm" maxlength="40" required><input id="idy" type="number" min="3" max="999" value="4"><button type="submit" id="iok"></button></form>
 <div id="ilist" class="ilist"></div></section>
-<div class="pane" style="margin-top:0"><div class="snapbar"><label>Stand <select id="asel"></select></label><label>Vergleich mit <select id="abase"></select></label><button type="button" id="adel">Diesen Stand löschen</button></div><div class="chips" id="achips" role="group" aria-label="Kategorien im Durchschnitt"></div><div class="nmbar"><input id="asearch" type="search" placeholder="Mitglied suchen …"> <span class="note" id="ainfo"></span> <span class="note" id="amsg"></span></div>
+<div class="pane" style="margin-top:0"><div class="snapbar"><label>Liste <select id="alst"></select></label><button type="button" id="anew">Neue Liste</button><button type="button" id="adl" hidden>Liste löschen</button><label>Stand <select id="asel"></select></label><label>Vergleich mit <select id="abase"></select></label><button type="button" id="adel">Diesen Stand löschen</button></div><div class="chips" id="achips" role="group" aria-label="Kategorien im Durchschnitt"></div><div class="nmbar"><input id="asearch" type="search" placeholder="Mitglied suchen …"> <span class="note" id="ainfo"></span> <span class="note" id="amsg"></span></div>
 <div class="wrap"><table id="al"></table></div>
 <p class="note">Klick auf eine Spaltenüberschrift sortiert die Liste. Grün und rot zeigen die Veränderung seit dem vorherigen Stand. Ranglisten ohne Resource Assistance und Armory Contributions.</p>
 <p class="note">Klick auf eine Kategorie über der Tabelle schaltet sie aus, mit der Maus ziehen ändert die Reihenfolge der Spalten. Die Einstellungen werden gespeichert. Eine ausgeschaltete Kategorie wird ausgeblendet und zählt nicht zum Ø Rang. Ø Rang ist der Durchschnitt der Plätze in den eingeschalteten Kategorien, niedriger ist besser. Die Zahl dahinter ist der Platz in dieser Durchschnittswertung.</p></div>
@@ -1965,7 +1995,9 @@ function renderAlliance(a){lastAl=a;if(!a)return;try{inRender()}catch(e){}const 
  $('asub').textContent=newest?LL('Member-Rangliste · Stand ','Member ranking · as of ')+dm(newest):LL('Member-Rangliste','Member ranking');
  const sn=a.snaps||[];$('asel').innerHTML=sn.slice().reverse().map(d=>`<option value="${d}"${d===a.sel?' selected':''}>${dm(d)}</option>`).join('');
  $('abase').innerHTML=`<option value="">${LL('Vorheriger Stand','Previous snapshot')}</option>`+sn.filter(d=>d<a.sel).reverse().map(d=>`<option value="${d}"${d===a.base?' selected':''}>${dm(d)}</option>`).join('');
- $('adel').hidden=!sn.length;$('adel').textContent=LL('Diesen Stand löschen','Delete this snapshot');
+ const ls=a.lists||[];$('alst').innerHTML=`<option value="">${LL('Aktuelle Liste','Current list')}</option>`+ls.map(n=>`<option value="${esc(n)}"${n===a.lst?' selected':''}>${esc(n)}</option>`).join('');
+ const arch=!!a.lst;$('adl').hidden=!arch;$('anew').hidden=arch;$('adel').hidden=arch||!sn.length;$('abtn').hidden=arch;$('anew').textContent=LL('Neue Liste','New list');$('adl').textContent=LL('Liste löschen','Delete list');
+ $('adel').hidden=arch||!sn.length;$('adel').textContent=LL('Diesen Stand löschen','Delete this snapshot');
  const AV=[['avg_all','Ø Rang',[]]];
   if(alOn===null){const u=a.ui||{};alOn=new Set(cats.map(c=>c.key).filter(k=>!(u.off||[]).includes(k)));
    if(u.sort&&(u.sort==='avg_all'||cats.some(c=>c.key===u.sort))){alSort=u.sort;alDir=u.dir||(u.sort==='avg_all'?1:-1)}}
@@ -2000,12 +2032,17 @@ $('abtn').onclick=()=>$('afile').click();
 $('aexp').href='/allianz/export?lang='+LANG;
 $('afile').onchange=async e=>{let n=0,err='';for(const fl of e.target.files){try{const r=await fetch('/api/alliance',{method:'POST',body:await fl.text()}).then(r=>r.json());if(r.ok)n+=r.n;else err=r.error}catch(x){err=String(x)}}
  $('amsg').textContent=err?'Fehler: '+err:n+' Eintrag/Einträge übernommen.';e.target.value='';lastSig='';load()};
-let alSel='',alBase='';
+let alSel='',alBase='',alLst='';
+$('alst').onchange=()=>{alLst=$('alst').value;alSel='';alBase='';lastSig='';load()};
+$('anew').onclick=async()=>{if(!lastAl||!lastAl.sel)return;const wk=(d=>{const t=new Date(Date.UTC(+d[0],+d[1]-1,+d[2]));const n=t.getUTCDay()||7;t.setUTCDate(t.getUTCDate()+4-n);const y=t.getUTCFullYear();return [Math.ceil(((t-Date.UTC(y,0,1))/864e5+1)/7),y]})(lastAl.sel.slice(0,10).split('-'));
+ const nm=window.prompt(LL('Die aktuelle Liste wird unter diesem Namen gespeichert, danach beginnt eine neue, leere Liste:','The current list is saved under this name, then a new empty list starts:'),LL('Woche ','Week ')+wk[0]+' '+wk[1]);if(nm===null)return;
+ const r=await fetch('/api/alliance_newlist',{method:'POST',body:JSON.stringify({name:nm})}).then(r=>r.json());$('amsg').textContent=r.ok?LL('Gespeichert als „'+r.name+'“. Neue Liste ist leer.','Saved as "'+r.name+'". New list is empty.'):LL('Fehler: ','Error: ')+r.error;alSel='';alBase='';lastSig='';load()};
+$('adl').onclick=async()=>{if(!alLst||!window.confirm(LL('Liste „'+alLst+'“ endgültig löschen?','Delete list "'+alLst+'" permanently?')))return;await fetch('/api/alliance_dellist',{method:'POST',body:JSON.stringify({name:alLst})});alLst='';alSel='';alBase='';lastSig='';load()};
 $('asel').onchange=()=>{alSel=$('asel').value;if(alBase>=alSel)alBase='';lastSig='';load()};
 $('abase').onchange=()=>{alBase=$('abase').value;lastSig='';load()};
 $('adel').onclick=async()=>{if(!lastAl||!lastAl.sel)return;if(!window.confirm(LL('Diesen Stand ('+dm(lastAl.sel)+') endgültig löschen?','Delete this snapshot ('+dm(lastAl.sel)+') permanently?')))return;
  await fetch('/api/alliance_del',{method:'POST',body:JSON.stringify({day:lastAl.sel})});alSel='';alBase='';lastSig='';load()};
-async function load(){try{const a=await fetch('/api/alliance?sel='+encodeURIComponent(alSel)+'&base='+encodeURIComponent(alBase)).then(r=>r.json());const sig=JSON.stringify(a);if(sig===lastSig)return;lastSig=sig;renderAlliance(a)}catch(e){}}
+async function load(){try{const a=await fetch('/api/alliance?sel='+encodeURIComponent(alSel)+'&base='+encodeURIComponent(alBase)+'&lst='+encodeURIComponent(alLst)).then(r=>r.json());const sig=JSON.stringify(a);if(sig===lastSig)return;lastSig=sig;renderAlliance(a)}catch(e){}}
 load();setInterval(load,4000);
 """ + _I18N + r"""</script></body></html>"""
 
@@ -2713,7 +2750,7 @@ def make_handler(db, watcher):
                 self.send(json.dumps(db.quick(parse_qs(u.query).get("account", ["main"])[0])), "application/json")
             elif u.path == "/api/alliance":
                 q = parse_qs(u.query)
-                self.send(json.dumps(db.alliance_stats(q.get("sel", [""])[0] or None, q.get("base", [""])[0] or None)), "application/json")
+                self.send(json.dumps(db.alliance_stats(q.get("sel", [""])[0] or None, q.get("base", [""])[0] or None, q.get("lst", [""])[0] or None)), "application/json")
             elif u.path == "/api/stats":
                 q = parse_qs(u.query)
                 self.send(json.dumps(db.stats(q.get("from", ["0000-01-01"])[0], q.get("to", ["9999-12-31"])[0],
@@ -2778,6 +2815,15 @@ def make_handler(db, watcher):
                     return
                 self.send(json.dumps({"ok": True}), "application/json")
                 threading.Thread(target=lambda: (time.sleep(0.4), os._exit(0)), daemon=True).start()
+                return
+            if path in ("/api/alliance_newlist", "/api/alliance_dellist"):
+                try:
+                    n = int(self.headers.get("Content-Length", 0))
+                    nm = str(json.loads(self.rfile.read(min(n, 10000))).get("name", ""))
+                    r = db.alliance_newlist(nm) if path.endswith("newlist") else db.alliance_dellist(nm)
+                    self.send(json.dumps({"ok": True, "name": r}), "application/json")
+                except Exception as e:
+                    self.send(json.dumps({"ok": False, "error": str(e)}), "application/json")
                 return
             if path == "/api/alliance_del":
                 try:
