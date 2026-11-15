@@ -283,6 +283,19 @@ def mit_fenster():
     from tkinter import font as tkfont
     from tkinter import filedialog, messagebox
 
+    # Farben im Stil eines dunklen Spiele-Launchers: fast schwarz, feines Raster, graue Flaechen, kaum Farbe
+    C.update(bg="#0b0b0c", grid="#141416", side="#121314", card="#17181a", soft="#232427", soft2="#2f3135",
+             ink="#f2f2f2", mute="#8b8d93", line="#33353a", acc="#e6e6e8", acc2="#c4c4c8")
+
+    root = tk.Tk()
+    root.title("RoK Tracker Launcher")
+    root.configure(bg=C["bg"])
+    root.resizable(False, False)
+    W, H = 1000, 650
+    root.geometry("%dx%d+%d+%d" % (W, H, (root.winfo_screenwidth() - W) // 2, max(20, (root.winfo_screenheight() - H) // 3)))
+    fams = set(tkfont.families(root))
+    PIX = next((f for f in ("Press Start 2P", "Silkscreen", "Pixelify Sans", "VT323", "Consolas", "Lucida Console", "Courier New") if f in fams), "Courier")
+
     def rrect(cv, x1, y1, x2, y2, r, **kw):
         """Rechteck mit runden Ecken auf einer Zeichenflaeche."""
         r = max(0, min(r, (x2 - x1) / 2, (y2 - y1) / 2))
@@ -290,39 +303,28 @@ def mit_fenster():
                x1, y2, x1, y2 - r, x1, y1 + r, x1, y1]
         return cv.create_polygon(pts, smooth=True, **kw)
 
-    class Karte(tk.Canvas):
-        """Karte mit runden Ecken und feinem Rand. Inhalt kommt in .innen."""
-        PAD = 2
-        def __init__(self, parent, radius=14, pad=0):
-            tk.Canvas.__init__(self, parent, width=10, height=10, bg=parent.cget("bg"), highlightthickness=0, bd=0)
-            self.radius = radius
-            self.innen = tk.Frame(self, bg=C["card"])
-            self.win = self.create_window(self.PAD + 1, self.PAD + 1, window=self.innen, anchor="nw")
-            self.innen.bind("<Configure>", self._inhalt)
-            self.bind("<Configure>", self._zeichne)
-        def _inhalt(self, e=None):
-            self.configure(height=self.innen.winfo_reqheight() + 2 * self.PAD + 2)
-        def _zeichne(self, e=None):
-            w, h = self.winfo_width(), self.winfo_height()
-            self.delete("bg")
-            rrect(self, 1, 1, w - 1, h - 1, self.radius, fill=C["card"], outline=C["line"], width=1, tags="bg")
-            self.tag_lower("bg")
-            self.itemconfigure(self.win, width=max(10, w - 2 * self.PAD - 2))
-
     class Knopf(tk.Canvas):
-        """Knopf mit runden Ecken. primaer = blau, sonst dezent."""
-        def __init__(self, parent, text, cmd, primaer=False, klein=False):
-            f = (FONT, 9 if klein else 10, "bold" if primaer else "normal")
-            fnt = tkfont.Font(family=f[0], size=f[1], weight=f[2])
-            w = fnt.measure(text) + (22 if klein else 30)
-            h = fnt.metrics("linespace") + (12 if klein else 18)
-            tk.Canvas.__init__(self, parent, width=w, height=h, bg=parent.cget("bg"), highlightthickness=0, bd=0, cursor="hand2")
-            self.w, self.h, self.cmd, self.aktiv, self.primaer = w, h, cmd, True, primaer
-            self.farbe = C["acc"] if primaer else C["soft"]
-            self.hover = C["acc2"] if primaer else C["line"]
-            self.textfarbe = "#ffffff" if primaer else C["ink"]
-            self.form = rrect(self, 0, 0, w, h, 10, fill=self.farbe, outline="")
-            self.txt = self.create_text(w / 2, h / 2, text=text, fill=self.textfarbe, font=f)
+        """Dunkler Knopf mit Rand. primaer = gross mit unterer Kante (wie der Start-Knopf), sonst flach."""
+        def __init__(self, parent, text, cmd, primaer=False, klein=False, w=None, h=None, sub=None, bg=None):
+            size = 8 if klein else (13 if primaer else 9)
+            fnt = tkfont.Font(family=PIX, size=size, weight="bold")
+            w = w or fnt.measure(text) + (26 if klein else 44)
+            h = h or fnt.metrics("linespace") + (14 if klein else 26)
+            tk.Canvas.__init__(self, parent, width=w, height=h, bg=bg or parent.cget("bg"), highlightthickness=0, bd=0, cursor="hand2")
+            self.cmd, self.aktiv, self.primaer = cmd, True, primaer
+            self.farbe, self.hover = (C["soft"], C["soft2"])
+            self.textfarbe = C["ink"]
+            lip = 5 if primaer else 0
+            if lip:
+                rrect(self, 0, lip, w, h, 16, fill="#44464b", outline="")
+            self.form = rrect(self, 1, 1, w - 1, h - lip - 1, 14 if primaer else 10, fill=self.farbe,
+                              outline="#5b5e64" if primaer else C["line"], width=2)
+            ym = (h - lip) / 2
+            if sub:
+                self.txt = self.create_text(w / 2, ym - 9, text=text, fill=self.textfarbe, font=(PIX, size, "bold"))
+                self.create_text(w / 2, ym + 16, text=sub, fill=C["mute"], font=(FONT, 8))
+            else:
+                self.txt = self.create_text(w / 2, ym, text=text, fill=self.textfarbe, font=(PIX, size, "bold"))
             self.bind("<Button-1>", lambda e: self.cmd() if self.aktiv else None)
             self.bind("<Enter>", lambda e: self.itemconfigure(self.form, fill=self.hover if self.aktiv else self.farbe))
             self.bind("<Leave>", lambda e: self.itemconfigure(self.form, fill=self.farbe))
@@ -330,15 +332,37 @@ def mit_fenster():
             self.aktiv = aktiv
             if farbe:
                 self.farbe = farbe
-            self.textfarbe = textfarbe or ("#ffffff" if self.primaer else C["ink"])
+            self.textfarbe = textfarbe or C["ink"]
             self.itemconfigure(self.form, fill=self.farbe)
             self.itemconfigure(self.txt, fill=self.textfarbe if aktiv else C["mute"])
             self.configure(cursor="hand2" if aktiv else "arrow")
 
+    class Nav(tk.Canvas):
+        """Eintrag der linken Leiste: grosses Symbol mit kleiner Beschriftung darunter."""
+        def __init__(self, parent, icon, label, cmd):
+            tk.Canvas.__init__(self, parent, width=88, height=80, bg=C["side"], highlightthickness=0, bd=0, cursor="hand2")
+            self.cmd = cmd
+            self.form = rrect(self, 8, 4, 80, 76, 14, fill=C["side"], outline=C["side"], width=2)
+            self.ic = self.create_text(44, 33, text=icon, fill=C["mute"], font=("Segoe UI Symbol", 20))
+            self.tx = self.create_text(44, 61, text=label, fill=C["mute"], font=(PIX, 7, "bold"))
+            self.on = False
+            self.bind("<Button-1>", lambda e: self.cmd())
+            self.bind("<Enter>", lambda e: self._f(True))
+            self.bind("<Leave>", lambda e: self._f(False))
+        def _f(self, hover):
+            if not self.on:
+                self.itemconfigure(self.ic, fill=C["ink"] if hover else C["mute"])
+                self.itemconfigure(self.tx, fill=C["ink"] if hover else C["mute"])
+        def setze(self, on):
+            self.on = on
+            self.itemconfigure(self.form, fill=C["soft"] if on else C["side"], outline="#5b5e64" if on else C["side"])
+            self.itemconfigure(self.ic, fill=C["ink"] if on else C["mute"])
+            self.itemconfigure(self.tx, fill=C["ink"] if on else C["mute"])
+
     class Balken(tk.Canvas):
-        """Duenner, runder Fortschrittsbalken (laeuft hin und her, solange gearbeitet wird)."""
+        """Duenner Fortschrittsbalken (laeuft hin und her, solange gearbeitet wird)."""
         def __init__(self, parent):
-            tk.Canvas.__init__(self, parent, height=6, width=10, bg=parent.cget("bg"), highlightthickness=0, bd=0)
+            tk.Canvas.__init__(self, parent, height=6, width=10, bg=C["bg"], highlightthickness=0, bd=0)
             self.an, self.pos, self.richtung = False, 0.0, 1
             self.bind("<Configure>", lambda e: self._zeichne())
         def _zeichne(self):
@@ -366,12 +390,17 @@ def mit_fenster():
             self.an, self.pos = False, 0.0
             self._zeichne()
 
-    root = tk.Tk()
-    root.title("RoK Tracker Launcher")
-    root.configure(bg=C["bg"])
-    root.resizable(False, False)
-    W, H = 760, 720
-    root.geometry("%dx%d+%d+%d" % (W, H, (root.winfo_screenwidth() - W) // 2, max(20, (root.winfo_screenheight() - H) // 3)))
+    class Txt:
+        """Kleine Huelle, damit Textfelder auf der Zeichenflaeche wie Labels angesprochen werden koennen."""
+        def __init__(self, cv, item):
+            self.cv, self.item = cv, item
+        def configure(self, text=None, fg=None):
+            kw = {}
+            if text is not None:
+                kw["text"] = text
+            if fg is not None:
+                kw["fill"] = fg
+            self.cv.itemconfigure(self.item, **kw)
 
     ui_q = queue.Queue()
     def ui(fn):
@@ -392,48 +421,48 @@ def mit_fenster():
     st = dict(busy=False, installiert=installierte_version(), neueste=None, laeuft=False, veraltet=False,
               auto=bool(cfg.get("autoupdate", True)))
 
-    # --- Kopf mit Chat-Knopf in der Ecke
-    kopf = tk.Frame(root, bg=C["bg"])
-    kopf.pack(fill="x", padx=28, pady=(26, 12))
-    ring = tk.Canvas(kopf, width=60, height=60, bg=C["bg"], highlightthickness=0)
-    ring.pack(side="left")
-    for i, farbe in enumerate(("#3b82f6", "#34d399", "#fbbf24")):
-        ring.create_arc(4, 4, 56, 56, start=90 + i * 120, extent=118, outline=farbe, width=4, style="arc")
-    ring.create_text(30, 30, text="RK", fill=C["ink"], font=(FONT, 14, "bold"))
-    titel = tk.Frame(kopf, bg=C["bg"])
-    titel.pack(side="left", padx=16)
-    tk.Label(titel, text="RoK Tracker", bg=C["bg"], fg=C["ink"], font=(FONT, 20, "bold")).pack(anchor="w")
-    tk.Label(titel, text="Launcher", bg=C["bg"], fg=C["mute"], font=(FONT, 10)).pack(anchor="w")
-    Knopf(kopf, "\U0001F4AC  Claude Chat", lambda: webbrowser.open(chat_url), klein=True).pack(side="right", anchor="n")
+    # ---------------- Aufbau: links die Leiste, rechts die Flaeche mit feinem Raster
+    side = tk.Frame(root, bg=C["side"], width=96)
+    side.pack(side="left", fill="y")
+    side.pack_propagate(False)
+    tk.Frame(root, bg=C["line"], width=1).pack(side="left", fill="y")
+    main = tk.Canvas(root, bg=C["bg"], highlightthickness=0, bd=0)
+    main.pack(side="left", fill="both", expand=True)
 
-    # --- Status
-    reihe = tk.Frame(root, bg=C["bg"])
-    reihe.pack(fill="x", padx=28, pady=6)
-    reihe.columnconfigure(0, weight=1, uniform="s")
-    reihe.columnconfigure(1, weight=1, uniform="s")
+    def raster(e=None):
+        main.delete("raster")
+        w, h = main.winfo_width(), main.winfo_height()
+        for x in range(0, w, 32):
+            main.create_line(x, 0, x, h, fill=C["grid"], tags="raster")
+        for y in range(0, h, 32):
+            main.create_line(0, y, w, y, fill=C["grid"], tags="raster")
+        main.tag_lower("raster")
+    main.bind("<Configure>", raster)
 
-    k1 = Karte(reihe)
-    k1.grid(row=0, column=0, sticky="nsew", padx=(0, 7))
-    tk.Label(k1.innen, text="Tracker", bg=C["card"], fg=C["mute"], font=(FONT, 9)).pack(anchor="w", padx=16, pady=(12, 0))
-    z1 = tk.Frame(k1.innen, bg=C["card"])
-    z1.pack(anchor="w", padx=16, pady=(3, 14))
-    punkt = tk.Canvas(z1, width=12, height=12, bg=C["card"], highlightthickness=0)
-    punkt.pack(side="left", pady=2)
-    kreis = punkt.create_oval(1, 1, 11, 11, fill=C["mute"], outline="")
-    t_tracker = tk.Label(z1, text="Pruefe ...", bg=C["card"], fg=C["ink"], font=(FONT, 12, "bold"))
-    t_tracker.pack(side="left", padx=8)
+    def T(seite, x, y, text, size=10, farbe=None, fett=False, anker="nw", schrift=None, **kw):
+        return main.create_text(x, y, text=text, fill=farbe or C["ink"], anchor=anker,
+                                font=(schrift or PIX, size, "bold" if fett else "normal"), tags=("p_" + seite,), **kw)
+    def R(seite, x1, y1, x2, y2, r=16, fill=None, rand=None):
+        i = rrect(main, x1, y1, x2, y2, r, fill=fill or C["card"], outline=rand or C["line"], width=2)
+        main.addtag_withtag("p_" + seite, i)
+        return i
+    def Wf(seite, x, y, widget, anker="nw"):
+        return main.create_window(x, y, window=widget, anchor=anker, tags=("p_" + seite,))
 
-    k2 = Karte(reihe)
-    k2.grid(row=0, column=1, sticky="nsew", padx=(7, 0))
-    tk.Label(k2.innen, text="Version", bg=C["card"], fg=C["mute"], font=(FONT, 9)).pack(anchor="w", padx=16, pady=(12, 0))
-    t_version = tk.Label(k2.innen, text="...", bg=C["card"], fg=C["ink"], font=(FONT, 12, "bold"))
-    t_version.pack(anchor="w", padx=16, pady=(3, 0))
-    t_version2 = tk.Label(k2.innen, text="", bg=C["card"], fg=C["mute"], font=(FONT, 9))
-    t_version2.pack(anchor="w", padx=16, pady=(0, 12))
+    # Kopfzeile (auf jeder Seite sichtbar)
+    main.create_text(36, 26, text="ROK TRACKER", fill=C["ink"], anchor="nw", font=(PIX, 16, "bold"))
+    main.create_text(37, 54, text="LAUNCHER", fill=C["mute"], anchor="nw", font=(PIX, 8, "bold"))
+    rrect(main, 520, 20, 700, 60, 12, fill=C["card"], outline=C["line"], width=2)
+    punkt = main
+    kreis = main.create_oval(536, 35, 546, 45, fill=C["mute"], outline="")
+    t_tracker = Txt(main, main.create_text(554, 40, text="PRÜFE ...", fill=C["ink"], anchor="w", font=(PIX, 8, "bold")))
+    kopf_chat = Knopf(main, "CLAUDE CHAT", lambda: webbrowser.open(chat_url), klein=True)
+    main.create_window(716, 40, window=kopf_chat, anchor="w")
 
-    # --- Aktionen
-    leiste = tk.Frame(root, bg=C["bg"])
-    leiste.pack(fill="x", padx=28, pady=(12, 4))
+    # Fuss (auf jeder Seite sichtbar)
+    bar = Balken(main)
+    main.create_window(36, 592, window=bar, anchor="nw", width=832)
+    status = Txt(main, main.create_text(36, 608, text="Bereit", fill=C["mute"], anchor="nw", font=(FONT, 9), width=832))
 
     def melden(text):
         ui(lambda: status.configure(text=text))
@@ -528,14 +557,52 @@ def mit_fenster():
                 melden(t)
             arbeit(d, "Starte Diagnose ...")
 
-    b_start = Knopf(leiste, "▶  Dashboard öffnen", lambda: aktion("dashboard"), primaer=True)
-    b_start.pack(side="left")
-    b_neu = Knopf(leiste, "↻  Neu starten", lambda: arbeit(neu_starten, "Starte neu ..."))
-    b_neu.pack(side="left", padx=8)
-    b_upd = Knopf(leiste, "⬇  Update", lambda: arbeit(update_ausfuehren, "Suche nach Updates ..."))
-    b_upd.pack(side="left")
-    b_stop = Knopf(leiste, "■  Beenden", lambda: arbeit(tracker_beenden, "Beende Tracker ..."))
-    b_stop.pack(side="left", padx=8)
+
+    # ---------------- Seite START
+    cx = 296
+    for i, farbe in enumerate(("#3b82f6", "#34d399", "#fbbf24")):
+        main.create_arc(cx - 70, 96, cx + 70, 236, start=90 + i * 120, extent=116, outline=farbe, width=6, style="arc", tags=("p_play",))
+    T("play", cx, 166, "RK", 22, fett=True, anker="center")
+    T("play", cx, 268, "ROK TRACKER", 20, fett=True, anker="center")
+    T("play", cx, 298, "BARBAREN, BEUTE UND PROFIL", 8, C["mute"], True, "center")
+    b_start = Knopf(main, "DASHBOARD ÖFFNEN", lambda: aktion("dashboard"), primaer=True, w=340, h=88, sub="Startet den Tracker und öffnet den Browser")
+    Wf("play", cx - 44, 392, b_start, "center")
+    menue = tk.Menu(root, tearoff=0, bg=C["card"], fg=C["ink"], activebackground=C["soft2"], activeforeground=C["ink"], bd=0, font=(FONT, 10))
+    b_menue = Knopf(main, "▾", lambda: menue.tk_popup(b_menue.winfo_rootx(), b_menue.winfo_rooty() + b_menue.winfo_height()), primaer=True, w=76, h=88)
+    Wf("play", cx + 172, 392, b_menue, "center")
+
+    # rechts: Tools als Kacheln
+    x0, x1 = 556, 868
+    T("play", x0 + 2, 108, "TOOLS", 11, fett=True)
+    main.create_line(x0, 134, x1, 134, fill=C["line"], tags=("p_play",))
+    y = 150
+    for symbol, name, beschr, knoepfe in MODULE[1:]:
+        zeilen = (len(knoepfe) + 1) // 2
+        hoehe = 84 + zeilen * 34
+        R("play", x0, y, x1, y + hoehe, 16)
+        R("play", x0 + 14, y + 14, x0 + 58, y + 58, 10, C["soft"], C["soft"])
+        T("play", x0 + 36, y + 36, symbol, 15, anker="center", schrift="Segoe UI Emoji")
+        T("play", x0 + 70, y + 16, name.upper(), 9, fett=True)
+        T("play", x0 + 70, y + 36, beschr, 8, C["mute"], schrift=FONT, width=x1 - x0 - 84)
+        for zeile in range(0, len(knoepfe), 2):
+            xx = x0 + 14
+            for text, akt in knoepfe[zeile:zeile + 2]:
+                kn = Knopf(main, text.upper(), (lambda a=akt: aktion(a)) if akt else (lambda: None), klein=True, bg=C["card"])
+                Wf("play", xx, y + 70 + (zeile // 2) * 34, kn)
+                xx += int(kn.cget("width")) + 8
+        y += hoehe + 12
+
+    # ---------------- Seite UPDATE
+    R("upd", 60, 112, 844, 460, 18)
+    T("upd", 92, 140, "INSTALLIERT", 8, C["mute"], True)
+    t_version = Txt(main, T("upd", 92, 162, "...", 16, fett=True))
+    t_version2 = Txt(main, T("upd", 92, 196, "", 10, C["mute"], schrift=FONT))
+    b_upd = Knopf(main, "UPDATE SUCHEN", lambda: arbeit(update_ausfuehren, "Suche nach Updates ..."), bg=C["card"])
+    Wf("upd", 92, 246, b_upd)
+    b_neu = Knopf(main, "NEU STARTEN", lambda: arbeit(neu_starten, "Starte neu ..."), bg=C["card"])
+    Wf("upd", 92 + int(b_upd.cget("width")) + 10, 246, b_neu)
+    b_stop = Knopf(main, "BEENDEN", lambda: arbeit(tracker_beenden, "Beende Tracker ..."), bg=C["card"])
+    Wf("upd", 92 + int(b_upd.cget("width")) + int(b_neu.cget("width")) + 20, 246, b_stop)
     alle = (b_start, b_neu, b_upd, b_stop)
 
     def sperren(an):
@@ -553,53 +620,46 @@ def mit_fenster():
         c["autoupdate"] = st["auto"]
         config_schreiben(c)
     autoupdate.trace_add("write", auto_geaendert)
-    tk.Checkbutton(root, text="Beim Neustart automatisch nach Updates suchen", variable=autoupdate, bg=C["bg"], fg=C["mute"],
-                   selectcolor=C["soft"], activebackground=C["bg"], activeforeground=C["ink"], font=(FONT, 9),
-                   highlightthickness=0, bd=0).pack(anchor="w", padx=26, pady=(6, 0))
+    Wf("upd", 90, 316, tk.Checkbutton(main, text="Beim Neustart automatisch nach Updates suchen", variable=autoupdate, bg=C["card"], fg=C["mute"],
+                                      selectcolor=C["soft"], activebackground=C["card"], activeforeground=C["ink"], font=(FONT, 10),
+                                      highlightthickness=0, bd=0))
+    k_prot = Knopf(main, "PROTOKOLL", lambda: ordner_oeffnen(DATA) if not os.path.exists(LOG) else
+                   (os.startfile(LOG) if os.name == "nt" else None), klein=True, bg=C["card"])
+    Wf("upd", 92, 380, k_prot)
+    Wf("upd", 92 + int(k_prot.cget("width")) + 10, 380, Knopf(main, "DATENORDNER", lambda: ordner_oeffnen(DATA), klein=True, bg=C["card"]))
 
-    # --- Kacheln
-    tk.Label(root, text="Tools", bg=C["bg"], fg=C["ink"], font=(FONT, 12, "bold")).pack(anchor="w", padx=28, pady=(16, 6))
-    raster = tk.Frame(root, bg=C["bg"])
-    raster.pack(fill="x", padx=28)
-    raster.columnconfigure(0, weight=1, uniform="m")
-    raster.columnconfigure(1, weight=1, uniform="m")
-    for i, (symbol, name, beschr, knoepfe) in enumerate(MODULE):
-        k = Karte(raster)
-        k.grid(row=i // 2, column=i % 2, sticky="nsew", padx=(0, 7) if i % 2 == 0 else (7, 0), pady=7)
-        oben = tk.Frame(k.innen, bg=C["card"])
-        oben.pack(fill="x", padx=16, pady=(14, 0))
-        tk.Label(oben, text=symbol, bg=C["soft"], fg=C["ink"], font=("Segoe UI Emoji", 15), width=2).pack(side="left")
-        tk.Label(oben, text=name, bg=C["card"], fg=C["ink"], font=(FONT, 11, "bold"),
-                 wraplength=220, justify="left").pack(side="left", padx=12)
-        tk.Label(k.innen, text=beschr, bg=C["card"], fg=C["mute"], font=(FONT, 9), wraplength=290, justify="left").pack(anchor="w", padx=16, pady=(8, 10))
-        for zeile in range(0, len(knoepfe), 2):                       # je Zeile hoechstens zwei Knoepfe
-            fr = tk.Frame(k.innen, bg=C["card"])
-            fr.pack(anchor="w", padx=16, pady=(0, 14 if zeile + 2 >= len(knoepfe) else 6))
-            for text, akt in knoepfe[zeile:zeile + 2]:
-                kn = Knopf(fr, text, (lambda a=akt: aktion(a)) if akt else (lambda: None), klein=True)
-                if not akt:
-                    kn.setze(False)
-                kn.pack(side="left", padx=(0, 8))
+    menue.add_command(label="Neu starten", command=lambda: arbeit(neu_starten, "Starte neu ..."))
+    menue.add_command(label="Nach Update suchen", command=lambda: arbeit(update_ausfuehren, "Suche nach Updates ..."))
+    menue.add_separator()
+    menue.add_command(label="Tracker beenden", command=lambda: arbeit(tracker_beenden, "Beende Tracker ..."))
 
-    # --- Fuss
-    fuss = tk.Frame(root, bg=C["bg"])
-    fuss.pack(side="bottom", fill="x", padx=28, pady=(0, 18))
-    bar = Balken(fuss)
-    bar.pack(fill="x", pady=(0, 10))
-    status = tk.Label(fuss, text="Bereit", bg=C["bg"], fg=C["mute"], font=(FONT, 9), anchor="w", justify="left", wraplength=480)
-    status.pack(side="left")
-    Knopf(fuss, "Datenordner", lambda: ordner_oeffnen(DATA), klein=True).pack(side="right")
-    Knopf(fuss, "Protokoll", lambda: ordner_oeffnen(DATA) if not os.path.exists(LOG) else
-          (os.startfile(LOG) if os.name == "nt" else None), klein=True).pack(side="right", padx=8)
+    # ---------------- linke Leiste
+    logo = tk.Canvas(side, width=96, height=84, bg=C["side"], highlightthickness=0, bd=0)
+    logo.pack()
+    logo.create_text(48, 44, text="⚡", fill=C["ink"], font=("Segoe UI Symbol", 26))
+    navs = {}
+    def zeige_seite(name):
+        for sname in ("play", "upd"):
+            main.itemconfigure("p_" + sname, state="normal" if sname == name else "hidden")
+        for k, nv in navs.items():
+            nv.setze(k == name)
+    for key, icon, label, cmd in (("play", "▶", "START", lambda: zeige_seite("play")),
+                                  ("upd", "⬇", "UPDATE", lambda: zeige_seite("upd")),
+                                  ("chat", "💬", "CHAT", lambda: webbrowser.open(chat_url))):
+        nv = Nav(side, icon, label, cmd)
+        nv.pack(pady=2)
+        navs[key] = nv
+    Nav(side, "⚙", "DATEN", lambda: ordner_oeffnen(DATA)).pack(side="bottom", pady=(0, 10))
+    zeige_seite("play")
 
     # --- Status regelmaessig aktualisieren (im Hintergrund, Anzeige im Fenster)
     def zeige():
         if st["laeuft"]:
             punkt.itemconfigure(kreis, fill=C["good"])
-            t_tracker.configure(text="Läuft  (Port %d)" % PORT)
+            t_tracker.configure(text="LÄUFT · PORT %d" % PORT)
         else:
             punkt.itemconfigure(kreis, fill=C["mute"])
-            t_tracker.configure(text="Gestoppt")
+            t_tracker.configure(text="GESTOPPT")
         inst = (st["installiert"] or "unbekannt")[:7]
         neu = (st["neueste"] or "")[:7]
         t_version.configure(text="Installiert: " + inst)
