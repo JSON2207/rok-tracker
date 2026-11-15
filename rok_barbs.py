@@ -742,6 +742,80 @@ class DB:
                              total=qty * it["unit"] if it else None))
         return dict(ap=sum(c["ap"] for c in cs), chains=len(cs), barbs=sum(c["n"] for c in cs), loot=loot, maxlvl=cfg["maxlvl"])
 
+    def week(self, account="", offset=0):
+        """Wochenbericht (Montag bis Sonntag) mit Vorwoche und Rekorden ueber alle Zeit."""
+        from datetime import date
+        if account == "main":
+            account = self.get_setting("main_account", "") or ""
+        mon = date.today() - timedelta(days=date.today().weekday()) - timedelta(weeks=int(offset))
+        IKINDS = ("speed_training", "speed_universal", "speed_healing", "wood", "stone", "gold", "food", "gems", "xp_books", "packs", "ap")
+
+        def summ(a, b):
+            st = self.stats(a, b, account)
+            t, ch = st["totals"], st["chain"]
+            kinds = {}
+            for r in st["loot"]:
+                if r["kind"] in IKINDS and r["total"] is not None:
+                    kinds[r["kind"]] = kinds.get(r["kind"], 0) + r["total"]
+            rare = [dict(name=r["name"], qty=r["qty"]) for r in st["loot"] if r["kind"] == "other"][:6]
+            return dict(barbs=t["foes"], solo=t["solo"], rallies=t["rallies"], forts=t["forts"], xp=t["xp"],
+                        chains=ch["chains"], cbarbs=ch["barbs"], series=ch["series"], longest=ch["longest"], ap=ch["ap"],
+                        loot=kinds, rare=rare), st
+        a, b = mon.isoformat(), (mon + timedelta(days=6)).isoformat()
+        pa, pb = (mon - timedelta(days=7)).isoformat(), (mon - timedelta(days=1)).isoformat()
+        cur, st = summ(a, b)
+        prev, _ = summ(pa, pb)
+        dmap = {d["day"]: d for d in st["days"]}
+        cdays = {d["day"]: d for d in st["chain"]["days"]}
+        days = []
+        for i in range(7):
+            dd = (mon + timedelta(days=i)).isoformat()
+            x, c = dmap.get(dd, {}), cdays.get(dd, {})
+            days.append(dict(day=dd, barbs=x.get("foes", 0), forts=x.get("forts", 0), chains=c.get("chains", 0)))
+        ch = self.chains(account)
+        acc = " AND account=?" if account else ""
+        aa = (account,) if account else ()
+        rec = {}
+        if ch:
+            bc = max(ch, key=lambda r: (r["n"], -r["ts"]))
+            rec["chain"] = dict(n=bc["n"], day=bc["day"])
+            ser = {}
+            for r in ch:
+                ser.setdefault(r["sid"], []).append(r)
+            ls = max(ser.values(), key=len)
+            rec["series"] = dict(n=len(ls), day=ls[0]["day"], barbs=sum(r["n"] for r in ls))
+            cd = {}
+            for r in ch:
+                cd[r["day"]] = cd.get(r["day"], 0) + 1
+            k = max(cd, key=lambda d: cd[d])
+            rec["chains_day"] = dict(n=cd[k], day=k)
+        bd = self.q("SELECT day, COUNT(*) n FROM battles WHERE role='solo' AND foe_kind!='fort'" + acc + " GROUP BY day ORDER BY n DESC LIMIT 1", aa)
+        if bd:
+            rec["barbs_day"] = dict(n=bd[0]["n"], day=bd[0]["day"])
+        fd = {}
+        for e in self.fort_entries(account):
+            fd[e["day"]] = fd.get(e["day"], 0) + 1
+        if fd:
+            k = max(fd, key=lambda d: fd[d])
+            rec["forts_day"] = dict(n=fd[k], day=k)
+        active = sorted({r["day"] for r in self.q("SELECT DISTINCT day FROM battles WHERE 1=1" + acc, aa)} | set(fd))
+        best = run = 0
+        prevd = None
+        for d in active:
+            dt = date.fromisoformat(d)
+            run = run + 1 if prevd and (dt - prevd).days == 1 else 1
+            best = max(best, run)
+            prevd = dt
+        cur_streak = 0
+        if active:
+            last = date.fromisoformat(active[-1])
+            if (date.today() - last).days <= 1:
+                cur_streak, i = 1, len(active) - 1
+                while i > 0 and (date.fromisoformat(active[i]) - date.fromisoformat(active[i - 1])).days == 1:
+                    cur_streak += 1; i -= 1
+        rec["streak"] = dict(best=best, now=cur_streak)
+        return dict(**{"from": a, "to": b}, prev_from=pa, prev_to=pb, cur=cur, prev=prev, days=days, records=rec, offset=int(offset))
+
     def quick(self, account=""):
         """Daten fuer die rechte Schnellzugriff-Spalte: Feed, 14-Tage-Verlauf, seltene Drops, Status."""
         if account == "main":
@@ -1201,7 +1275,7 @@ tr.flash td,details.flash{animation:fl 2.6s ease-out}
 .mbtn{position:fixed;top:12px;left:12px;z-index:60;padding:5px 11px;font-size:1.2rem;line-height:1.2;cursor:pointer}body.sbopen .mbtn#mbtn{display:none}.sb{position:fixed;top:0;left:0;bottom:0;width:260px;z-index:70;background:var(--card);border-right:1px solid var(--line);display:flex;flex-direction:column;transform:translateX(-102%);transition:transform .18s ease;overflow-y:auto}body.sbopen .sb{transform:none}.sbh{display:flex;align-items:center;justify-content:space-between;padding:16px 14px 12px 18px}.sbt{font-weight:800;font-size:1.15rem;letter-spacing:.02em}.sbh .mbtn{position:static;padding:3px 9px;font-size:1rem}.sbn{display:flex;flex-direction:column;padding:6px 10px 20px;gap:2px}.sbl{font-size:.72rem;color:var(--mute);padding:10px 8px 4px}.sbn a{display:flex;align-items:center;gap:10px;padding:9px 10px;border-radius:9px;text-decoration:none;color:var(--ink)}.sbn a svg{flex:none;color:var(--mute)}.sbn a:hover{background:var(--soft)}.sbn a.cur{background:var(--accsoft);color:var(--acc);font-weight:700}.sbn a.cur svg{color:var(--acc)}.msep{height:1px;background:var(--line);margin:10px 2px 4px}.mrow{display:flex;flex-direction:column;gap:5px;padding:6px 8px;font-size:.82rem;color:var(--mute)}.mrow select{width:100%}.seg{display:flex;gap:4px}.seg button{flex:1;padding:5px 2px;font-size:.78rem;cursor:pointer}.seg button.on{background:var(--acc);border-color:var(--acc);color:#fff}.sbov{display:none}body{transition:padding-left .18s ease}@media(min-width:1100px){body.sbopen{padding-left:260px}}@media(max-width:1099px){body.sbopen .sbov{display:block;position:fixed;inset:0;background:#0007;z-index:65}}
 
 </style></head><body><main>
-<button type="button" id="mbtn" class="mbtn" aria-label="Menü" aria-expanded="true" title="Menü">☰</button><aside id="sb" class="sb" aria-label="Menü"><div class="sbh"><span class="sbt">RoK&nbsp;Tracker</span><button type="button" id="sbx" class="mbtn" aria-label="Menü schließen" title="Menü schließen">⇤</button></div><nav class="sbn"><div class="sbl">Seiten</div><a href="/" data-p="/" data-k="loot"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l8 4v5c0 4.5-3.2 7.8-8 9-4.8-1.2-8-4.5-8-9V7z"/><path d="M9 12l2 2 4-4"/></svg><span>Loot-Tracker</span></a><a href="/allianz" data-p="/allianz" data-k="ali"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20V10M10 20V4M16 20v-8M22 20H2"/></svg><span>Allianz-Ranking</span></a><a href="/kvk1" data-p="/kvk1" data-k="kvk"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M14.5 17.5L3 6V3h3l11.5 11.5M13 19l6-6M16 16l4 4M19 21l2-2M14.5 6.5L18 3h3v3l-3.5 3.5M5 14l4 4M7 17l-3 3M3 19l2 2"/></svg><span>KVK1</span></a><a href="/settings" data-p="/settings" data-k="set"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.9l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.9-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1-1.5 1.7 1.7 0 0 0-1.9.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.9 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1 1.7 1.7 0 0 0-.3-1.9l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.9.3h0a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5h0a1.7 1.7 0 0 0 1.9-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.9v0a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg><span>Einstellungen</span><b class="sbb" id="sbbadge" hidden></b></a><div class="sbdiv" data-k="d1"></div><div class="sbdiv" data-k="d2"></div><div class="sbstat" data-k="prof"><div class="sbgh0">Profil</div><a href="/#profil"><span>Profil</span></a><a href="/#tag"><span>Pro Tag</span></a></div></nav></aside><div id="sbov" class="sbov"></div><script>window.sbOrd=function(){var A=["loot","ali","kvk"],o=A.slice();try{var v=JSON.parse(localStorage.getItem("roksbo")||"null");if(v&&v.length){v=v.filter(function(x){return A.indexOf(x)>=0});o=v.concat(A.filter(function(x){return v.indexOf(x)<0}))}}catch(e){}var m={d1:3,prof:4,d2:5,set:6};o.forEach(function(k,i){m[k]=i});document.querySelectorAll("#sb [data-k]").forEach(function(e){e.style.order=m[e.dataset.k]})};sbOrd();window.sbUnk=function(){fetch("/api/unk").then(r=>r.json()).then(u=>{var b=document.getElementById("sbbadge");b.textContent=u.n;b.hidden=!u.n;}).catch(function(){})};sbUnk();setInterval(sbUnk,30000)</script><script>(function(){const b=document.getElementById("mbtn"),x=document.getElementById("sbx"),ov=document.getElementById("sbov"),n=document.getElementById("sb"),R=document.documentElement,B=document.body;n.querySelectorAll("a[data-p]").forEach(a=>{if(a.dataset.p===(location.pathname.replace(/\/+$/,"")||"/"))a.className="cur"});let V={w:"1600",a:"c"},O=window.innerWidth>=1100;try{V=Object.assign(V,JSON.parse(localStorage.getItem("rokview")||"{}"));const o=localStorage.getItem("roksb");if(o!==null)O=o==="1"}catch(e){}const ap=()=>{R.style.setProperty("--mw",V.w==="100%"?"100%":V.w+"px");R.style.setProperty("--ml",V.a==="l"?"0":"auto");R.style.setProperty("--mr",V.a==="r"?"0":"auto");document.querySelectorAll("#mw button").forEach(y=>y.classList.toggle("on",y.dataset.v===V.w));document.querySelectorAll("#ma button").forEach(y=>y.classList.toggle("on",y.dataset.v===V.a))};const so=v=>{O=v;B.classList.toggle("sbopen",O);b.setAttribute("aria-expanded",O);try{localStorage.setItem("roksb",O?"1":"0")}catch(e){}};document.addEventListener("DOMContentLoaded",ap);
+<button type="button" id="mbtn" class="mbtn" aria-label="Menü" aria-expanded="true" title="Menü">☰</button><aside id="sb" class="sb" aria-label="Menü"><div class="sbh"><span class="sbt">RoK&nbsp;Tracker</span><button type="button" id="sbx" class="mbtn" aria-label="Menü schließen" title="Menü schließen">⇤</button></div><nav class="sbn"><div class="sbl">Seiten</div><a href="/" data-p="/" data-k="loot"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l8 4v5c0 4.5-3.2 7.8-8 9-4.8-1.2-8-4.5-8-9V7z"/><path d="M9 12l2 2 4-4"/></svg><span>Loot-Tracker</span></a><a href="/allianz" data-p="/allianz" data-k="ali"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20V10M10 20V4M16 20v-8M22 20H2"/></svg><span>Allianz-Ranking</span></a><a href="/kvk1" data-p="/kvk1" data-k="kvk"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M14.5 17.5L3 6V3h3l11.5 11.5M13 19l6-6M16 16l4 4M19 21l2-2M14.5 6.5L18 3h3v3l-3.5 3.5M5 14l4 4M7 17l-3 3M3 19l2 2"/></svg><span>KVK1</span></a><a href="/woche" data-p="/woche" data-k="wb"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="17" rx="2"/><path d="M3 9h18M8 2v4M16 2v4M8 14h3M13 14h3M8 17h3"/></svg><span>Wochenbericht</span></a><a href="/settings" data-p="/settings" data-k="set"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.9l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.9-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1-1.5 1.7 1.7 0 0 0-1.9.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.9 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1 1.7 1.7 0 0 0-.3-1.9l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.9.3h0a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5h0a1.7 1.7 0 0 0 1.9-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.9v0a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg><span>Einstellungen</span><b class="sbb" id="sbbadge" hidden></b></a><div class="sbdiv" data-k="d1"></div><div class="sbdiv" data-k="d2"></div><div class="sbstat" data-k="prof"><div class="sbgh0">Profil</div><a href="/#profil"><span>Profil</span></a><a href="/#tag"><span>Pro Tag</span></a></div></nav></aside><div id="sbov" class="sbov"></div><script>window.sbOrd=function(){var A=["loot","ali","kvk","wb"],o=A.slice();try{var v=JSON.parse(localStorage.getItem("roksbo")||"null");if(v&&v.length){v=v.filter(function(x){return A.indexOf(x)>=0});o=v.concat(A.filter(function(x){return v.indexOf(x)<0}))}}catch(e){}var m={d1:4,prof:5,d2:6,set:7};o.forEach(function(k,i){m[k]=i});document.querySelectorAll("#sb [data-k]").forEach(function(e){e.style.order=m[e.dataset.k]})};sbOrd();window.sbUnk=function(){fetch("/api/unk").then(r=>r.json()).then(u=>{var b=document.getElementById("sbbadge");b.textContent=u.n;b.hidden=!u.n;}).catch(function(){})};sbUnk();setInterval(sbUnk,30000)</script><script>(function(){const b=document.getElementById("mbtn"),x=document.getElementById("sbx"),ov=document.getElementById("sbov"),n=document.getElementById("sb"),R=document.documentElement,B=document.body;n.querySelectorAll("a[data-p]").forEach(a=>{if(a.dataset.p===(location.pathname.replace(/\/+$/,"")||"/"))a.className="cur"});let V={w:"1600",a:"c"},O=window.innerWidth>=1100;try{V=Object.assign(V,JSON.parse(localStorage.getItem("rokview")||"{}"));const o=localStorage.getItem("roksb");if(o!==null)O=o==="1"}catch(e){}const ap=()=>{R.style.setProperty("--mw",V.w==="100%"?"100%":V.w+"px");R.style.setProperty("--ml",V.a==="l"?"0":"auto");R.style.setProperty("--mr",V.a==="r"?"0":"auto");document.querySelectorAll("#mw button").forEach(y=>y.classList.toggle("on",y.dataset.v===V.w));document.querySelectorAll("#ma button").forEach(y=>y.classList.toggle("on",y.dataset.v===V.a))};const so=v=>{O=v;B.classList.toggle("sbopen",O);b.setAttribute("aria-expanded",O);try{localStorage.setItem("roksb",O?"1":"0")}catch(e){}};document.addEventListener("DOMContentLoaded",ap);
 document.addEventListener("click",e=>{const y=e.target.closest(".seg button");if(!y||!y.parentNode.id.match(/^m[wa]$/))return;if(y.parentNode.id==="mw")V.w=y.dataset.v;else V.a=y.dataset.v;try{localStorage.setItem("rokview",JSON.stringify(V))}catch(e){}ap()});ap();B.classList.toggle("sbopen",O);b.onclick=()=>so(!O);x.onclick=()=>so(false);ov.onclick=()=>so(false);document.addEventListener("keydown",e=>{if(e.key==="Escape"&&window.innerWidth<1100)so(false)})})()</script>@@QP@@
 <section class="hero"><div class="avc"><div class="av" id="avbox" tabindex="0" role="button" title="Avatar ändern"><span id="hav">⚔</span></div><button id="avreset" hidden>Avatar zurücksetzen</button><input type="file" id="avfile" accept="image/*" hidden></div><div>
 <div class="hrow"><div><h1 id="hname">Barbaren-Tracker</h1><div id="per"></div><div id="st"></div></div>
@@ -1575,7 +1649,7 @@ a.btn{font:inherit;color:var(--ink);background:var(--soft);border:1px solid var(
 #achips{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:12px}.chip{font:inherit;font-size:.85rem;color:var(--ink);background:var(--soft);border:1px solid var(--line);border-radius:999px;padding:5px 12px;cursor:pointer}.chip[aria-pressed="false"]{color:var(--mute);text-decoration:line-through;background:transparent}.chip[aria-pressed="true"]{border-color:var(--acc)}
 #al th,#al td{padding:9px 12px}#al td.r{color:var(--mute);width:2.5em;text-align:right}#al td.n{text-align:left}
 </style></head><body><main>
-<button type="button" id="mbtn" class="mbtn" aria-label="Menü" aria-expanded="true" title="Menü">☰</button><aside id="sb" class="sb" aria-label="Menü"><div class="sbh"><span class="sbt">RoK&nbsp;Tracker</span><button type="button" id="sbx" class="mbtn" aria-label="Menü schließen" title="Menü schließen">⇤</button></div><nav class="sbn"><div class="sbl">Seiten</div><a href="/" data-p="/" data-k="loot"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l8 4v5c0 4.5-3.2 7.8-8 9-4.8-1.2-8-4.5-8-9V7z"/><path d="M9 12l2 2 4-4"/></svg><span>Loot-Tracker</span></a><a href="/allianz" data-p="/allianz" data-k="ali"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20V10M10 20V4M16 20v-8M22 20H2"/></svg><span>Allianz-Ranking</span></a><a href="/kvk1" data-p="/kvk1" data-k="kvk"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M14.5 17.5L3 6V3h3l11.5 11.5M13 19l6-6M16 16l4 4M19 21l2-2M14.5 6.5L18 3h3v3l-3.5 3.5M5 14l4 4M7 17l-3 3M3 19l2 2"/></svg><span>KVK1</span></a><a href="/settings" data-p="/settings" data-k="set"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.9l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.9-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1-1.5 1.7 1.7 0 0 0-1.9.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.9 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1 1.7 1.7 0 0 0-.3-1.9l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.9.3h0a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5h0a1.7 1.7 0 0 0 1.9-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.9v0a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg><span>Einstellungen</span><b class="sbb" id="sbbadge" hidden></b></a><div class="sbdiv" data-k="d1"></div><div class="sbdiv" data-k="d2"></div><div class="sbstat" data-k="prof"><div class="sbgh0">Profil</div><a href="/#profil"><span>Profil</span></a><a href="/#tag"><span>Pro Tag</span></a></div></nav></aside><div id="sbov" class="sbov"></div><script>window.sbOrd=function(){var A=["loot","ali","kvk"],o=A.slice();try{var v=JSON.parse(localStorage.getItem("roksbo")||"null");if(v&&v.length){v=v.filter(function(x){return A.indexOf(x)>=0});o=v.concat(A.filter(function(x){return v.indexOf(x)<0}))}}catch(e){}var m={d1:3,prof:4,d2:5,set:6};o.forEach(function(k,i){m[k]=i});document.querySelectorAll("#sb [data-k]").forEach(function(e){e.style.order=m[e.dataset.k]})};sbOrd();window.sbUnk=function(){fetch("/api/unk").then(r=>r.json()).then(u=>{var b=document.getElementById("sbbadge");b.textContent=u.n;b.hidden=!u.n;}).catch(function(){})};sbUnk();setInterval(sbUnk,30000)</script><script>(function(){const b=document.getElementById("mbtn"),x=document.getElementById("sbx"),ov=document.getElementById("sbov"),n=document.getElementById("sb"),R=document.documentElement,B=document.body;n.querySelectorAll("a[data-p]").forEach(a=>{if(a.dataset.p===(location.pathname.replace(/\/+$/,"")||"/"))a.className="cur"});let V={w:"1600",a:"c"},O=window.innerWidth>=1100;try{V=Object.assign(V,JSON.parse(localStorage.getItem("rokview")||"{}"));const o=localStorage.getItem("roksb");if(o!==null)O=o==="1"}catch(e){}const ap=()=>{R.style.setProperty("--mw",V.w==="100%"?"100%":V.w+"px");R.style.setProperty("--ml",V.a==="l"?"0":"auto");R.style.setProperty("--mr",V.a==="r"?"0":"auto");document.querySelectorAll("#mw button").forEach(y=>y.classList.toggle("on",y.dataset.v===V.w));document.querySelectorAll("#ma button").forEach(y=>y.classList.toggle("on",y.dataset.v===V.a))};const so=v=>{O=v;B.classList.toggle("sbopen",O);b.setAttribute("aria-expanded",O);try{localStorage.setItem("roksb",O?"1":"0")}catch(e){}};document.addEventListener("DOMContentLoaded",ap);
+<button type="button" id="mbtn" class="mbtn" aria-label="Menü" aria-expanded="true" title="Menü">☰</button><aside id="sb" class="sb" aria-label="Menü"><div class="sbh"><span class="sbt">RoK&nbsp;Tracker</span><button type="button" id="sbx" class="mbtn" aria-label="Menü schließen" title="Menü schließen">⇤</button></div><nav class="sbn"><div class="sbl">Seiten</div><a href="/" data-p="/" data-k="loot"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l8 4v5c0 4.5-3.2 7.8-8 9-4.8-1.2-8-4.5-8-9V7z"/><path d="M9 12l2 2 4-4"/></svg><span>Loot-Tracker</span></a><a href="/allianz" data-p="/allianz" data-k="ali"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20V10M10 20V4M16 20v-8M22 20H2"/></svg><span>Allianz-Ranking</span></a><a href="/kvk1" data-p="/kvk1" data-k="kvk"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M14.5 17.5L3 6V3h3l11.5 11.5M13 19l6-6M16 16l4 4M19 21l2-2M14.5 6.5L18 3h3v3l-3.5 3.5M5 14l4 4M7 17l-3 3M3 19l2 2"/></svg><span>KVK1</span></a><a href="/woche" data-p="/woche" data-k="wb"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="17" rx="2"/><path d="M3 9h18M8 2v4M16 2v4M8 14h3M13 14h3M8 17h3"/></svg><span>Wochenbericht</span></a><a href="/settings" data-p="/settings" data-k="set"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.9l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.9-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1-1.5 1.7 1.7 0 0 0-1.9.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.9 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1 1.7 1.7 0 0 0-.3-1.9l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.9.3h0a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5h0a1.7 1.7 0 0 0 1.9-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.9v0a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg><span>Einstellungen</span><b class="sbb" id="sbbadge" hidden></b></a><div class="sbdiv" data-k="d1"></div><div class="sbdiv" data-k="d2"></div><div class="sbstat" data-k="prof"><div class="sbgh0">Profil</div><a href="/#profil"><span>Profil</span></a><a href="/#tag"><span>Pro Tag</span></a></div></nav></aside><div id="sbov" class="sbov"></div><script>window.sbOrd=function(){var A=["loot","ali","kvk","wb"],o=A.slice();try{var v=JSON.parse(localStorage.getItem("roksbo")||"null");if(v&&v.length){v=v.filter(function(x){return A.indexOf(x)>=0});o=v.concat(A.filter(function(x){return v.indexOf(x)<0}))}}catch(e){}var m={d1:4,prof:5,d2:6,set:7};o.forEach(function(k,i){m[k]=i});document.querySelectorAll("#sb [data-k]").forEach(function(e){e.style.order=m[e.dataset.k]})};sbOrd();window.sbUnk=function(){fetch("/api/unk").then(r=>r.json()).then(u=>{var b=document.getElementById("sbbadge");b.textContent=u.n;b.hidden=!u.n;}).catch(function(){})};sbUnk();setInterval(sbUnk,30000)</script><script>(function(){const b=document.getElementById("mbtn"),x=document.getElementById("sbx"),ov=document.getElementById("sbov"),n=document.getElementById("sb"),R=document.documentElement,B=document.body;n.querySelectorAll("a[data-p]").forEach(a=>{if(a.dataset.p===(location.pathname.replace(/\/+$/,"")||"/"))a.className="cur"});let V={w:"1600",a:"c"},O=window.innerWidth>=1100;try{V=Object.assign(V,JSON.parse(localStorage.getItem("rokview")||"{}"));const o=localStorage.getItem("roksb");if(o!==null)O=o==="1"}catch(e){}const ap=()=>{R.style.setProperty("--mw",V.w==="100%"?"100%":V.w+"px");R.style.setProperty("--ml",V.a==="l"?"0":"auto");R.style.setProperty("--mr",V.a==="r"?"0":"auto");document.querySelectorAll("#mw button").forEach(y=>y.classList.toggle("on",y.dataset.v===V.w));document.querySelectorAll("#ma button").forEach(y=>y.classList.toggle("on",y.dataset.v===V.a))};const so=v=>{O=v;B.classList.toggle("sbopen",O);b.setAttribute("aria-expanded",O);try{localStorage.setItem("roksb",O?"1":"0")}catch(e){}};document.addEventListener("DOMContentLoaded",ap);
 document.addEventListener("click",e=>{const y=e.target.closest(".seg button");if(!y||!y.parentNode.id.match(/^m[wa]$/))return;if(y.parentNode.id==="mw")V.w=y.dataset.v;else V.a=y.dataset.v;try{localStorage.setItem("rokview",JSON.stringify(V))}catch(e){}ap()});ap();B.classList.toggle("sbopen",O);b.onclick=()=>so(!O);x.onclick=()=>so(false);ov.onclick=()=>so(false);document.addEventListener("keydown",e=>{if(e.key==="Escape"&&window.innerWidth<1100)so(false)})})()</script>@@QP@@
 <section class="ah"><div><h1>Allianz-Tracker</h1><div class="sub" id="asub">Member-Rangliste</div></div>
 <div class="bar"><a class="btn" id="aexp" href="/allianz/export?lang=de" title="Speichert die Rangliste als eigenständige Datei, die du weitergeben kannst">Als HTML exportieren</a><button id="abtn">Allianz-Daten einfügen …</button><input type="file" id="afile" accept=".json" multiple hidden></div></section>
@@ -1665,8 +1739,8 @@ const esc=s=>String(s==null?'':s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;',
 const MON=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
 const dm=d=>LANG==='en'?(p=>p.length===3?+p[2]+' '+MON[+p[1]-1]+' '+p[0]:d)(d.split('-')):d.split('-').reverse().join('.');
 
-const ORDN={loot:'Loot-Tracker (Beute, Festungen, Barbarenkämpfe …)',ali:'Allianz-Ranking',kvk:'KVK1'};
-let ORD=['loot','ali','kvk'];try{const v=JSON.parse(localStorage.getItem('roksbo')||'null');if(v&&v.length)ORD=v.filter(x=>ORDN[x]).concat(['loot','ali','kvk'].filter(x=>!v.includes(x)))}catch(e){}
+const ORDN={loot:'Loot-Tracker (Beute, Festungen, Barbarenkämpfe …)',ali:'Allianz-Ranking',kvk:'KVK1',wb:'Wochenbericht'};
+let ORD=['loot','ali','kvk','wb'];try{const v=JSON.parse(localStorage.getItem('roksbo')||'null');if(v&&v.length)ORD=v.filter(x=>ORDN[x]).concat(['loot','ali','kvk','wb'].filter(x=>!v.includes(x)))}catch(e){}
 function ordSave(){try{localStorage.setItem('roksbo',JSON.stringify(ORD))}catch(e){}if(window.sbOrd)sbOrd();ordDraw()}
 function ordDraw(){$('ordl').innerHTML=ORD.map((k,i)=>`<li draggable="true" data-k="${k}"><span>${ORDN[k]}</span><button type="button" data-d="-1" ${i?'':'disabled'} aria-label="nach oben">▲</button><button type="button" data-d="1" ${i<ORD.length-1?'':'disabled'} aria-label="nach unten">▼</button></li>`).join('')}
 $('ordl').addEventListener('click',e=>{const b=e.target.closest('button[data-d]');if(!b)return;const k=b.closest('li').dataset.k,i=ORD.indexOf(k),j=i+ +b.dataset.d;if(j<0||j>=ORD.length)return;ORD.splice(i,1);ORD.splice(j,0,k);ordSave()});
@@ -1674,7 +1748,7 @@ let dragK=null;$('ordl').addEventListener('dragstart',e=>{const li=e.target.clos
 $('ordl').addEventListener('dragover',e=>{if(dragK)e.preventDefault()});
 $('ordl').addEventListener('drop',e=>{e.preventDefault();const li=e.target.closest('li');if(!li||!dragK||li.dataset.k===dragK)return;const j=ORD.indexOf(li.dataset.k);ORD.splice(ORD.indexOf(dragK),1);ORD.splice(j,0,dragK);dragK=null;ordSave()});
 $('ordl').addEventListener('dragend',()=>{dragK=null;ordDraw()});
-$('ordr').onclick=()=>{ORD=['loot','ali','kvk'];ordSave()};ordDraw();
+$('ordr').onclick=()=>{ORD=['loot','ali','kvk','wb'];ordSave()};ordDraw();
 // ===== Namen eintragen
 const KINDS=[['speed_training','Training-Speedup (Min)'],['speed_universal','Universal-Speedup (Min)'],['speed_healing','Heilungs-Speedup (Min)'],['wood','Holz'],['stone','Stein'],['gold','Gold'],['food','Mais'],['gems','Edelsteine'],['xp_books','XP-Buch'],['packs','Ressourcenpaket'],['ap','Aktionspunkte'],['other','Sonstiges']];
 let nmSig='',lastNames={items:[],heroes:[],foes:[],ignored:[]},nmSort='qty';try{nmSort=localStorage.getItem('roknmsort')||'qty'}catch(e){}$('nmsort').value=nmSort;
@@ -1763,10 +1837,82 @@ $('krs').onclick=()=>sv(JSON.stringify({reset:1}));
 ld();
 """ + _I18N + r"""</script></body></html>"""
 
+WOCHE_PAGE = r"""<!doctype html><html lang="de"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1"><title>Wochenbericht</title>
+""" + _STYLE + r"""
+<style>
+.wh{display:flex;flex-wrap:wrap;gap:10px 16px;align-items:center;justify-content:space-between;padding:18px 22px;border:1px solid var(--line);border-radius:20px;background:linear-gradient(135deg,var(--accsoft),var(--card) 60%);margin-bottom:14px}
+.wh h1{margin:0;font-size:1.4rem}.wh .sub{color:var(--mute);font-size:.9rem}.wh .nav{display:flex;gap:6px;align-items:center;flex-wrap:wrap}.wh button{padding:7px 12px;cursor:pointer}
+.ks{border:1px solid var(--line);border-radius:20px;background:var(--card);padding:18px 22px;margin-bottom:14px}.ks h2{margin:0 0 4px;font-size:1.1rem}.ks .note{margin:0 0 12px}
+.kg{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:12px}
+.kg .k{padding:12px 14px;border:1px solid var(--line);border-radius:14px;background:var(--card)}.kg .k b{font-size:1.45rem;display:block;font-variant-numeric:tabular-nums;overflow-wrap:anywhere}.kg .k span{color:var(--mute);font-size:.8rem}.kg .k small{display:block;font-size:.78rem;margin-top:2px}
+.dy{display:grid;grid-template-columns:repeat(7,1fr);gap:8px;align-items:end;height:190px}.dy>div{display:flex;flex-direction:column;justify-content:flex-end;align-items:center;height:100%;gap:4px;font-size:.78rem;color:var(--mute);text-align:center}.dy .b{width:100%;max-width:56px;border-radius:8px 8px 3px 3px;background:var(--acc);min-height:3px}.dy .b.z{background:var(--line)}.dy b{color:var(--ink);font-variant-numeric:tabular-nums}
+.ll2{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:8px}.ll2 div{display:flex;justify-content:space-between;gap:8px;padding:9px 12px;border:1px solid var(--line);border-radius:12px;background:var(--soft)}.ll2 b{font-variant-numeric:tabular-nums}
+.rc{display:grid;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));gap:12px}.rc .r{padding:14px;border:1px solid var(--line);border-radius:14px;background:var(--soft);display:flex;gap:12px;align-items:center}.rc .ic{font-size:1.9rem}.rc b{font-size:1.3rem;display:block}.rc small{color:var(--mute)}
+.md{display:inline-block;margin-top:4px;padding:1px 9px;border-radius:99px;font-size:.74rem;font-weight:700;border:1px solid var(--line)}.md.g{color:#b8860b;border-color:#b8860b}.md.s{color:#7b8794;border-color:#7b8794}.md.c{color:#b4673a;border-color:#b4673a}.md.n{color:var(--mute)}
+.ch{display:inline-block;margin:3px 6px 0 0;padding:3px 10px;border-radius:99px;border:1px solid var(--line);background:var(--soft)}
+</style></head><body><main>
+""" + _SB + r"""
+<section class="wh"><div><h1>Wochenbericht</h1><div class="sub" id="wl"></div></div><div class="nav"><button id="wp" type="button">◀ Vorwoche</button><button id="wn" type="button">Nächste Woche ▶</button><button id="wi" type="button">Als Bild speichern</button><button id="wt" type="button">Text kopieren</button><span class="note" id="wm"></span></div></section>
+<div id="wb"></div>
+@@QP@@
+<script>
+let LANG='de';try{LANG=localStorage.getItem('roklang')==='en'?'en':'de'}catch(e){}
+const LOC=LANG==='en'?'en-US':'de-DE',$=id=>document.getElementById(id),f=n=>Number(n).toLocaleString(LOC);
+const esc=s=>String(s==null?'':s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const MON=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+const dm=d=>d.split('-').reverse().join('.'),dms=d=>d.slice(8)+'.'+d.slice(5,7)+'.';
+const WD=['Mo','Di','Mi','Do','Fr','Sa','So'];
+const KL=[['speed_training','⏩','Training-Speedups',1],['speed_universal','⏱️','Universal-Speedups',1],['speed_healing','💊','Heilungs-Speedups',1],['wood','🪵','Holz'],['stone','🪨','Stein'],['gold','🪙','Gold'],['food','🌽','Mais'],['gems','💎','Edelsteine'],['xp_books','📘','XP aus Büchern'],['packs','📦','Ressourcenpakete'],['ap','⚡','Notfall-AP']];
+const dur=m=>{m=Math.round(m);const d=Math.floor(m/1440),h=Math.floor(m%1440/60),n=m%60;return d?`${d} Tage ${h} Std`:h?`${h} Std ${n} Min`:`${n} Min`};
+const big=n=>n>=1e6?(n/1e6).toFixed(1).replace('.',',')+' Mio':n>=1e4?(n/1e3).toFixed(1).replace('.',',')+' K':f(n);
+const val=(k,v,t)=>t?dur(v):big(v);
+function kw(d){const t=new Date(d+'T00:00:00Z'),n=(t.getUTCDay()+6)%7;t.setUTCDate(t.getUTCDate()-n+3);const y=t.getUTCFullYear(),j=new Date(Date.UTC(y,0,4));return 1+Math.round(((t-j)/864e5-3+((j.getUTCDay()+6)%7))/7)}
+const dl=(a,b)=>{if(b==null||b===0&&a===0)return '';const x=a-b;return x===0?'<small class="note">wie Vorwoche</small>':`<small class="${x>0?'good':'bad'}">${x>0?'+':''}${f(x)} zur Vorwoche</small>`};
+const TIER=(v,t)=>v>=t[2]?['g','Gold']:v>=t[1]?['s','Silber']:v>=t[0]?['c','Bronze']:['n','noch keine Auszeichnung'];
+let W=null,off=0;
+const REC=r=>{const R=r.records,o=[];
+ if(R.chain)o.push(['🔗','Beste Chain',R.chain.n+' Barbaren',dm(R.chain.day),TIER(R.chain.n,[3,5,8])]);
+ if(R.series)o.push(['🔥','Längste Serie',R.series.n+' Chains',dm(R.series.day)+' · '+f(R.series.barbs)+' Barbaren',TIER(R.series.n,[5,10,20])]);
+ if(R.barbs_day)o.push(['🪓','Bester Tag (Barbaren)',f(R.barbs_day.n),dm(R.barbs_day.day),TIER(R.barbs_day.n,[50,150,300])]);
+ if(R.chains_day)o.push(['⛓️','Meiste Chains an einem Tag',f(R.chains_day.n),dm(R.chains_day.day),TIER(R.chains_day.n,[10,25,50])]);
+ if(R.forts_day)o.push(['🏰','Meiste Festungen an einem Tag',f(R.forts_day.n),dm(R.forts_day.day),TIER(R.forts_day.n,[3,6,10])]);
+ if(R.streak)o.push(['📅','Aktivitäts-Streak',R.streak.now+' Tage (aktuell)','Rekord: '+R.streak.best+' Tage',TIER(R.streak.best,[3,7,14])]);
+ return o};
+function draw(){const w=W,c=w.cur,p=w.prev,mx=Math.max(1,...w.days.map(d=>d.barbs));
+ $('wl').textContent=`KW ${kw(w.from)} · ${dm(w.from)} – ${dm(w.to)}`;$('wn').disabled=off<=0;
+ const kp=[[f(c.barbs),'Barbaren besiegt',dl(c.barbs,p.barbs)],[f(c.chains),'Chains',dl(c.chains,p.chains)],[c.chains?(c.cbarbs/c.chains).toFixed(1).replace('.',','):'–','Ø Barbaren pro Chain',''],[f(c.series),'Serien',dl(c.series,p.series)],[f(c.longest),'Längste Serie (Chains)',dl(c.longest,p.longest)],[f(c.forts),'Festungen',dl(c.forts,p.forts)],[f(c.ap),'AP für Chains',dl(c.ap,p.ap)],[f(c.xp),'Kommandanten-XP',dl(c.xp,p.xp)]];
+ const loot=KL.filter(k=>c.loot[k[0]]).map(k=>`<div><span>${k[1]} ${k[2]}</span><b>${val(k[0],c.loot[k[0]],k[3])}</b></div>`).join('');
+ $('wb').innerHTML=`<section class="ks"><h2>Überblick</h2><p class="note">Montag bis Sonntag, verglichen mit der Woche davor.</p><div class="kg">${kp.map(x=>`<div class="k"><b>${x[0]}</b><span>${x[1]}</span>${x[2]}</div>`).join('')}</div></section>
+ <section class="ks"><h2>Barbaren pro Tag</h2><p class="note">Besiegte Barbaren je Tag, darunter Chains und Festungen.</p><div class="dy">${w.days.map((d,i)=>`<div><b>${d.barbs||''}</b><div class="b ${d.barbs?'':'z'}" style="height:${d.barbs?Math.max(4,d.barbs/mx*130):3}px"></div>${WD[i]}<span>${d.chains} Ch · ${d.forts} F</span></div>`).join('')}</div></section>
+ <section class="ks"><h2>Beute</h2><p class="note">Alle Funde der Woche${Object.keys(c.loot).length?'':' – diese Woche gibt es noch keine Beute.'}</p><div class="ll2">${loot}</div>${c.rare.length?`<p style="margin:12px 0 0">Besondere Funde: ${c.rare.map(r=>`<span class="ch">${f(r.qty)}× ${esc(r.name)}</span>`).join('')}</p>`:''}</section>
+ <section class="ks"><h2>Rekorde &amp; Streaks</h2><p class="note">Deine Bestwerte aus allen Berichten, mit Auszeichnung nach Bronze, Silber und Gold.</p><div class="rc">${REC(w).map(r=>`<div class="r"><span class="ic">${r[0]}</span><div><small>${r[1]}</small><b>${r[2]}</b><small>${r[3]}</small><br><span class="md ${r[4][0]}">${r[4][1]}</span></div></div>`).join('')||'<p class="note">Noch keine Daten.</p>'}</div></section>`}
+function txt(){const w=W,c=w.cur;let t=`Wochenbericht KW ${kw(w.from)} (${dm(w.from)} – ${dm(w.to)})\n`;t+=`Barbaren: ${f(c.barbs)} | Chains: ${f(c.chains)} (Ø ${c.chains?(c.cbarbs/c.chains).toFixed(1):'–'} Barbaren) | Serien: ${c.series} | Festungen: ${c.forts}\n`;
+ const l=KL.filter(k=>c.loot[k[0]]).map(k=>`${k[2]}: ${val(k[0],c.loot[k[0]],k[3])}`);if(l.length)t+='Beute: '+l.join(', ')+'\n';
+ const R=REC(w);if(R.length)t+='Rekorde: '+R.map(r=>`${r[1]} ${r[2]}`).join(' | ');return t}
+function png(){const w=W,c=w.cur,cv=document.createElement('canvas');cv.width=1080;cv.height=1500;const g=cv.getContext('2d');
+ g.fillStyle='#0b1020';g.fillRect(0,0,1080,1500);const gr=g.createLinearGradient(0,0,1080,300);gr.addColorStop(0,'#1d3a78');gr.addColorStop(1,'#0b1020');g.fillStyle=gr;g.fillRect(0,0,1080,300);
+ const F='system-ui,Segoe UI,Arial,sans-serif';g.fillStyle='#fff';g.font='bold 64px '+F;g.fillText('Wochenbericht',60,110);g.font='32px '+F;g.fillStyle='#b8c7e6';g.fillText(`KW ${kw(w.from)} · ${dm(w.from)} – ${dm(w.to)}`,60,160);g.fillText('RoK Tracker',60,220);
+ const kp=[[f(c.barbs),'Barbaren'],[f(c.chains),'Chains'],[c.chains?(c.cbarbs/c.chains).toFixed(1).replace('.',','):'–','Ø pro Chain'],[f(c.series),'Serien'],[f(c.longest),'Längste Serie'],[f(c.forts),'Festungen']];
+ kp.forEach((k,i)=>{const x=60+(i%3)*330,y=340+Math.floor(i/3)*150;g.fillStyle='#16203a';g.beginPath();g.roundRect(x,y,300,126,18);g.fill();g.fillStyle='#fff';g.font='bold 50px '+F;g.fillText(k[0],x+22,y+68);g.fillStyle='#8ea2c8';g.font='26px '+F;g.fillText(k[1],x+22,y+105)});
+ const mx=Math.max(1,...w.days.map(d=>d.barbs));g.fillStyle='#fff';g.font='bold 34px '+F;g.fillText('Barbaren pro Tag',60,700);
+ w.days.forEach((d,i)=>{const x=60+i*144,h=d.barbs?Math.max(6,d.barbs/mx*200):4;g.fillStyle=d.barbs?'#3b82f6':'#25304a';g.beginPath();g.roundRect(x,930-h,100,h,10);g.fill();g.fillStyle='#fff';g.font='bold 26px '+F;g.textAlign='center';if(d.barbs)g.fillText(d.barbs,x+50,920-h);g.fillStyle='#8ea2c8';g.font='24px '+F;g.fillText(WD[i],x+50,965);g.textAlign='left'});
+ g.fillStyle='#fff';g.font='bold 34px '+F;g.fillText('Beute',60,1040);const l=KL.filter(k=>c.loot[k[0]]).slice(0,6);g.font='23px '+F;
+ l.forEach((k,i)=>{const x=60+(i%2)*500,y=1090+Math.floor(i/2)*56;g.fillStyle='#8ea2c8';g.fillText(k[2],x,y);g.fillStyle='#fff';g.textAlign='right';g.fillText(val(k[0],c.loot[k[0]],k[3]),x+440,y);g.textAlign='left'});
+ const R=REC(w).slice(0,3);g.fillStyle='#fff';g.font='bold 34px '+F;g.fillText('Rekorde',60,1290);R.forEach((r,i)=>{g.fillStyle='#16203a';g.beginPath();g.roundRect(60+i*330,1315,300,130,18);g.fill();g.fillStyle='#8ea2c8';g.font='24px '+F;g.fillText(r[1],80+i*330,1355);g.fillStyle='#fff';g.font='bold 32px '+F;g.fillText(r[2],80+i*330,1400);g.fillStyle='#d4a72c';g.font='24px '+F;g.fillText(r[4][0]==='n'?'':r[4][1],80+i*330,1435)});
+ return new Promise(r=>cv.toBlob(r,'image/png'))}
+async function ld(){try{W=await fetch('/api/week?offset='+off).then(r=>r.json());draw()}catch(e){}}
+$('wp').onclick=()=>{off++;ld()};$('wn').onclick=()=>{if(off>0){off--;ld()}};
+$('wi').onclick=async()=>{if(!W)return;const b=await png(),a=document.createElement('a');a.href=URL.createObjectURL(b);a.download='wochenbericht-'+W.from+'.png';document.body.appendChild(a);a.click();a.remove();$('wm').textContent='Bild gespeichert'};
+$('wt').onclick=async()=>{if(!W)return;try{await navigator.clipboard.writeText(txt());$('wm').textContent='Text kopiert'}catch(e){$('wm').textContent='Kopieren nicht möglich'}};
+ld();
+""" + _I18N + r"""</script></body></html>"""
+
 PAGE = PAGE.replace("@@QP@@", QP_BLOCK)
 ALLIANCE_PAGE = ALLIANCE_PAGE.replace("@@QP@@", QP_BLOCK)
 SETTINGS_PAGE = SETTINGS_PAGE.replace("@@QP@@", QP_BLOCK)
 KVK_PAGE = KVK_PAGE.replace("@@QP@@", QP_BLOCK)
+WOCHE_PAGE = WOCHE_PAGE.replace("@@QP@@", QP_BLOCK)
 
 KVK1_DEFAULT = {
     "season": {"id": "S11474", "name": "Endless War", "kvk": "#4123", "from": "13.09.2026", "to": "09.11.2026"},
@@ -1918,6 +2064,11 @@ def make_handler(db, watcher):
             u = urlparse(self.path)
             if u.path == "/":
                 self.send(PAGE, "text/html")
+            elif u.path in ("/woche", "/woche/", "/wochenbericht"):
+                self.send(WOCHE_PAGE, "text/html")
+            elif u.path == "/api/week":
+                q = parse_qs(u.query)
+                self.send(json.dumps(db.week(q.get("account", ["main"])[0], q.get("offset", ["0"])[0])), "application/json")
             elif u.path in ("/kvk1", "/kvk1/"):
                 self.send(KVK_PAGE, "text/html")
             elif u.path == "/api/kvk1":
