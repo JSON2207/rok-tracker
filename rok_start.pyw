@@ -2,7 +2,7 @@
 """RoK-Tracker Launcher: Fenster mit Status, Update, Start/Neustart/Beenden und Tool-Kacheln.
 Doppelklick genuegt (kein Konsolenfenster). Lege diese Datei in denselben Ordner wie rok_barbs.py.
 Ohne tkinter oder bei einem Fehler im Fenster startet der Tracker wie frueher direkt."""
-import hashlib, json, os, queue, re, subprocess, sys, threading, time, traceback, urllib.request, webbrowser
+import hashlib, json, math, os, queue, re, struct, subprocess, sys, threading, time, traceback, urllib.request, webbrowser, zlib
 
 UPDATE_URL = "https://raw.githubusercontent.com/JSON2207/rok-tracker/main/"
 DATEIEN = ["rok_barbs.py", "rok_diagnose.py", "rok_start.pyw"]      # fehlt eine online, wird sie uebersprungen
@@ -14,7 +14,8 @@ LOG = os.path.join(DATA, "update.log")
 TRACKER_LOG = os.path.join(DATA, "tracker.log")
 VERSION_FILE = os.path.join(DATA, "version.txt")
 CONFIG = os.path.join(DATA, "launcher.json")
-ARGS = [a for a in sys.argv[1:]]
+AUTOSTART = "--autostart" in sys.argv[1:]                    # vom Windows-Autostart: leise starten, Fenster minimiert
+ARGS = [a for a in sys.argv[1:] if a != "--autostart"]
 PORT = 8765
 if "--port" in ARGS:
     try:
@@ -202,7 +203,7 @@ def launcher_neu_starten():
         pass
     try:
         env = dict(os.environ, ROK_RELAUNCHED=str(time.time()))
-        subprocess.Popen([python_exe(), os.path.abspath(__file__)] + ARGS, cwd=HIER, env=env, close_fds=True,
+        subprocess.Popen([python_exe(), os.path.abspath(__file__)] + ARGS + (["--autostart"] if AUTOSTART else []), cwd=HIER, env=env, close_fds=True,
                          creationflags=(0x00000008 | 0x00000200) if os.name == "nt" else 0)
         return True
     except Exception as e:
@@ -217,6 +218,41 @@ def diagnose_starten():
     subprocess.Popen([python_exe(True), pfad], cwd=HIER, **kw)
     return True, "Diagnose gestartet. Das Ergebnis liegt als diagnose.txt auf dem Desktop."
 
+RUN_KEY = r"Software\Microsoft\Windows\CurrentVersion\Run"
+RUN_NAME = "RoKTracker"
+
+def autostart_befehl():
+    return '"%s" "%s" --autostart' % (python_exe(), os.path.abspath(__file__))
+
+def autostart_aktiv():
+    """True, wenn der Launcher mit Windows startet (Eintrag im Benutzer-Autostart, kein Administrator noetig)."""
+    if os.name != "nt":
+        return False
+    try:
+        import winreg
+        with winreg.OpenKey(winreg.HKEY_CURRENT_USER, RUN_KEY) as k:
+            return bool(winreg.QueryValueEx(k, RUN_NAME)[0])
+    except Exception:
+        return False
+
+def autostart_setzen(an):
+    if os.name != "nt":
+        return False
+    try:
+        import winreg
+        with winreg.OpenKey(winreg.HKEY_CURRENT_USER, RUN_KEY, 0, winreg.KEY_SET_VALUE) as k:
+            if an:
+                winreg.SetValueEx(k, RUN_NAME, 0, winreg.REG_SZ, autostart_befehl())
+            else:
+                try:
+                    winreg.DeleteValue(k, RUN_NAME)
+                except FileNotFoundError:
+                    pass
+        return True
+    except Exception as e:
+        log("Autostart aendern fehlgeschlagen: %s" % e)
+        return False
+
 def ordner_oeffnen(pfad):
     try:
         os.makedirs(pfad, exist_ok=True)
@@ -226,6 +262,178 @@ def ordner_oeffnen(pfad):
             subprocess.Popen(["xdg-open", pfad])
     except Exception as e:
         log("Ordner oeffnen fehlgeschlagen: %s" % e)
+
+
+# ---------------------------------------------------------------- Symbol und Infobereich (Taskleiste)
+def symbol_png(g=128):
+    def hx(c): return (int(c[1:3], 16), int(c[3:5], 16), int(c[5:7], 16))
+    def mix(a, b, t): return (a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t, a[2] + (b[2] - a[2]) * t)
+    cl = lambda v: 0.0 if v < 0 else 1.0 if v > 1 else v
+    stops = [hx(c) for c in ("#3b82f6", "#22d3ee", "#34d399", "#fbbf24", "#f472b6", "#8b5cf6")]
+    bg, weiss = hx("#0b0b0c"), hx("#f2f2f2")
+    P = [(.62, 0), (.14, .57), (.45, .57), (.34, 1), (.86, .38), (.55, .38)]
+    bw, bh = g * .30, g * .40
+    ox, oy = g / 2 - bw / 2, g / 2 - bh / 2
+    P = [(ox + x * bw, oy + y * bh) for x, y in P]
+    def innen(px, py):
+        c = False
+        for k in range(len(P)):
+            x1, y1 = P[k]; x2, y2 = P[(k + 1) % len(P)]
+            if (y1 > py) != (y2 > py) and px < (x2 - x1) * (py - y1) / (y2 - y1) + x1:
+                c = not c
+        return c
+    R, ri, r = g / 2 - 14, g / 2 - 14 - g * .075, g * .22
+    rows = []
+    for y in range(g):
+        row = bytearray([0])
+        for x in range(g):
+            px, py = x + .5, y + .5
+            qx, qy = abs(px - g / 2) - (g / 2 - r - 1), abs(py - g / 2) - (g / 2 - r - 1)
+            d = math.hypot(max(qx, 0), max(qy, 0)) + min(max(qx, qy), 0) - r
+            a = cl(.5 - d)
+            col = bg
+            dist = math.hypot(px - g / 2, py - g / 2)
+            cov = cl(R + .5 - dist) * cl(dist - ri + .5)
+            if cov > 0:
+                t = ((math.degrees(math.atan2(py - g / 2, px - g / 2)) + 360) % 360) / 360 * len(stops)
+                i = int(t) % len(stops)
+                col = mix(col, mix(stops[i], stops[(i + 1) % len(stops)], t - int(t)), cov)
+            if ox - 1 <= px <= ox + bw + 1 and oy - 1 <= py <= oy + bh + 1:
+                n = sum(innen(px - .5 + (i + .5) / 3, py - .5 + (j + .5) / 3) for i in range(3) for j in range(3))
+                col = mix(col, weiss, n / 9)
+            row += bytes((int(col[0] + .5), int(col[1] + .5), int(col[2] + .5), int(a * 255 + .5)))
+        rows.append(bytes(row))
+    raw = b"".join(rows)
+    def chunk(t, d):
+        c = struct.pack(">I", len(d)) + t + d
+        return c + struct.pack(">I", zlib.crc32(t + d) & 0xffffffff)
+    return b"\x89PNG\r\n\x1a\n" + chunk(b"IHDR", struct.pack(">IIBBBBB", g, g, 8, 6, 0, 0, 0)) + chunk(b"IDAT", zlib.compress(raw, 9)) + chunk(b"IEND", b"")
+
+def symbol_schreiben(pfad):
+    png = symbol_png(128)
+    with open(pfad, "wb") as f:
+        f.write(struct.pack("<HHH", 0, 1, 1) + struct.pack("<BBBBHHII", 0, 0, 0, 0, 1, 32, len(png), 22) + png)
+
+
+ICO = os.path.join(DATA, "rok.ico")
+
+def symbol_sichern():
+    """Legt das Programmsymbol an, falls es fehlt. Gibt den Pfad zurueck oder None."""
+    try:
+        if not os.path.exists(ICO):
+            os.makedirs(DATA, exist_ok=True)
+            symbol_schreiben(ICO)
+        return ICO
+    except Exception as e:
+        log("Symbol konnte nicht erstellt werden: %s" % e)
+        return None
+
+class TrayIcon:
+    """Symbol im Windows-Infobereich (neben der Uhr). Linksklick: Fenster zeigen, Rechtsklick: Menue.
+    Laeuft in einem eigenen Thread; Aktionen werden ueber die uebergebenen Funktionen an das Fenster gegeben."""
+    WM_TRAY = 0x0400 + 20
+    def __init__(self, ico, tip, auf_klick, auf_menue):
+        self.ok, self.klick, self.menue, self.ico, self.tip = False, auf_klick, auf_menue, ico, tip
+        self.hwnd = self.nid = None
+        self.bereit = threading.Event()
+        threading.Thread(target=self._lauf, daemon=True).start()
+        self.bereit.wait(4)
+
+    def _lauf(self):
+        try:
+            import ctypes
+            from ctypes import wintypes as wt
+            u, sh, k = ctypes.windll.user32, ctypes.windll.shell32, ctypes.windll.kernel32
+            LRESULT = ctypes.c_ssize_t
+            WNDPROC = ctypes.WINFUNCTYPE(LRESULT, wt.HWND, wt.UINT, wt.WPARAM, wt.LPARAM)
+            class WNDCLASSW(ctypes.Structure):
+                _fields_ = [("style", wt.UINT), ("lpfnWndProc", WNDPROC), ("cbClsExtra", ctypes.c_int), ("cbWndExtra", ctypes.c_int),
+                            ("hInstance", wt.HINSTANCE), ("hIcon", wt.HICON), ("hCursor", wt.HANDLE), ("hbrBackground", wt.HBRUSH),
+                            ("lpszMenuName", wt.LPCWSTR), ("lpszClassName", wt.LPCWSTR)]
+            class NOTIFYICONDATAW(ctypes.Structure):
+                _fields_ = [("cbSize", wt.DWORD), ("hWnd", wt.HWND), ("uID", wt.UINT), ("uFlags", wt.UINT), ("uCallbackMessage", wt.UINT),
+                            ("hIcon", wt.HICON), ("szTip", wt.WCHAR * 128), ("dwState", wt.DWORD), ("dwStateMask", wt.DWORD),
+                            ("szInfo", wt.WCHAR * 256), ("uVersion", wt.UINT), ("szInfoTitle", wt.WCHAR * 64), ("dwInfoFlags", wt.DWORD),
+                            ("guidItem", ctypes.c_byte * 16), ("hBalloonIcon", wt.HICON)]
+            u.DefWindowProcW.argtypes, u.DefWindowProcW.restype = [wt.HWND, wt.UINT, wt.WPARAM, wt.LPARAM], LRESULT
+            u.CreateWindowExW.argtypes = [wt.DWORD, wt.LPCWSTR, wt.LPCWSTR, wt.DWORD, ctypes.c_int, ctypes.c_int, ctypes.c_int, ctypes.c_int,
+                                          wt.HWND, wt.HMENU, wt.HINSTANCE, wt.LPVOID]
+            u.CreateWindowExW.restype = wt.HWND
+            u.RegisterClassW.argtypes = [ctypes.POINTER(WNDCLASSW)]
+            u.GetMessageW.argtypes = [ctypes.POINTER(wt.MSG), wt.HWND, wt.UINT, wt.UINT]
+            u.DispatchMessageW.argtypes = [ctypes.POINTER(wt.MSG)]
+            u.TranslateMessage.argtypes = [ctypes.POINTER(wt.MSG)]
+            u.CreatePopupMenu.restype = wt.HMENU
+            u.AppendMenuW.argtypes = [wt.HMENU, wt.UINT, ctypes.c_size_t, wt.LPCWSTR]
+            u.TrackPopupMenu.argtypes = [wt.HMENU, wt.UINT, ctypes.c_int, ctypes.c_int, ctypes.c_int, wt.HWND, wt.LPVOID]
+            u.DestroyMenu.argtypes = [wt.HMENU]
+            u.SetForegroundWindow.argtypes = [wt.HWND]
+            u.LoadImageW.argtypes = [wt.HINSTANCE, wt.LPCWSTR, wt.UINT, ctypes.c_int, ctypes.c_int, wt.UINT]
+            u.LoadImageW.restype = wt.HANDLE
+            u.LoadIconW.argtypes, u.LoadIconW.restype = [wt.HINSTANCE, ctypes.c_void_p], wt.HICON
+            u.PostMessageW.argtypes = [wt.HWND, wt.UINT, wt.WPARAM, wt.LPARAM]
+            k.GetModuleHandleW.argtypes, k.GetModuleHandleW.restype = [wt.LPCWSTR], wt.HMODULE
+            sh.Shell_NotifyIconW.argtypes = [wt.DWORD, ctypes.POINTER(NOTIFYICONDATAW)]
+
+            def wnd(hwnd, msg, wp, lp):
+                if msg == self.WM_TRAY:
+                    ev = lp & 0xFFFF
+                    if ev in (0x0202, 0x0203):                    # Linksklick / Doppelklick
+                        self.klick()
+                    elif ev == 0x0205:                            # Rechtsklick
+                        self._menue(u, ctypes, wt, hwnd)
+                    return 0
+                return u.DefWindowProcW(hwnd, msg, wp, lp)
+            self._wp = WNDPROC(wnd)                               # Verweis behalten, sonst raeumt Python die Funktion weg
+            inst = k.GetModuleHandleW(None)
+            wc = WNDCLASSW()
+            wc.lpfnWndProc, wc.hInstance, wc.lpszClassName = self._wp, inst, "RoKTrackerTray"
+            u.RegisterClassW(ctypes.byref(wc))
+            self.hwnd = u.CreateWindowExW(0, "RoKTrackerTray", "RoK Tracker", 0, 0, 0, 0, 0, None, None, inst, None)
+            if not self.hwnd:
+                raise OSError("Fenster fuer das Symbol konnte nicht erstellt werden")
+            icon = u.LoadImageW(None, self.ico, 1, 0, 0, 0x10 | 0x40) if self.ico and os.path.exists(self.ico) else None
+            if not icon:
+                icon = u.LoadIconW(None, ctypes.c_void_p(32512))
+            nid = NOTIFYICONDATAW()
+            nid.cbSize, nid.hWnd, nid.uID = ctypes.sizeof(NOTIFYICONDATAW), self.hwnd, 1
+            nid.uFlags, nid.uCallbackMessage, nid.hIcon, nid.szTip = 0x1 | 0x2 | 0x4, self.WM_TRAY, icon, self.tip[:120]
+            if not sh.Shell_NotifyIconW(0, ctypes.byref(nid)):    # NIM_ADD
+                raise OSError("Symbol konnte nicht in den Infobereich gesetzt werden")
+            self.nid, self._sh, self._ct = nid, sh, ctypes
+            self.ok = True
+            self.bereit.set()
+            msg = wt.MSG()
+            while u.GetMessageW(ctypes.byref(msg), None, 0, 0) > 0:
+                u.TranslateMessage(ctypes.byref(msg))
+                u.DispatchMessageW(ctypes.byref(msg))
+        except Exception:
+            log("Infobereich-Symbol nicht verfuegbar: " + traceback.format_exc())
+        finally:
+            self.bereit.set()
+
+    def _menue(self, u, ct, wt, hwnd):
+        m = u.CreatePopupMenu()
+        u.AppendMenuW(m, 0, 1, "Fenster zeigen")
+        u.AppendMenuW(m, 0, 2, "Dashboard öffnen")
+        u.AppendMenuW(m, 0x800, 0, None)
+        u.AppendMenuW(m, 0, 3, "Launcher schließen")
+        pt = wt.POINT()
+        u.GetCursorPos(ct.byref(pt))
+        u.SetForegroundWindow(hwnd)
+        cmd = u.TrackPopupMenu(m, 0x100 | 0x2, pt.x, pt.y, 0, hwnd, None)      # TPM_RETURNCMD | TPM_RIGHTBUTTON
+        u.DestroyMenu(m)
+        if cmd:
+            self.menue(cmd)
+
+    def entfernen(self):
+        if self.ok:
+            try:
+                self._sh.Shell_NotifyIconW(2, self._ct.byref(self.nid))          # NIM_DELETE
+            except Exception:
+                pass
+            self.ok = False
+
 
 # ---------------------------------------------------------------- Fenster
 C = dict(bg="#090d15", card="#0f1623", soft="#141d2e", ink="#e8edf6", mute="#8793a8", line="#1f2b42",
@@ -492,7 +700,13 @@ def mit_fenster():
     cfg = config_lesen()
     chat_url = cfg.get("chat_url") or CHAT_URL
     st = dict(busy=False, installiert=installierte_version(), neueste=None, laeuft=False, veraltet=False,
-              auto=bool(cfg.get("autoupdate", True)))
+              auto=bool(cfg.get("autoupdate", True)), tray=bool(cfg.get("tray", True)))
+    ico = symbol_sichern()
+    if ico and os.name == "nt":
+        try:
+            root.iconbitmap(ico)
+        except Exception:
+            pass
 
     # ---------------- Aufbau: links die Leiste, rechts die Flaeche mit feinem Raster
     side = tk.Frame(root, bg=C["side"], width=96)
@@ -694,10 +908,31 @@ def mit_fenster():
     Wf("upd", 90, 316, tk.Checkbutton(main, text="Beim Neustart automatisch nach Updates suchen", variable=autoupdate, bg=C["card"], fg=C["mute"],
                                       selectcolor=C["soft"], activebackground=C["card"], activeforeground=C["ink"], font=(FONT, 10),
                                       highlightthickness=0, bd=0))
+    autowin = tk.BooleanVar(value=autostart_aktiv())
+    def autowin_geaendert(*a):
+        if not autostart_setzen(bool(autowin.get())):
+            autowin.set(autostart_aktiv())
+            melden("Autostart konnte nicht geändert werden (nur unter Windows möglich).")
+        else:
+            melden("Autostart aktiviert. Der Launcher startet mit Windows und öffnet den Tracker im Hintergrund." if autowin.get() else "Autostart deaktiviert.")
+    autowin.trace_add("write", autowin_geaendert)
+    Wf("upd", 90, 346, tk.Checkbutton(main, text="Mit Windows starten (Tracker läuft dann im Hintergrund)", variable=autowin, bg=C["card"], fg=C["mute"],
+                                      selectcolor=C["soft"], activebackground=C["card"], activeforeground=C["ink"], font=(FONT, 10),
+                                      highlightthickness=0, bd=0, state="normal" if os.name == "nt" else "disabled"))
+    traywahl = tk.BooleanVar(value=st["tray"])
+    def tray_geaendert(*a):
+        st["tray"] = bool(traywahl.get())
+        c = config_lesen()
+        c["tray"] = st["tray"]
+        config_schreiben(c)
+    traywahl.trace_add("write", tray_geaendert)
+    Wf("upd", 90, 376, tk.Checkbutton(main, text="Beim Schließen (X) in den Infobereich neben der Uhr minimieren", variable=traywahl, bg=C["card"], fg=C["mute"],
+                                      selectcolor=C["soft"], activebackground=C["card"], activeforeground=C["ink"], font=(FONT, 10),
+                                      highlightthickness=0, bd=0, state="normal" if os.name == "nt" else "disabled"))
     k_prot = Knopf(main, "PROTOKOLL", lambda: ordner_oeffnen(DATA) if not os.path.exists(LOG) else
                    (os.startfile(LOG) if os.name == "nt" else None), klein=True, bg=C["card"])
-    Wf("upd", 92, 380, k_prot)
-    Wf("upd", 92 + int(k_prot.cget("width")) + 10, 380, Knopf(main, "DATENORDNER", lambda: ordner_oeffnen(DATA), klein=True, bg=C["card"]))
+    Wf("upd", 92, 418, k_prot)
+    Wf("upd", 92 + int(k_prot.cget("width")) + 10, 418, Knopf(main, "DATENORDNER", lambda: ordner_oeffnen(DATA), klein=True, bg=C["card"]))
 
     menue.add_command(label="Neu starten", command=lambda: arbeit(neu_starten, "Starte neu ..."))
     menue.add_command(label="Nach Update suchen", command=lambda: arbeit(update_ausfuehren, "Suche nach Updates ..."))
@@ -762,18 +997,51 @@ def mit_fenster():
             pruefen(False)
         root.after(3000, takt)
 
+    tray = None
+    def zeigen():
+        root.deiconify()
+        root.lift()
+        try:
+            root.focus_force()
+        except Exception:
+            pass
+    def ganz_schliessen():
+        if tray:
+            tray.entfernen()
+        root.destroy()
+    if os.name == "nt":
+        menue_aktionen = {1: zeigen, 2: lambda: aktion("dashboard"), 3: ganz_schliessen}
+        tray = TrayIcon(ico, "RoK Tracker", lambda: ui(zeigen), lambda c: ui(menue_aktionen.get(c, lambda: None)))
+    def x_gedrueckt():
+        if tray and tray.ok and st["tray"]:
+            root.withdraw()                                   # bleibt als Symbol neben der Uhr erreichbar
+        else:
+            ganz_schliessen()
+    root.protocol("WM_DELETE_WINDOW", x_gedrueckt)
     pump()
     pruefen(True)
     root.after(3000, takt)
-    if st["auto"]:
+    if AUTOSTART:
+        if tray and tray.ok:
+            root.withdraw()
+        else:
+            root.iconify()
+        def leise():
+            if st["auto"]:
+                update_ausfuehren()
+            ok, fehler = tracker_starten()
+            melden("Tracker läuft im Hintergrund." if ok else "Start fehlgeschlagen. " + fehler)
+        root.after(800, lambda: arbeit(leise, "Starte Tracker ..."))
+    elif st["auto"]:
         root.after(600, lambda: arbeit(update_ausfuehren, "Suche nach Updates ..."))
     root.mainloop()
 
 def ohne_fenster():
-    beenden()
+    if not AUTOSTART:
+        beenden()
     aktualisieren()
     ok, fehler = tracker_starten()
-    if ok:
+    if ok and not AUTOSTART:
         browser_oeffnen()
     else:
         log("Start fehlgeschlagen: " + fehler)
