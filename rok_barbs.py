@@ -1138,6 +1138,7 @@ button:focus-visible,select:focus-visible,input:focus-visible,summary:focus-visi
 .kc b{font-size:1.4rem}.kc span{overflow-wrap:anywhere}
 .cnt{color:var(--mute);font-size:.82rem}.cnt:empty{display:none}
 .sbf select,.sbf input[type=date]{width:100%}.sbf button{width:100%;cursor:pointer}.sbf label{display:flex;flex-direction:column;gap:3px;margin-top:4px}.sbf #cu{display:flex;flex-direction:column;gap:4px}.sbf .mrow>span:empty{display:none}
+.rbar{margin:14px 0 10px}
 .tu{display:flex;justify-content:flex-end;margin-bottom:8px;font-size:.85rem;color:var(--mute)}.tu select{margin-left:6px}.lap{margin-top:18px}.laph{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;margin-bottom:8px}.laph h3{margin:0}
 .loot{display:grid;grid-template-columns:repeat(auto-fill,minmax(236px,1fr));gap:12px}
 .l{display:grid;grid-template-columns:52px 1fr;column-gap:12px;align-items:center;border:1px solid var(--line);background:var(--soft);border-radius:14px;padding:12px 14px}
@@ -1201,15 +1202,16 @@ tr.flash td,details.flash{animation:fl 2.6s ease-out}
 document.addEventListener("click",e=>{const y=e.target.closest(".seg button");if(!y||!y.parentNode.id.match(/^m[wa]$/))return;if(y.parentNode.id==="mw")V.w=y.dataset.v;else V.a=y.dataset.v;try{localStorage.setItem("rokview",JSON.stringify(V))}catch(e){}ap()});ap();B.classList.toggle("sbopen",O);b.onclick=()=>so(!O);x.onclick=()=>so(false);ov.onclick=()=>so(false);document.addEventListener("keydown",e=>{if(e.key==="Escape"&&window.innerWidth<1100)so(false)})})()</script>@@QP@@
 <section class="hero"><div class="avc"><div class="av" id="avbox" tabindex="0" role="button" title="Avatar ändern"><span id="hav">⚔</span></div><button id="avreset" hidden>Avatar zurücksetzen</button><input type="file" id="avfile" accept="image/*" hidden></div><div>
 <div class="hrow"><div><h1 id="hname">Barbaren-Tracker</h1><div id="per"></div><div id="st"></div></div>
-<div class="bar"><select id="acc" hidden></select><button id="mainbtn" hidden></button><select id="range">
+<div class="bar"><select id="acc" hidden></select><button id="mainbtn" hidden></button></div></div>
+<div class="chips" id="hchips"></div></div></section>
+<div class="grid" id="kpi"></div>
+<p class="note" id="kpinote"></p>
+<div class="bar rbar"><select id="range">
 <option value="today">Heute</option><option value="yesterday">Gestern</option><option value="7">Letzte 7 Tage</option>
 <option value="30">Letzte 30 Tage</option><option value="month">Dieser Monat</option><option value="all">Alles</option>
 <option value="custom">Zeitraum wählen</option></select>
 <span id="cu" hidden><label>von <input type="date" id="d1"></label> <label>bis <input type="date" id="d2"></label></span>
-<button id="expand" type="button">Alle Berichte aufklappen</button></div></div>
-<div class="chips" id="hchips"></div></div></section>
-<div class="grid" id="kpi"></div>
-<p class="note" id="kpinote"></p>
+<button id="expand" type="button">Alle Berichte aufklappen</button></div>
 <nav class="tabs" id="tabs" role="tablist">
 <button role="tab" data-t="loot">Beute</button>
 <button role="tab" data-t="ft">Festungen <span class="cnt" id="c_ft"></span></button>
@@ -1254,13 +1256,7 @@ function showTab(t){const btn=document.querySelector(`#tabs [data-t="${t}"]`);if
  try{localStorage.setItem('roktab',t)}catch(e){}}
 $('tabs').onclick=e=>{const b=e.target.closest('button');if(b)showTab(b.dataset.t)};showTab(tab);
 let repOpen=false;$('expand').onclick=()=>{repOpen=!repOpen;document.querySelectorAll('details.rep').forEach(d=>d.open=repOpen);$('expand').textContent=repOpen?(LANG==='en'?'Collapse all reports':'Alle Berichte zuklappen'):(LANG==='en'?'Expand all reports':'Alle Berichte aufklappen')};
-(function(){const sbn=document.querySelector('#sb .sbn'),bar=document.querySelector('.hrow .bar');if(!sbn||!bar)return;
- const box=document.createElement('div');box.className='sbf';
- const row=(lbl,...els)=>{const d=document.createElement('div');d.className='mrow';const sp=document.createElement('span');sp.textContent=lbl;d.append(sp,...els);return d};
- const acc=row('Account',$('acc'),$('mainbtn'));const syncAcc=()=>{acc.hidden=$('acc').hidden};
- box.append(Object.assign(document.createElement('div'),{className:'msep'}),Object.assign(document.createElement('div'),{className:'sbl',textContent:'Berichte'}),acc,row('Zeitraum',$('range'),$('cu')),row('',$('expand')));
- box.querySelector('.mrow:last-child span').remove();
- sbn.appendChild(box);bar.remove();syncAcc();new MutationObserver(syncAcc).observe($('acc'),{attributes:true,attributeFilter:['hidden']})})();
+
 function range(){const v=$('range').value,t=new Date();$('cu').hidden=v!=='custom';
  if(v==='today')return[iso(t),iso(t)];
  if(v==='yesterday'){t.setDate(t.getDate()-1);return[iso(t),iso(t)]}
