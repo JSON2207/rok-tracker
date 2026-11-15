@@ -1012,7 +1012,7 @@ body.qpopen .qp{transform:none}
 .qp svg{width:100%;height:auto;display:block}.qp svg rect.bar{fill:var(--acc)}.qp svg rect.bar.td{fill:var(--good)}.qp svg text{fill:var(--mute);font-size:9px}
 .ql{display:flex;flex-direction:column;gap:5px;font-size:.84rem}.ql>div{display:flex;justify-content:space-between;gap:8px}.ql span:last-child{color:var(--mute);white-space:nowrap}
 .qa{display:grid;grid-template-columns:1fr auto;gap:2px 10px;font-size:.82rem}.qa b{text-align:right}
-.qbig{font-size:1.6rem;font-weight:800;line-height:1.1}
+.qbig{font-size:1.6rem;font-weight:800;line-height:1.1}.qsel{margin-top:8px;width:100%;padding:5px 8px;font-size:.84rem}
 body{transition:padding-left .18s ease,padding-right .18s ease}
 @media(min-width:1500px){body.qpopen{padding-right:340px}}
 @media(max-width:1499px){body.qpopen .qp{box-shadow:0 0 30px #0006}}
@@ -1023,7 +1023,7 @@ body{transition:padding-left .18s ease,padding-right .18s ease}
 <div class="qch" id="qch" hidden></div><div class="qwl" id="qwl"></div></aside>
 <script>(function(){
 let LG='de';try{LG=localStorage.getItem('roklang')==='en'?'en':'de'}catch(e){}
-const TT={'Schnellzugriff':'Quick access','Widgets auswählen':'Choose widgets','Schließen':'Close','Live-Feed':'Live feed','Chain-Länge':'Chain length','Ø Barbaren pro Chain':'Avg barbarians per chain','Chains/Serie':'chains/series','Gesamt':'Total','Heute gegen gestern':'Today vs yesterday','Verlauf':'Trend','Seltene Drops':'Rare drops','Allianz':'Alliance','Letzte 7 Tage':'Last 7 days','Status':'Status','Festung':'Fort','Barbaren':'Barbarians','Speedups':'Speedups','Gems':'Gems','Tomes-XP':'Tome XP','Festungen':'Forts','heute':'today','gestern':'yesterday','Noch nichts da':'Nothing yet','Dein Ø Rang':'Your avg rank','Top 5 (Ø Rang)':'Top 5 (avg rank)','Rang':'Rank','von':'of','Dateien überwacht':'files watched','Letzter Bericht':'Last report','Vorwoche':'prev. week','7 Tage':'7 days','14 Tage':'14 days','Min':'min','Rally':'Rally','Solo':'Solo','Du bist in der Allianz-Liste nicht gefunden. Profil-Daten einlesen, damit dein Name bekannt ist.':'You were not found in the alliance list. Import profile data so your name is known.','Noch keine Allianz-Daten':'No alliance data yet'};
+const TT={'Schnellzugriff':'Quick access','Widgets auswählen':'Choose widgets','Schließen':'Close','Live-Feed':'Live feed','Chain-Länge':'Chain length','Ø Barbaren pro Chain':'Avg barbarians per chain','Zeitraum':'Period','Gesamt':'Total','Heute gegen gestern':'Today vs yesterday','Verlauf':'Trend','Seltene Drops':'Rare drops','Allianz':'Alliance','Letzte 7 Tage':'Last 7 days','Status':'Status','Festung':'Fort','Barbaren':'Barbarians','Speedups':'Speedups','Gems':'Gems','Tomes-XP':'Tome XP','Festungen':'Forts','heute':'today','gestern':'yesterday','Noch nichts da':'Nothing yet','Dein Ø Rang':'Your avg rank','Top 5 (Ø Rang)':'Top 5 (avg rank)','Rang':'Rank','von':'of','Dateien überwacht':'files watched','Letzter Bericht':'Last report','Vorwoche':'prev. week','7 Tage':'7 days','14 Tage':'14 days','Min':'min','Rally':'Rally','Solo':'Solo','Du bist in der Allianz-Liste nicht gefunden. Profil-Daten einlesen, damit dein Name bekannt ist.':'You were not found in the alliance list. Import profile data so your name is known.','Noch keine Allianz-Daten':'No alliance data yet'};
 const t=s=>LG==='en'?(TT[s]||s):s,LOC=LG==='en'?'en-US':'de-DE',f=n=>Number(n||0).toLocaleString(LOC);
 const esc=s=>String(s==null?'':s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
 const $=id=>document.getElementById(id),B=document.body;
@@ -1050,9 +1050,8 @@ function wAli(){if(!AL||!AL.members||!AL.members.length)return`<div class="q0">$
  let h='';if(me){h+=`<div class="q0">${t('Dein Ø Rang')}</div><div class="qbig">${me.avg.toFixed(1)} <small class="q0">#${i+1} ${t('von')} ${ms.length}</small></div><div class="qa" style="margin:8px 0">${cats.map(c=>{const x=me.m.c[c.key];return`<span>${esc(c.label)}</span><b>${x&&x.r!=null?'#'+x.r:'–'}</b>`}).join('')}</div>`}else if(nm)h+=`<div class="q0" style="margin-bottom:8px">${t('Du bist in der Allianz-Liste nicht gefunden. Profil-Daten einlesen, damit dein Name bekannt ist.')}</div>`;
  h+=`<div class="q0" style="margin-bottom:4px">${t('Top 5 (Ø Rang)')}</div><div class="qa">${ms.slice(0,5).map((x,j)=>`<span>${j+1}. ${esc(x.m.name)}</span><b>${x.avg.toFixed(1)}</b>`).join('')}</div>`;return h}
 function wStat(){const s=ST||{};return`<div class="ql"><div><span>${t('Dateien überwacht')}</span><span>${f(s.files)}</span></div><div><span>${t('Letzter Bericht')}</span><span>${esc(Q.last||'–')}</span></div></div>`}
-function wChain(){const c=Q.chain,r=x=>(Math.round(x*10)/10).toLocaleString(LOC),av=a=>a.chains?r(a.barbs/a.chains):'–',sr=a=>a.series?r(a.chains/a.series):'–';
- const row=(l,a)=>`<span>${t(l)}</span><b>${av(a)} <small class="q0">${sr(a)} ${t('Chains/Serie')}</small></b>`;
- return`<div class="q0">${t('Ø Barbaren pro Chain')}</div><div class="qbig">${av(c.week)} <small class="q0">${t('7 Tage')}</small></div><div class="qa" style="margin-top:8px">${row('heute',c.today)}${row('7 Tage',c.week)}${row('Gesamt',c.all)}</div>`}
+function wChain(){const c=Q.chain,k=S.cp||'today',a=c[k]||c.today,v=a.chains?(Math.round(a.barbs/a.chains*10)/10).toLocaleString(LOC):'–';
+ return`<div class="q0">${t('Ø Barbaren pro Chain')}</div><div class="qbig">${v}</div><select id="qcp" class="qsel" aria-label="${t('Zeitraum')}">${[['today','heute'],['week','7 Tage'],['all','Gesamt']].map(o=>`<option value="${o[0]}"${o[0]===k?' selected':''}>${t(o[1])}</option>`).join('')}</select>`}
 const FN={chain:wChain,feed:wFeed,vs:wVs,trend:wTrend,rare:wRare,ali:wAli,week:wWeek,stat:wStat};
 function draw(){if(!Q)return;$('qwl').innerHTML=W.filter(w=>S.on.includes(w[0])).map(w=>`<section class="qw" data-w="${w[0]}"><h4>${t(w[1])}</h4>${FN[w[0]]()}</section>`).join('')||`<div class="q0">${t('Widgets auswählen')} ⚙</div>`}
 function chips(){$('qch').innerHTML=W.map(w=>`<button type="button" data-w="${w[0]}" aria-pressed="${S.on.includes(w[0])}">${t(w[1])}</button>`).join('')}
@@ -1060,6 +1059,7 @@ async function pull(){if(document.hidden)return;try{const need=S.on.includes('al
 function setOpen(v){S.open=v;B.classList.toggle('qpopen',v);save();if(v)pull()}
 $('qbtn').onclick=()=>setOpen(true);$('qx').onclick=()=>setOpen(false);$('qset').onclick=()=>{$('qch').hidden=!$('qch').hidden};
 $('qch').onclick=e=>{const b=e.target.closest('button');if(!b)return;const k=b.dataset.w;S.on=S.on.includes(k)?S.on.filter(x=>x!==k):W.map(w=>w[0]).filter(x=>x===k||S.on.includes(x));save();chips();draw();pull()};
+$('qwl').onchange=e=>{if(e.target.id==='qcp'){S.cp=e.target.value;save();draw()}};
 $('qwl').onclick=e=>{const b=e.target.closest('button');if(!b)return;if(b.dataset.m)S.m=b.dataset.m;else if(b.dataset.n)S.n=+b.dataset.n;else return;save();draw()};
 $('qbtn').textContent='⚡ '+t('Schnellzugriff');$('qp').querySelector('.qph b').textContent='⚡ '+t('Schnellzugriff');$('qset').title=t('Widgets auswählen');$('qx').title=t('Schließen');
 const sbn=document.querySelector('#sb .sbn');if(sbn){const r=document.createElement('div');r.className='mrow';r.innerHTML='<button type="button" id="qtog" style="cursor:pointer">⚡ '+t('Schnellzugriff')+'</button>';sbn.appendChild(r);r.firstChild.onclick=()=>setOpen(!S.open)}
