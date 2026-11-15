@@ -1063,17 +1063,19 @@ const short=n=>{n=Number(n||0);return n>=1e6?(n/1e6).toFixed(2).replace(/\.?0+$/
 const MET={forts:['Festungen',d=>d.forts],speed:['Speedups',d=>d.speed],gems:['Gems',d=>d.gems],xp:['Tomes-XP',d=>d.xp],barb:['Barbaren',d=>d.barb]};
 const TUq=()=>{try{return localStorage.getItem('roktime')||'min'}catch(e){return'min'}};
 const rr=(v,n)=>(Math.round(v*n)/n).toLocaleString(LOC);
-const tm=v=>{const u=TUq();return u==='h'?rr(v/60,10):u==='d'?rr(v/1440,100):short(v)};
-const tun=()=>({min:t('Min'),h:'h',d:LG==='en'?'days':'Tage'}[TUq()]||t('Min'));
+const tm=v=>{const u=TUq();if(u==='min')return short(v);let m=Math.round(v);const L=LG==='en'?{d:'days',h:'h',m:'min'}:{d:'Tage',h:'Std',m:'Min'};
+ if(u==='h'){const h=Math.floor(m/60);return h?f(h)+' '+L.h+' '+m%60+' '+L.m:m+' '+L.m}
+ const d=Math.floor(m/1440),h=Math.round(m%1440/60);return h===24?f(d+1)+' '+L.d+' 0 '+L.h:f(d)+' '+L.d+' '+h+' '+L.h};
+const tun=()=>TUq()==='min'?' ('+t('Min')+')':'';
 const arrow=(a,b,k)=>{const d=a-b,fa=k==='speed'?tm:f;if(!d)return'<em class="eq">= '+t('gestern')+'</em>';const p=b?Math.round(d/b*100):null;return`<em class="${d>0?'up':'dn'}">${d>0?'▲':'▼'} ${fa(Math.abs(d))}${p===null?'':' ('+(d>0?'+':'−')+Math.abs(p)+' %)'}</em>`};
 const norm=s=>String(s||'').normalize('NFKC').toLowerCase().replace(/\s+/g,'');
 function wFeed(){const l=Q.feed;return l.length?`<div class="qf">${l.map(e=>`<div><div class="r1"><time>${esc(e.time)}</time><span class="tg${e.type==='barb'?' b':''}">${t(e.type==='fort'?'Festung':'Barbaren')}</span><b>${esc(e.title)}</b>${e.role&&e.role!=='solo'?'<span class="tg">'+t('Rally')+'</span>':''}</div><div class="ls">${e.loot.length?e.loot.map(x=>x.name?f(x.qty)+'× '+esc(x.name):'+'+x.qty).join(', '):'–'}</div></div>`).join('')}</div>`:`<div class="q0">${t('Noch nichts da')}</div>`}
-function wVs(){const d=Q.days,a=d[d.length-1],b=d[d.length-2];return`<div class="qg">${['speed','gems','forts','xp'].map(k=>`<div><small>${t(MET[k][0])}${k==='speed'?' ('+tun()+')':''}</small><b>${k==='speed'?tm(a[k]):short(a[k])}</b>${arrow(a[k],b[k],k)}</div>`).join('')}</div>`}
+function wVs(){const d=Q.days,a=d[d.length-1],b=d[d.length-2];return`<div class="qg">${['speed','gems','forts','xp'].map(k=>`<div><small>${t(MET[k][0])}${k==='speed'?tun():''}</small><b>${k==='speed'?tm(a[k]):short(a[k])}</b>${arrow(a[k],b[k],k)}</div>`).join('')}</div>`}
 function wTrend(){const n=S.n,d=Q.days.slice(-n),fn=MET[S.m][1],v=d.map(fn),mx=Math.max(1,...v),W=280,H=84,bw=W/n;
  const bars=v.map((x,i)=>{const h=Math.round(x/mx*(H-16));return`<rect class="bar${i===n-1?' td':''}" x="${(i*bw+1.5).toFixed(1)}" y="${H-h}" width="${(bw-3).toFixed(1)}" height="${h}" rx="2"><title>${d[i].day.slice(8)}.${d[i].day.slice(5,7)}.: ${f(x)}</title></rect>`}).join('');
  return`<div class="qt">${Object.entries(MET).map(([k,m])=>`<button type="button" data-m="${k}" class="${k===S.m?'on':''}">${t(m[0])}</button>`).join('')}</div><svg viewBox="0 0 ${W} ${H+10}">${bars}<text x="0" y="${H+9}">${d[0].day.slice(8)}.${d[0].day.slice(5,7)}.</text><text x="${W}" y="${H+9}" text-anchor="end">${t('heute')}</text><text x="${W}" y="9" text-anchor="end">max ${short(mx)}</text></svg><div class="qt" style="margin:6px 0 0"><button type="button" data-n="7" class="${n===7?'on':''}">${t('7 Tage')}</button><button type="button" data-n="14" class="${n===14?'on':''}">${t('14 Tage')}</button></div>`}
 function wRare(){const l=Q.rare;return l.length?`<div class="ql">${l.map(x=>`<div><span><img class="qi" src="/icon/${x.slug}" alt="" onerror="this.remove()">${f(x.qty)}× ${esc(x.name)}</span><span>${x.last.slice(8)}.${x.last.slice(5,7)}.</span></div>`).join('')}</div>`:`<div class="q0">${t('Noch nichts da')}</div>`}
-function wWeek(){const d=Q.days,a=d.slice(-7),b=d.slice(0,7),sm=(l,k)=>l.reduce((n,x)=>n+x[k],0);return`<div class="qg">${['speed','gems','forts','xp'].map(k=>{const x=sm(a,k),y=sm(b,k),df=x-y;return`<div><small>${t(MET[k][0])}${k==='speed'?' ('+tun()+')':''}</small><b>${k==='speed'?tm(x):short(x)}</b><em class="${df>0?'up':df<0?'dn':'eq'}">${df>0?'▲':df<0?'▼':'='} ${k==='speed'?tm(Math.abs(df)):f(Math.abs(df))} ${t('Vorwoche')}</em></div>`}).join('')}</div>`}
+function wWeek(){const d=Q.days,a=d.slice(-7),b=d.slice(0,7),sm=(l,k)=>l.reduce((n,x)=>n+x[k],0);return`<div class="qg">${['speed','gems','forts','xp'].map(k=>{const x=sm(a,k),y=sm(b,k),df=x-y;return`<div><small>${t(MET[k][0])}${k==='speed'?tun():''}</small><b>${k==='speed'?tm(x):short(x)}</b><em class="${df>0?'up':df<0?'dn':'eq'}">${df>0?'▲':df<0?'▼':'='} ${k==='speed'?tm(Math.abs(df)):f(Math.abs(df))} ${t('Vorwoche')}</em></div>`}).join('')}</div>`}
 function wAli(){if(!AL||!AL.members||!AL.members.length)return`<div class="q0">${t('Noch keine Allianz-Daten')}</div>`;
  const off=(AL.ui&&AL.ui.off)||[],cats=AL.cats.filter(c=>!off.includes(c.key)),ms=AL.members.map(m=>{const r=cats.map(c=>m.c[c.key]&&m.c[c.key].r).filter(x=>x!=null);return{m,avg:r.length?r.reduce((a,b)=>a+b,0)/r.length:null}}).filter(x=>x.avg!=null).sort((a,b)=>a.avg-b.avg);
  const nm=norm(Q.me),i=nm?ms.findIndex(x=>norm(x.m.name)===nm):-1,me=i>=0?ms[i]:null;
@@ -1333,9 +1335,12 @@ const lootBig=L=>{const sum=k=>L.filter(x=>x.kind===k).reduce((n,x)=>n+x.total,0
   ['Ressourcenpakete',sum('packs'),'Stück','packs'],['Aktionspunkte (Notfall)',sum('ap'),'AP','ap'],['Mais',sum('food'),'','food']]
   .concat(L.filter(x=>x.kind==='other').map(x=>[x.name,x.qty,'×','item_'+x.item_id])).filter(x=>x[1]>0)};
 let TU='min';try{TU=localStorage.getItem('roktime')||'min'}catch(e){}
-const tfmt=v=>TU==='h'?(Math.round(v/60*10)/10).toLocaleString(LOC):TU==='d'?(Math.round(v/1440*100)/100).toLocaleString(LOC):f(Math.round(v));
-const tlab=()=>TU==='h'?'h':TU==='d'?(LANG==='en'?'days':'Tage'):'Min';
-const lootHtml=(big,k,none)=>big.length?big.map(x=>{const v=x[1]*k;if(x[2]==='Min')return`<div class="l" tabindex="0" data-tip="${esc(TIPS[x[3]]||x[0])}"><i><img src="/icon/${x[3]}" alt="" onerror="icoFb(this,'${slug(x[0])}','${LI[x[0]]||'🎁'}')"></i><b>${k===1||TU!=='min'||v>=100?tfmt(v):(Math.round(v*10)/10).toLocaleString(LOC)} ${tlab()}</b><small>${esc(x[0])}</small></div>`;return`<div class="l" tabindex="0" data-tip="${esc(TIPS[x[3]]||x[0])}"><i><img src="/icon/${x[3]}" alt="" onerror="icoFb(this,'${slug(x[0])}','${LI[x[0]]||'🎁'}')"></i><b>${k===1||v>=100?f(Math.round(v)):(Math.round(v*10)/10).toLocaleString(LOC)} ${x[2]}</b><small>${esc(x[0])}</small></div>`}).join(''):`<span class="note">${none}</span>`;
+const durS=(v,u,en)=>{let m=Math.round(v);const L=en?{d:'days',h:'h',m:'min'}:{d:'Tage',h:'Std',m:'Min'};
+ if(u==='h'){const h=Math.floor(m/60);return h?`${f(h)} ${L.h} ${m%60} ${L.m}`:`${m} ${L.m}`}
+ const d=Math.floor(m/1440),h=Math.round(m%1440/60);return h===24?`${f(d+1)} ${L.d} 0 ${L.h}`:`${f(d)} ${L.d} ${h} ${L.h}`};
+const tfmt=v=>TU==='min'?f(Math.round(v)):durS(v,TU,LANG==='en');
+const tlab=()=>TU==='min'?'Min':'';
+const lootHtml=(big,k,none)=>big.length?big.map(x=>{const v=x[1]*k;if(x[2]==='Min')return`<div class="l" tabindex="0" data-tip="${esc(TIPS[x[3]]||x[0])}"><i><img src="/icon/${x[3]}" alt="" onerror="icoFb(this,'${slug(x[0])}','${LI[x[0]]||'🎁'}')"></i><b>${TU!=='min'?tfmt(v):(k===1||v>=100?f(Math.round(v)):(Math.round(v*10)/10).toLocaleString(LOC))+' '+tlab()}</b><small>${esc(x[0])}</small></div>`;return`<div class="l" tabindex="0" data-tip="${esc(TIPS[x[3]]||x[0])}"><i><img src="/icon/${x[3]}" alt="" onerror="icoFb(this,'${slug(x[0])}','${LI[x[0]]||'🎁'}')"></i><b>${k===1||v>=100?f(Math.round(v)):(Math.round(v*10)/10).toLocaleString(LOC)} ${x[2]}</b><small>${esc(x[0])}</small></div>`}).join(''):`<span class="note">${none}</span>`;
 $('tunit').value=TU;$('tunit').onchange=()=>{TU=$('tunit').value;try{localStorage.setItem('roktime',TU)}catch(e){}window.dispatchEvent(new Event('roktime'));lastSig='';load();lapLoad(true).catch(()=>{})};
 let lapPer='7';try{lapPer=localStorage.getItem('roklap')||'7'}catch(e){}
 let lapSig='';
