@@ -121,8 +121,8 @@ def tracker_starten():
         time.sleep(0.3)
     return False, "Das Programm hat sich beendet oder antwortet nicht. Siehe " + TRACKER_LOG
 
-def browser_oeffnen(ziel=""):
-    webbrowser.open(URL + (("#" + ziel) if ziel else ""))
+def browser_oeffnen(ziel="", seite=""):
+    webbrowser.open(URL + seite + (("#" + ziel) if ziel else ""))
 
 # ---------------------------------------------------------------- Updates
 def installierte_version():
@@ -230,17 +230,55 @@ C = dict(bg="#090d15", card="#0f1623", soft="#141d2e", ink="#e8edf6", mute="#879
 FONT = "Segoe UI"
 CHAT_URL = "https://claude.ai/code/session_01LFjMW45VQY2gAnMtkdR1Uk"     # kann in launcher.json mit "chat_url" ueberschrieben werden
 
-# Kacheln: (Symbol, Titel, Beschreibung, Aktion, Knopftext). Aktion None = noch nicht verfuegbar.
+# Kacheln: (Symbol, Titel, Beschreibung, [(Knopftext, Aktion), ...]). Aktion None = noch nicht verfuegbar.
 MODULE = [
-    ("⚔", "Barbaren- und Beute-Tracker", "Berichte, Festungen, Spielerkaempfe und Ark of Osiris", "dashboard", "Oeffnen"),
-    ("\U0001F464", "Profil-Tracker", "Macht, Kill Points und Verlauf aus deinen Profil-Screenshots", "profil", "Oeffnen"),
-    ("\U0001F50D", "Diagnose", "Prueft den mailcache und schreibt diagnose.txt auf den Desktop", "diagnose", "Starten"),
-    ("✨", "Weitere Tools", "Hier kommen die naechsten Funktionen hin", None, "Bald"),
+    ("\u2694", "Barbaren- und Beute-Tracker", "Berichte, Festungen, Spielerkaempfe und Ark of Osiris", [("Oeffnen", "dashboard")]),
+    ("\U0001F464", "Profil-Tracker", "Macht, Kill Points und Verlauf aus deinen Profil-Screenshots", [("Oeffnen", "profil")]),
+    ("\U0001F6E1", "Allianz-Tracker", "Member-Rangliste: Power, Kills, Tech, Bau, Hilfen, Festungen",
+     [("Oeffnen", "allianz"), ("Daten einfuegen", "allianz_import"), ("Bilder hinzufuegen", "allianz_bilder")]),
+    ("\U0001F50D", "Diagnose", "Prueft den mailcache und schreibt diagnose.txt auf den Desktop", [("Starten", "diagnose")]),
 ]
+BILDER = os.path.join(DATA, "allianz", "bilder")
+
+def json_einspielen(pfade):
+    """Schickt JSON-Dateien (Allianz-Ranglisten) an den laufenden Tracker. Gibt (Zeilen, Fehlertext) zurueck."""
+    n, fehler = 0, ""
+    for pfad in pfade:
+        try:
+            with open(pfad, "rb") as f:
+                daten = f.read()
+            req = urllib.request.Request(URL + "api/alliance", data=daten, method="POST")
+            with urllib.request.urlopen(req, timeout=10) as r:
+                antwort = json.loads(r.read().decode("utf-8", "replace"))
+            if antwort.get("ok"):
+                n += antwort.get("n", 0)
+            else:
+                fehler = "%s: %s" % (os.path.basename(pfad), antwort.get("error"))
+        except Exception as e:
+            fehler = "%s: %s" % (os.path.basename(pfad), e)
+    return n, fehler
+
+def bilder_sammeln(pfade):
+    """Kopiert Bilder in einen Ordner pro Tag. Gibt (Anzahl, Zielordner) zurueck."""
+    import shutil
+    ziel = os.path.join(BILDER, time.strftime("%Y-%m-%d"))
+    os.makedirs(ziel, exist_ok=True)
+    n = 0
+    for pfad in pfade:
+        name = os.path.basename(pfad)
+        basis, ext = os.path.splitext(name)
+        ziel_datei, i = os.path.join(ziel, name), 1
+        while os.path.exists(ziel_datei):
+            ziel_datei = os.path.join(ziel, "%s_%d%s" % (basis, i, ext))
+            i += 1
+        shutil.copy2(pfad, ziel_datei)
+        n += 1
+    return n, ziel
 
 def mit_fenster():
     import tkinter as tk
     from tkinter import font as tkfont
+    from tkinter import filedialog, messagebox
 
     def rrect(cv, x1, y1, x2, y2, r, **kw):
         """Rechteck mit runden Ecken auf einer Zeichenflaeche."""
@@ -426,11 +464,11 @@ def mit_fenster():
         if launcher and launcher_neu_starten():
             ui(lambda: (log("Launcher aktualisiert, startet neu"), root.destroy()))
 
-    def start_und_oeffnen(ziel=""):
+    def start_und_oeffnen(ziel="", seite=""):
         melden("Starte Tracker ...")
         ok, fehler = tracker_starten()
         if ok:
-            browser_oeffnen(ziel)
+            browser_oeffnen(ziel, seite)
             melden("Tracker laeuft. Browser geoeffnet.")
         else:
             melden("Start fehlgeschlagen. " + fehler)
@@ -453,6 +491,34 @@ def mit_fenster():
             arbeit(lambda: start_und_oeffnen(), "Oeffne Dashboard ...")
         elif name == "profil":
             arbeit(lambda: start_und_oeffnen("profil"), "Oeffne Profil ...")
+        elif name == "allianz":
+            arbeit(lambda: start_und_oeffnen(seite="allianz"), "Oeffne Allianz-Tracker ...")
+        elif name == "allianz_import":
+            pfade = filedialog.askopenfilenames(title="Allianz-Datei (JSON) waehlen", filetypes=[("JSON-Datei", "*.json"), ("Alle Dateien", "*.*")])
+            if pfade:
+                def imp():
+                    melden("Starte Tracker ...")
+                    ok, fehler = tracker_starten()
+                    if not ok:
+                        return melden("Start fehlgeschlagen. " + fehler)
+                    n, f = json_einspielen(pfade)
+                    melden(("%d Eintraege uebernommen." % n) + (" Fehler: " + f if f else " Im Dashboard unter Allianz ansehen."))
+                arbeit(imp, "Spiele Allianz-Daten ein ...")
+        elif name == "allianz_bilder":
+            pfade = filedialog.askopenfilenames(title="Allianz-Screenshots waehlen",
+                                                filetypes=[("Bilder", "*.png *.jpg *.jpeg *.webp"), ("Alle Dateien", "*.*")])
+            if pfade:
+                def bilder():
+                    n, ziel = bilder_sammeln(pfade)
+                    melden("%d Bilder gesammelt in %s" % (n, ziel))
+                    def fragen():
+                        if messagebox.askyesno("Bilder gesammelt",
+                                               "%d Bilder wurden gesammelt.\n\nDie Auswertung macht Claude im Chat. Chat und Ordner jetzt oeffnen, "
+                                               "um die Bilder dort hochzuladen?" % n):
+                            ordner_oeffnen(ziel)
+                            webbrowser.open(chat_url)
+                    ui(fragen)
+                arbeit(bilder, "Kopiere Bilder ...")
         elif name == "diagnose":
             def d():
                 ok, t = diagnose_starten()
@@ -494,19 +560,23 @@ def mit_fenster():
     raster.pack(fill="x", padx=28)
     raster.columnconfigure(0, weight=1, uniform="m")
     raster.columnconfigure(1, weight=1, uniform="m")
-    for i, (symbol, name, beschr, akt, knopf) in enumerate(MODULE):
+    for i, (symbol, name, beschr, knoepfe) in enumerate(MODULE):
         k = Karte(raster)
         k.grid(row=i // 2, column=i % 2, sticky="nsew", padx=(0, 7) if i % 2 == 0 else (7, 0), pady=7)
         oben = tk.Frame(k.innen, bg=C["card"])
         oben.pack(fill="x", padx=16, pady=(14, 0))
         tk.Label(oben, text=symbol, bg=C["soft"], fg=C["ink"], font=("Segoe UI Emoji", 15), width=2).pack(side="left")
-        tk.Label(oben, text=name, bg=C["card"], fg=C["ink"] if akt else C["mute"], font=(FONT, 11, "bold"),
+        tk.Label(oben, text=name, bg=C["card"], fg=C["ink"], font=(FONT, 11, "bold"),
                  wraplength=220, justify="left").pack(side="left", padx=12)
         tk.Label(k.innen, text=beschr, bg=C["card"], fg=C["mute"], font=(FONT, 9), wraplength=290, justify="left").pack(anchor="w", padx=16, pady=(8, 10))
-        kn = Knopf(k.innen, knopf, (lambda a=akt: aktion(a)) if akt else (lambda: None), klein=True)
-        if not akt:
-            kn.setze(False)
-        kn.pack(anchor="w", padx=16, pady=(0, 14))
+        for zeile in range(0, len(knoepfe), 2):                       # je Zeile hoechstens zwei Knoepfe
+            fr = tk.Frame(k.innen, bg=C["card"])
+            fr.pack(anchor="w", padx=16, pady=(0, 14 if zeile + 2 >= len(knoepfe) else 6))
+            for text, akt in knoepfe[zeile:zeile + 2]:
+                kn = Knopf(fr, text, (lambda a=akt: aktion(a)) if akt else (lambda: None), klein=True)
+                if not akt:
+                    kn.setze(False)
+                kn.pack(side="left", padx=(0, 8))
 
     # --- Fuss
     fuss = tk.Frame(root, bg=C["bg"])

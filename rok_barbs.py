@@ -46,6 +46,9 @@ PROFILE_FIELDS = [("power", "Macht"), ("highest_power", "Höchste Macht"), ("kil
                   ("kills_t1", "T1-Kills"), ("kills_t2", "T2-Kills"), ("kills_t3", "T3-Kills"), ("kills_t4", "T4-Kills"),
                   ("kills_t5", "T5-Kills"), ("helps", "Hilfen"), ("gathered", "Gesammelt"), ("rss_assist", "Ressourcenhilfe"),
                   ("ap", "Aktionspunkte")]
+# Allianz-Rangliste: Kategorien (Schluessel, Spieltitel). Resource Assistance und Armory Contributions werden bewusst nicht erfasst.
+ALLIANCE_CATS = [("power", "Individual Power"), ("kills", "Killing Machine"), ("tech", "Mad Scientist"),
+                 ("build", "Master Builder"), ("help", "Alliance Help"), ("forts", "Fort Destroyer")]
 MODES = {"dungeon": "Ark of Osiris"}     # alle anderen Modi heißen "Spielerkampf (<Kennung>)"
 KINDS = {"speed_training", "speed_universal", "speed_healing", "wood", "stone", "gold", "food", "gems",
          "xp_books", "packs", "ap", "other"}
@@ -223,6 +226,7 @@ class DB:
         CREATE TABLE IF NOT EXISTS samples(k TEXT PRIMARY KEY, js TEXT);
         CREATE TABLE IF NOT EXISTS settings(k TEXT PRIMARY KEY, v TEXT);
         CREATE TABLE IF NOT EXISTS profile(account TEXT, day TEXT, name TEXT, data TEXT, PRIMARY KEY(account, day));
+        CREATE TABLE IF NOT EXISTS alliance(day TEXT, cat TEXT, name TEXT, rank INT, value INT, PRIMARY KEY(day, cat, name));
         CREATE INDEX IF NOT EXISTS ix_b ON battles(day, account);
         CREATE INDEX IF NOT EXISTS ix_f ON forts(day, account);
         CREATE INDEX IF NOT EXISTS ix_l ON loot(day, account);
@@ -605,6 +609,51 @@ class DB:
             self.c.commit()
         return n
 
+    def add_alliance(self, snaps):
+        """Allianz-Ranglisten (aus Screenshots abgelesen). Format: {"date": "...", "categories": {"power": [{"rank", "name", "value"}]}}.
+        Mehrere Dateien pro Tag werden zusammengefuehrt; derselbe Name am selben Tag wird ueberschrieben."""
+        if isinstance(snaps, dict):
+            snaps = snaps.get("snapshots", [snaps])
+        valid = {k for k, _ in ALLIANCE_CATS}
+        n = 0
+        with self.lock:
+            for s in snaps:
+                day = str(s["date"])[:10]
+                datetime.strptime(day, "%Y-%m-%d")
+                for cat, rows in (s.get("categories") or {}).items():
+                    if cat not in valid:
+                        raise ValueError("Unbekannte Kategorie: %s" % cat)
+                    for r in rows:
+                        name = str(r["name"]).strip()
+                        if not name:
+                            continue
+                        rank = int(r["rank"]) if r.get("rank") is not None else None
+                        val = int(r["value"]) if r.get("value") is not None else None
+                        self.c.execute("INSERT OR REPLACE INTO alliance VALUES(?,?,?,?,?)", (day, cat, name, rank, val))
+                        n += 1
+            self.c.commit()
+        return n
+
+    def alliance_stats(self):
+        rows = self.q("SELECT day, cat, name, rank, value FROM alliance ORDER BY day")
+        days, members = {}, {}
+        for r in rows:
+            days.setdefault(r["cat"], set()).add(r["day"])
+            m = members.setdefault(r["name"], {"name": r["name"], "c": {}, "h": {}})
+            m["h"].setdefault(r["cat"], []).append([r["day"], r["value"], r["rank"]])
+        latest = {c: max(d) for c, d in days.items()}
+        for m in members.values():
+            for cat, hist in list(m["h"].items()):
+                last = hist[-1]
+                if last[0] != latest[cat]:                      # in der neuesten Liste nicht mehr aufgefuehrt
+                    m["c"][cat] = dict(v=None, r=None, d=None, day=latest[cat], seen=last[0])
+                    continue
+                prev = next((h for h in reversed(hist[:-1]) if h[1] is not None), None)
+                m["c"][cat] = dict(v=last[1], r=last[2], day=last[0], pd=prev[0] if prev else None,
+                                   d=(last[1] - prev[1]) if prev and last[1] is not None else None)
+        return dict(cats=[dict(key=k, label=l) for k, l in ALLIANCE_CATS], latest=latest,
+                    days={c: sorted(d) for c, d in days.items()}, members=sorted(members.values(), key=lambda m: m["name"].lower()))
+
     def profile_stats(self, d_from, d_to, account=""):
         out = []
         accs = [r["account"] for r in self.q("SELECT DISTINCT account FROM profile" + (" WHERE account=?" if account else ""),
@@ -843,7 +892,7 @@ details.rep>summary:hover{background:var(--accsoft)}
 .rb h3,#pf h3{font-size:.95rem;margin:12px 0 6px}.ll{margin:0}
 [hidden]{display:none!important}
 .tabs{display:flex;gap:6px;overflow-x:auto;padding:6px;margin-top:6px;border:1px solid var(--line);border-radius:16px;background:var(--card)}
-.tabs button{border:0;border-radius:11px;background:none;color:var(--mute);padding:9px 16px;white-space:nowrap;font-weight:600}
+.tabs button{border:0;border-radius:11px;background:none;color:var(--mute);padding:9px 13px;white-space:nowrap;font-weight:600}
 .tabs button:hover{background:var(--soft);color:var(--ink)}
 .tabs button.on{background:var(--acc);color:#fff;box-shadow:0 8px 20px -8px var(--acc)}
 .tabs .cnt{margin-left:6px;padding:1px 8px;border-radius:999px;background:var(--soft)}.tabs .on .cnt{background:rgba(255,255,255,.24);color:#fff}
@@ -859,6 +908,13 @@ tr.flash td,details.flash{animation:fl 2.6s ease-out}
 @keyframes fl{0%{box-shadow:0 0 0 3px var(--acc);background:var(--accsoft)}100%{box-shadow:0 0 0 0 transparent}}
 @media(prefers-reduced-motion:reduce){tr.flash td,details.flash{animation:none;outline:2px solid var(--acc)}}
 @media(max-width:640px){.grid{grid-template-columns:1fr 1fr}.kc{grid-template-columns:1fr}.kc .ic{display:none}.hero{grid-template-columns:1fr}.av{width:64px;height:64px}.av span{font-size:1.2rem}.rb{padding-left:16px}}
+#al td{vertical-align:top}#al th[data-k]{cursor:pointer;user-select:none}#al th.on{color:var(--ink)}
+#al tr.m{cursor:pointer}#al td.n{white-space:nowrap;font-weight:600}
+.rk{color:var(--mute);font-size:.74rem;margin-left:6px}.dl{display:block;font-size:.74rem}
+#al tr.det td{white-space:normal;text-align:left;background:var(--soft)}
+.hist{display:grid;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));gap:14px;padding:6px 4px}.hist h3{margin:0 0 4px;font-size:.88rem}
+.hist table{font-size:.82rem}.hist td,.hist th{padding:3px 8px}
+.topn b{font-size:1.1rem!important;overflow-wrap:anywhere}
 .topbar{display:flex;justify-content:flex-end;margin:-6px 0 10px}
 .topbar select{padding:5px 10px;font-size:.88rem}
 </style></head><body><main>
@@ -1080,7 +1136,13 @@ $('pfile').onchange=async e=>{let n=0,err='';for(const fl of e.target.files){try
 const EN=[
 [`Barbaren-Tracker`,`Barbarian Tracker`],[`Heute`,`Today`],[`Gestern`,`Yesterday`],[`Letzte 7 Tage`,`Last 7 days`],[`Letzte 30 Tage`,`Last 30 days`],
 [`Dieser Monat`,`This month`],[`Alles`,`All time`],[`Zeitraum wählen`,`Custom range`],[`von`,`from`],[`bis`,`to`],[`und`,`and`],
-[`Avatar ändern`,`Change avatar`],[`Avatar zurücksetzen`,`Reset avatar`],[`Alle Berichte aufklappen`,`Expand all reports`],[`zuklappen`,`Collapse all`],
+[`Allianz-Tracker`,`Alliance Tracker`],[`Zum Loot-Tracker`,`Back to loot tracker`],[`Member-Rangliste`,`Member ranking`],[`Mitglieder`,`members`],
+[`Klick auf eine Spaltenüberschrift sortiert die Liste. Grün und rot zeigen die Veränderung seit dem vorherigen Stand. Ranglisten ohne Resource Assistance und Armory Contributions.`,`Click a column header to sort the list. Green and red show the change since the previous snapshot. Rankings without Resource Assistance and Armory Contributions.`],
+[`Allianz-Daten einfügen …`,`Import alliance data …`],[`Mitglied suchen …`,`Search member …`],[`Allianz`,`Alliance`],
+[`Ranglisten deiner Allianz aus Screenshots (ohne Resource Assistance und Armory Contributions). Die Datei, die ich dir schicke, fügst du hier ein. Frühere Stände bleiben gespeichert, so siehst du, wer wie viel dazugewonnen hat.`,`Rankings of your alliance from screenshots (without Resource Assistance and Armory Contributions). Import the file I send you here. Earlier snapshots are kept, so you can see who gained how much.`],
+[`Noch keine Allianz-Daten. Schick mir Screenshots der Ranglisten, ich erstelle dir die Datei zum Einfügen.`,`No alliance data yet. Send me screenshots of the rankings and I will create the file to import.`],
+[`Nicht mehr in der Liste, zuletzt gesehen`,`No longer listed, last seen`],[`Klick auf einen Namen zeigt den Verlauf.`,`Click a name to see the history.`],[`Noch keine Daten`,`No data yet`],
+[`Mitgliedern`,`members`],[`Rang`,`Rank`],[`Wert`,`Value`],[`Veränderung`,`Change`],[`Avatar ändern`,`Change avatar`],[`Avatar zurücksetzen`,`Reset avatar`],[`Alle Berichte aufklappen`,`Expand all reports`],[`zuklappen`,`Collapse all`],
 [`Beute`,`Loot`],[`Festungen`,`Forts`],[`Barbarenkämpfe`,`Barbarian Battles`],[`Spielerkämpfe`,`PvP Battles`],[`Profil`,`Profile`],[`Pro Tag`,`Per Day`],[`Namen eintragen`,`Enter Names`],
 [`offen`,`open`],[`weitere`,`more`],[`letzte`,`last`],
 [`Solo-Berichte`,`Solo reports`],[`Rallys`,`Rallies`],[`Festungen zerstört`,`Forts destroyed`],[`Gegner besiegt (solo)`,`Enemies defeated (solo)`],
@@ -1165,6 +1227,57 @@ $('lang').value=LANG;
 $('lang').onchange=()=>{try{localStorage.setItem('roklang',$('lang').value)}catch(e){}location.reload()};
 </script></body></html>"""
 
+# ---------------------------------------------------------------- Eigene Seite: Allianz-Tracker (nur die Member-Liste)
+_STYLE = PAGE[PAGE.index("<style>"):PAGE.index("</style>") + 8]
+_I18N = PAGE[PAGE.index("// ===== Sprache"):PAGE.index("</script>")]
+ALLIANCE_PAGE = r"""<!doctype html><html lang="de"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1"><title>Allianz-Tracker</title>
+""" + _STYLE + r"""
+<style>
+.ah{display:flex;flex-wrap:wrap;gap:14px;align-items:center;justify-content:space-between;padding:20px 22px;border:1px solid var(--line);border-radius:20px;background:linear-gradient(135deg,var(--soft),var(--card));margin-bottom:14px;box-shadow:0 18px 40px -26px rgba(0,0,0,.7)}
+.ah h1{margin:0}.ah .sub{color:var(--mute);font-size:.9rem;margin-top:2px}
+a.btn{font:inherit;color:var(--ink);background:var(--soft);border:1px solid var(--line);border-radius:10px;padding:7px 12px;text-decoration:none}a.btn:hover{border-color:var(--acc)}
+#al th,#al td{padding:9px 12px}#al td.r{color:var(--mute);width:2.5em;text-align:right}#al td.n{text-align:left}
+</style></head><body><main>
+<div class="topbar"><select id="lang" aria-label="Language / Sprache" title="Language / Sprache"><option value="de">🌐 Deutsch</option><option value="en">🌐 English</option></select></div>
+<section class="ah"><div><h1>Allianz-Tracker</h1><div class="sub" id="asub">Member-Rangliste</div></div>
+<div class="bar"><a class="btn" href="/">Zum Loot-Tracker</a><button id="abtn">Allianz-Daten einfügen …</button><input type="file" id="afile" accept=".json" multiple hidden></div></section>
+<div class="pane" style="margin-top:0"><div class="nmbar"><input id="asearch" type="search" placeholder="Mitglied suchen …"> <span class="note" id="ainfo"></span> <span class="note" id="amsg"></span></div>
+<div class="wrap"><table id="al"></table></div>
+<p class="note">Klick auf eine Spaltenüberschrift sortiert die Liste. Grün und rot zeigen die Veränderung seit dem vorherigen Stand. Ranglisten ohne Resource Assistance und Armory Contributions.</p></div>
+</main><script>
+let LANG='de';try{LANG=localStorage.getItem('roklang')==='en'?'en':'de'}catch(e){}
+const LOC=LANG==='en'?'en-US':'de-DE',$=id=>document.getElementById(id),f=n=>Number(n).toLocaleString(LOC);
+const esc=s=>String(s==null?'':s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const MON=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+const dm=d=>LANG==='en'?(p=>p.length===3?+p[2]+' '+MON[+p[1]-1]+' '+p[0]:d)(d.split('-')):d.split('-').reverse().join('.');
+let lastAl=null,lastSig='',alSort='power',alDir=-1,alQ='';const alOpen=new Set();
+function renderAlliance(a){lastAl=a;if(!a)return;const cats=a.cats,ms=a.members;
+ const newest=Object.values(a.latest||{}).sort().pop();
+ $('asub').textContent=newest?'Member-Rangliste · Stand '+dm(newest):'Member-Rangliste';
+ const q=alQ.trim().toLowerCase(),val=(m,k)=>{const x=m.c[k];return x&&x.v!=null?x.v:null};
+ const rows=ms.filter(m=>!q||m.name.toLowerCase().includes(q));
+ rows.sort((x,y)=>{const a1=val(x,alSort),b1=val(y,alSort);if(a1==null&&b1==null)return x.name.localeCompare(y.name);if(a1==null)return 1;if(b1==null)return -1;return (a1-b1)*alDir||x.name.localeCompare(y.name)});
+ const dl=x=>x&&x.d!=null&&x.d!==0?`<span class="dl ${x.d>0?'good':'bad'}">${(x.d>0?'+':'')+f(x.d)}</span>`:'';
+ const cell=(m,k)=>{const x=m.c[k];if(!x)return '<td>–</td>';if(x.v==null&&x.seen)return `<td class="note" title="Nicht mehr in der Liste, zuletzt gesehen ${dm(x.seen)}">–</td>`;
+  return `<td>${x.v==null?'–':f(x.v)}${x.r!=null?`<span class="rk">#${x.r}</span>`:''}${dl(x)}</td>`};
+ const hist=m=>`<tr class="det"><td colspan="${cats.length+2}"><div class="hist">${cats.filter(c=>m.h[c.key]).map(c=>{const h=m.h[c.key].slice().reverse();
+   return `<div><h3>${c.label}</h3><table><tr><th>Tag</th><th>Wert</th><th>Rang</th><th>Veränderung</th></tr>${h.map((r,i)=>{const p=h[i+1],d=p&&p[1]!=null&&r[1]!=null?r[1]-p[1]:null;
+     return `<tr><td>${dm(r[0])}</td><td>${r[1]==null?'–':f(r[1])}</td><td>${r[2]==null?'–':'#'+r[2]}</td><td class="${d>0?'good':d<0?'bad':''}">${d==null?'–':(d>0?'+':'')+f(d)}</td></tr>`}).join('')}</table></div>`}).join('')}</div></td></tr>`;
+ $('al').innerHTML=ms.length?`<tr><th class="t">#</th><th class="t">Name</th>${cats.map(c=>`<th data-k="${c.key}" class="${alSort===c.key?'on':''}">${c.label}${alSort===c.key?(alDir<0?' ▼':' ▲'):''}</th>`).join('')}</tr>`+
+  rows.map((m,i)=>`<tr class="m" data-n="${esc(m.name)}"><td class="r">${i+1}</td><td class="n">${alOpen.has(m.name)?'▾':'▸'} ${esc(m.name)}</td>${cats.map(c=>cell(m,c.key)).join('')}</tr>${alOpen.has(m.name)?hist(m):''}`).join(''):
+  '<tr><td class="note">Noch keine Allianz-Daten. Schick mir Screenshots der Ranglisten, ich erstelle dir die Datei zum Einfügen.</td></tr>';
+ $('ainfo').textContent=ms.length?`${rows.length} / ${ms.length} Mitglieder`:''}
+$('al').addEventListener('click',e=>{const th=e.target.closest('th[data-k]');if(th){if(alSort===th.dataset.k)alDir=-alDir;else{alSort=th.dataset.k;alDir=-1}return renderAlliance(lastAl)}
+ const tr=e.target.closest('tr.m');if(tr){const n=tr.dataset.n;alOpen.has(n)?alOpen.delete(n):alOpen.add(n);renderAlliance(lastAl)}});
+$('asearch').oninput=()=>{alQ=$('asearch').value;renderAlliance(lastAl)};
+$('abtn').onclick=()=>$('afile').click();
+$('afile').onchange=async e=>{let n=0,err='';for(const fl of e.target.files){try{const r=await fetch('/api/alliance',{method:'POST',body:await fl.text()}).then(r=>r.json());if(r.ok)n+=r.n;else err=r.error}catch(x){err=String(x)}}
+ $('amsg').textContent=err?'Fehler: '+err:n+' Eintrag/Einträge übernommen.';e.target.value='';lastSig='';load()};
+async function load(){try{const a=await fetch('/api/alliance').then(r=>r.json());const sig=JSON.stringify(a);if(sig===lastSig)return;lastSig=sig;renderAlliance(a)}catch(e){}}
+load();setInterval(load,4000);
+""" + _I18N + r"""</script></body></html>"""
+
 def make_handler(db, watcher):
     class H(BaseHTTPRequestHandler):
         def log_message(self, *a): pass
@@ -1179,6 +1292,10 @@ def make_handler(db, watcher):
             u = urlparse(self.path)
             if u.path == "/":
                 self.send(PAGE, "text/html")
+            elif u.path in ("/allianz", "/allianz/"):
+                self.send(ALLIANCE_PAGE, "text/html")
+            elif u.path == "/api/alliance":
+                self.send(json.dumps(db.alliance_stats()), "application/json")
             elif u.path == "/api/stats":
                 q = parse_qs(u.query)
                 self.send(json.dumps(db.stats(q.get("from", ["0000-01-01"])[0], q.get("to", ["9999-12-31"])[0],
@@ -1234,6 +1351,14 @@ def make_handler(db, watcher):
                     return
                 self.send(json.dumps({"ok": True}), "application/json")
                 threading.Thread(target=lambda: (time.sleep(0.4), os._exit(0)), daemon=True).start()
+                return
+            if path == "/api/alliance":
+                try:
+                    n = int(self.headers.get("Content-Length", 0))
+                    d = json.loads(self.rfile.read(min(n, 4000000)))
+                    self.send(json.dumps({"ok": True, "n": db.add_alliance(d)}), "application/json")
+                except Exception as e:
+                    self.send(json.dumps({"ok": False, "error": str(e)}), "application/json")
                 return
             if path == "/api/profile":
                 try:
