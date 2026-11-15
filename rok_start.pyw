@@ -303,37 +303,110 @@ def mit_fenster():
                x1, y2, x1, y2 - r, x1, y1 + r, x1, y1]
         return cv.create_polygon(pts, smooth=True, **kw)
 
+    import math
+
+    # Weiche Formen: Kanten werden pixelgenau mit Glaettung berechnet (Tk selbst zeichnet nur eckige Kanten)
+    def hx(c):
+        return (int(c[1:3], 16), int(c[3:5], 16), int(c[5:7], 16))
+    def mixc(a, b, t):
+        return (a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t, a[2] + (b[2] - a[2]) * t)
+    def tohex(c):
+        return "#%02x%02x%02x" % (int(c[0] + .5), int(c[1] + .5), int(c[2] + .5))
+    def cl(v):
+        return 0.0 if v < 0 else 1.0 if v > 1 else v
+    def sdf(px, py, w, h, r):
+        qx, qy = abs(px - w / 2) - (w / 2 - r), abs(py - h / 2) - (h / 2 - r)
+        return math.hypot(max(qx, 0), max(qy, 0)) + min(max(qx, qy), 0) - r
+    _bilder = {}
+    def bild(w, h, pix):
+        im = tk.PhotoImage(master=root, width=w, height=h)
+        im.put(" ".join("{" + " ".join(tohex(pix(x, y)) for x in range(w)) + "}" for y in range(h)))
+        return im
+    def rr_img(w, h, r, fill, outline, bg, bw=1.3, lip=0, lipc=None):
+        key = ("rr", w, h, r, fill, outline, bg, bw, lip, lipc)
+        if key not in _bilder:
+            f, b = hx(fill), hx(bg)
+            o = hx(outline) if outline else f
+            lc = hx(lipc) if lipc else b
+            hh = h - lip
+            def pix(x, y):
+                col = b
+                if lip:
+                    col = mixc(col, lc, cl(.5 - sdf(x + .5, y + .5 - lip, w, hh, r)))
+                d = sdf(x + .5, y + .5, w, hh, r)
+                col = mixc(col, o, cl(.5 - d))
+                return mixc(col, f, cl(.5 - (d + bw)))
+            _bilder[key] = bild(w, h, pix)
+        return _bilder[key]
+    def ring_img(size, dicke, stops, bg):
+        key = ("ring", size, dicke, tuple(stops), bg)
+        if key not in _bilder:
+            b, cs = hx(bg), [hx(c) for c in stops]
+            mid = size / 2
+            R, ri, n = size / 2 - 1.5, size / 2 - 1.5 - dicke, len(cs)
+            def pix(x, y):
+                dx, dy = x + .5 - mid, y + .5 - mid
+                dist = math.hypot(dx, dy)
+                cov = cl(R + .5 - dist) * cl(dist - ri + .5)
+                if cov <= 0:
+                    return b
+                t = ((math.degrees(math.atan2(dy, dx)) + 360) % 360) / 360 * n
+                i = int(t) % n
+                return mixc(b, mixc(cs[i], cs[(i + 1) % n], t - int(t)), cov)
+            _bilder[key] = bild(size, size, pix)
+        return _bilder[key]
+    def blitz_img(w, h, farbe, bg):
+        key = ("blitz", w, h, farbe, bg)
+        if key not in _bilder:
+            P = [(.62, 0), (.14, .57), (.45, .57), (.34, 1), (.86, .38), (.55, .38)]
+            P = [(x * w, y * h) for x, y in P]
+            b, f = hx(bg), hx(farbe)
+            def innen(px, py):
+                c = False
+                for k in range(len(P)):
+                    x1, y1 = P[k]
+                    x2, y2 = P[(k + 1) % len(P)]
+                    if (y1 > py) != (y2 > py) and px < (x2 - x1) * (py - y1) / (y2 - y1) + x1:
+                        c = not c
+                return c
+            def pix(x, y):
+                n = sum(innen(x + (i + .5) / 3, y + (j + .5) / 3) for i in range(3) for j in range(3))
+                return mixc(b, f, n / 9)
+            _bilder[key] = bild(w, h, pix)
+        return _bilder[key]
+
     class Knopf(tk.Canvas):
-        """Dunkler Knopf mit Rand. primaer = gross mit unterer Kante (wie der Start-Knopf), sonst flach."""
+        """Dunkler Knopf mit weichen Ecken. primaer = gross mit unterer Kante (wie der Start-Knopf), sonst flach."""
         def __init__(self, parent, text, cmd, primaer=False, klein=False, w=None, h=None, sub=None, bg=None):
             size = 8 if klein else (13 if primaer else 9)
             fnt = tkfont.Font(family=PIX, size=size, weight="bold")
-            w = w or fnt.measure(text) + (26 if klein else 44)
-            h = h or fnt.metrics("linespace") + (14 if klein else 26)
-            tk.Canvas.__init__(self, parent, width=w, height=h, bg=bg or parent.cget("bg"), highlightthickness=0, bd=0, cursor="hand2")
-            self.cmd, self.aktiv, self.primaer = cmd, True, primaer
-            self.farbe, self.hover = (C["soft"], C["soft2"])
-            self.textfarbe = C["ink"]
-            lip = 5 if primaer else 0
-            if lip:
-                rrect(self, 0, lip, w, h, 16, fill="#44464b", outline="")
-            self.form = rrect(self, 1, 1, w - 1, h - lip - 1, 14 if primaer else 10, fill=self.farbe,
-                              outline="#5b5e64" if primaer else C["line"], width=2)
-            ym = (h - lip) / 2
+            w = w or fnt.measure(text) + (28 if klein else 46)
+            h = h or fnt.metrics("linespace") + (16 if klein else 28)
+            self.bgc = bg or parent.cget("bg")
+            tk.Canvas.__init__(self, parent, width=w, height=h, bg=self.bgc, highlightthickness=0, bd=0, cursor="hand2")
+            self.w, self.h, self.cmd, self.aktiv, self.primaer = w, h, cmd, True, primaer
+            self.lip = 6 if primaer else 0
+            self.radius = 22 if primaer else min(h // 2, 18)
+            self.rand = "#5b5e64" if primaer else C["line"]
+            self.farbe, self.hover, self.textfarbe = C["soft"], C["soft2"], C["ink"]
+            self.bgimg = self.create_image(0, 0, anchor="nw", image=self._bild(self.farbe))
+            ym = (h - self.lip) / 2
             if sub:
                 self.txt = self.create_text(w / 2, ym - 9, text=text, fill=self.textfarbe, font=(PIX, size, "bold"))
                 self.create_text(w / 2, ym + 16, text=sub, fill=C["mute"], font=(FONT, 8))
             else:
                 self.txt = self.create_text(w / 2, ym, text=text, fill=self.textfarbe, font=(PIX, size, "bold"))
             self.bind("<Button-1>", lambda e: self.cmd() if self.aktiv else None)
-            self.bind("<Enter>", lambda e: self.itemconfigure(self.form, fill=self.hover if self.aktiv else self.farbe))
-            self.bind("<Leave>", lambda e: self.itemconfigure(self.form, fill=self.farbe))
+            self.bind("<Enter>", lambda e: self.itemconfigure(self.bgimg, image=self._bild(self.hover if self.aktiv else self.farbe)))
+            self.bind("<Leave>", lambda e: self.itemconfigure(self.bgimg, image=self._bild(self.farbe)))
+        def _bild(self, fill):
+            return rr_img(self.w, self.h, self.radius, fill, self.rand, self.bgc, 1.3, self.lip, "#3c3e43" if self.primaer else None)
         def setze(self, aktiv=True, farbe=None, textfarbe=None):
             self.aktiv = aktiv
             if farbe:
                 self.farbe = farbe
             self.textfarbe = textfarbe or C["ink"]
-            self.itemconfigure(self.form, fill=self.farbe)
+            self.itemconfigure(self.bgimg, image=self._bild(self.farbe))
             self.itemconfigure(self.txt, fill=self.textfarbe if aktiv else C["mute"])
             self.configure(cursor="hand2" if aktiv else "arrow")
 
@@ -342,7 +415,7 @@ def mit_fenster():
         def __init__(self, parent, icon, label, cmd):
             tk.Canvas.__init__(self, parent, width=88, height=80, bg=C["side"], highlightthickness=0, bd=0, cursor="hand2")
             self.cmd = cmd
-            self.form = rrect(self, 8, 4, 80, 76, 14, fill=C["side"], outline=C["side"], width=2)
+            self.bgimg = self.create_image(8, 4, anchor="nw", image=rr_img(72, 72, 20, C["soft"], "#5b5e64", C["side"]), state="hidden")
             self.ic = self.create_text(44, 33, text=icon, fill=C["mute"], font=("Segoe UI Symbol", 20))
             self.tx = self.create_text(44, 61, text=label, fill=C["mute"], font=(PIX, 7, "bold"))
             self.on = False
@@ -355,7 +428,7 @@ def mit_fenster():
                 self.itemconfigure(self.tx, fill=C["ink"] if hover else C["mute"])
         def setze(self, on):
             self.on = on
-            self.itemconfigure(self.form, fill=C["soft"] if on else C["side"], outline="#5b5e64" if on else C["side"])
+            self.itemconfigure(self.bgimg, state="normal" if on else "hidden")
             self.itemconfigure(self.ic, fill=C["ink"] if on else C["mute"])
             self.itemconfigure(self.tx, fill=C["ink"] if on else C["mute"])
 
@@ -442,17 +515,16 @@ def mit_fenster():
     def T(seite, x, y, text, size=10, farbe=None, fett=False, anker="nw", schrift=None, **kw):
         return main.create_text(x, y, text=text, fill=farbe or C["ink"], anchor=anker,
                                 font=(schrift or PIX, size, "bold" if fett else "normal"), tags=("p_" + seite,), **kw)
-    def R(seite, x1, y1, x2, y2, r=16, fill=None, rand=None):
-        i = rrect(main, x1, y1, x2, y2, r, fill=fill or C["card"], outline=rand or C["line"], width=2)
-        main.addtag_withtag("p_" + seite, i)
-        return i
+    def R(seite, x1, y1, x2, y2, r=22, fill=None, rand=None, bgc=None):
+        im = rr_img(int(x2 - x1), int(y2 - y1), r, fill or C["card"], rand or C["line"], bgc or C["bg"])
+        return main.create_image(x1, y1, image=im, anchor="nw", tags=("p_" + seite,))
     def Wf(seite, x, y, widget, anker="nw"):
         return main.create_window(x, y, window=widget, anchor=anker, tags=("p_" + seite,))
 
     # Kopfzeile (auf jeder Seite sichtbar)
     main.create_text(36, 26, text="ROK TRACKER", fill=C["ink"], anchor="nw", font=(PIX, 16, "bold"))
     main.create_text(37, 54, text="LAUNCHER", fill=C["mute"], anchor="nw", font=(PIX, 8, "bold"))
-    rrect(main, 520, 20, 700, 60, 12, fill=C["card"], outline=C["line"], width=2)
+    main.create_image(520, 20, anchor="nw", image=rr_img(180, 40, 20, C["card"], C["line"], C["bg"]))
     punkt = main
     kreis = main.create_oval(536, 35, 546, 45, fill=C["mute"], outline="")
     t_tracker = Txt(main, main.create_text(554, 40, text="PRÜFE ...", fill=C["ink"], anchor="w", font=(PIX, 8, "bold")))
@@ -560,8 +632,7 @@ def mit_fenster():
 
     # ---------------- Seite START
     cx = 296
-    for i, farbe in enumerate(("#3b82f6", "#34d399", "#fbbf24")):
-        main.create_arc(cx - 70, 96, cx + 70, 236, start=90 + i * 120, extent=116, outline=farbe, width=6, style="arc", tags=("p_play",))
+    main.create_image(cx, 166, image=ring_img(156, 11, ("#3b82f6", "#22d3ee", "#34d399", "#fbbf24", "#f472b6", "#8b5cf6"), C["bg"]), tags=("p_play",))
     T("play", cx, 166, "RK", 22, fett=True, anker="center")
     T("play", cx, 268, "ROK TRACKER", 20, fett=True, anker="center")
     T("play", cx, 298, "BARBAREN, BEUTE UND PROFIL", 8, C["mute"], True, "center")
@@ -580,7 +651,7 @@ def mit_fenster():
         zeilen = (len(knoepfe) + 1) // 2
         hoehe = 84 + zeilen * 34
         R("play", x0, y, x1, y + hoehe, 16)
-        R("play", x0 + 14, y + 14, x0 + 58, y + 58, 10, C["soft"], C["soft"])
+        R("play", x0 + 14, y + 14, x0 + 58, y + 58, 14, C["soft"], C["soft"], C["card"])
         T("play", x0 + 36, y + 36, symbol, 15, anker="center", schrift="Segoe UI Emoji")
         T("play", x0 + 70, y + 16, name.upper(), 9, fett=True)
         T("play", x0 + 70, y + 36, beschr, 8, C["mute"], schrift=FONT, width=x1 - x0 - 84)
@@ -593,7 +664,7 @@ def mit_fenster():
         y += hoehe + 12
 
     # ---------------- Seite UPDATE
-    R("upd", 60, 112, 844, 460, 18)
+    upd_karte = main.create_image(60, 112, anchor="nw", tags=("p_upd",))      # Bild folgt erst beim ersten Oeffnen der Seite
     T("upd", 92, 140, "INSTALLIERT", 8, C["mute"], True)
     t_version = Txt(main, T("upd", 92, 162, "...", 16, fett=True))
     t_version2 = Txt(main, T("upd", 92, 196, "", 10, C["mute"], schrift=FONT))
@@ -636,9 +707,11 @@ def mit_fenster():
     # ---------------- linke Leiste
     logo = tk.Canvas(side, width=96, height=84, bg=C["side"], highlightthickness=0, bd=0)
     logo.pack()
-    logo.create_text(48, 44, text="⚡", fill=C["ink"], font=("Segoe UI Symbol", 26))
+    logo.create_image(48, 44, image=blitz_img(34, 46, C["ink"], C["side"]))
     navs = {}
     def zeige_seite(name):
+        if name == "upd" and not main.itemcget(upd_karte, "image"):
+            main.itemconfigure(upd_karte, image=rr_img(784, 348, 24, C["card"], C["line"], C["bg"]))
         for sname in ("play", "upd"):
             main.itemconfigure("p_" + sname, state="normal" if sname == name else "hidden")
         for k, nv in navs.items():
