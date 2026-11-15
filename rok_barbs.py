@@ -1175,6 +1175,7 @@ details.rep>summary:hover{background:var(--accsoft)}
 .tabs button{border:0;border-radius:11px;background:none;color:var(--mute);padding:9px 13px;white-space:nowrap;font-weight:600}
 .tabs button:hover{background:var(--soft);color:var(--ink)}
 .tabs button.on{background:var(--acc);color:#fff;box-shadow:0 8px 20px -8px var(--acc)}
+.sbtabs{flex-direction:column;gap:1px;overflow:visible;padding:0 0 6px 16px;margin:0;border:0;border-radius:0;background:none}.sbtabs button{text-align:left;width:100%;padding:7px 12px;font-weight:500;font-size:.9rem;white-space:normal}.sbtabs button.on{background:var(--accsoft);color:var(--acc);box-shadow:none}.sbtabs .on .cnt{background:var(--card);color:var(--acc)}
 .tabs .cnt{margin-left:6px;padding:1px 8px;border-radius:999px;background:var(--soft)}.tabs .on .cnt{background:rgba(255,255,255,.24);color:#fff}
 .pane{margin-top:12px;background:var(--card);border:1px solid var(--line);border-radius:18px;padding:20px}
 [data-item]{cursor:pointer}
@@ -1255,6 +1256,7 @@ function showTab(t){const btn=document.querySelector(`#tabs [data-t="${t}"]`);if
  document.querySelectorAll('.pane').forEach(p=>p.hidden=p.id!=='p_'+t);
  try{localStorage.setItem('roktab',t)}catch(e){}}
 $('tabs').onclick=e=>{const b=e.target.closest('button');if(b)showTab(b.dataset.t)};showTab(tab);
+(function(){const t=$('tabs'),a=document.querySelector('#sb a[data-p="/"]');if(t&&a){t.classList.add('sbtabs');a.after(t)}})();
 let repOpen=false;$('expand').onclick=()=>{repOpen=!repOpen;document.querySelectorAll('details.rep').forEach(d=>d.open=repOpen);$('expand').textContent=repOpen?(LANG==='en'?'Collapse all reports':'Alle Berichte zuklappen'):(LANG==='en'?'Expand all reports':'Alle Berichte aufklappen')};
 
 function range(){const v=$('range').value,t=new Date();$('cu').hidden=v!=='custom';
