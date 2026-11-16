@@ -579,6 +579,7 @@ class DB:
         rows = [r for r in rows if (not q or q in (r["foe_name"] or "").lower()) and (not ab or ab in (r["foe_abbr"] or "").lower())
                 and (not hid or hid in (r["hero1"], r["hero2"])) and (not ehid or ehid in (r["ehero1"], r["ehero2"]))]
         hn = lambda h: (HEROES.get(h, "#%d" % h) if h else "")
+        names = {r["account"]: r["n"] for r in self.q("SELECT account, MAX(CASE WHEN acc_name<>'' THEN acc_name END) n FROM reports GROUP BY account")}
         tours, cur = [], None
         for r in rows:
             if cur and cur["account"] == r["account"] and r["ts"] - cur["end"] <= self.PVP_GAP:
@@ -601,6 +602,7 @@ class DB:
             t["time_end"] = datetime.fromtimestamp(t["end"]).strftime("%H:%M:%S")
             h1, h2 = rs[0]["hero1"], rs[0]["hero2"]
             t["hero1"], t["hero2"] = hn(h1), hn(h2)
+            t["account_name"] = names.get(t["account"]) or t["account"]
             fin(t, rs)
             t["enemies"] = sorted({("[%s] " % r["foe_abbr"] if r["foe_abbr"] else "") + (r["foe_name"] or "?") for r in rs})
             t["rounds"] = [dict(time=datetime.fromtimestamp(r["ts"]).strftime("%H:%M:%S"), foe=("[%s] " % r["foe_abbr"] if r["foe_abbr"] else "") + (r["foe_name"] or "?"),
@@ -3021,7 +3023,7 @@ function pvp(d){
  h+=`<div class="split"><div class="list"><h3><span>${L('Touren','Tours')}</span><span class="mute">${f(d.n_tours)}${d.n_tours>d.tours.length?' ('+L('neueste ','latest ')+d.tours.length+')':''}</span></h3>`+
   d.tours.map(z=>`<button type="button" class="tour ${z.id===S.sel?'on':''}" data-t="${z.id}"><div class="t1"><b>${esc(z.hero1||'–')}${z.hero2?' + '+esc(z.hero2):''}</b><span class="badge ${z.kpr!=null&&z.kpr>=1?'good':'bad'}">${z.kpr==null?'–':z.kpr.toFixed(2)}</span></div><div class="t2">${z.time} · ${z.battles} ${L('Kämpfe','battles')} · ${esc(z.enemies.slice(0,2).join(', '))}${z.enemies.length>2?' +'+(z.enemies.length-2):''}</div></button>`).join('')+`</div><div>`;
  const row=(m,a,b,lossy,c)=>{const net=lossy?b-a:a-b;return `<tr><td>${m}</td><td class="num ${c||''}">${f(a)}</td><td class="num ${c||''}">${f(b)}</td><td class="num ${net>0?'good':net<0?'bad':''}">${net>0?'+':''}${f(net)}</td></tr>`};
- h+=`<div class="two"><div class="card"><h3>${L('Bericht-Daten','Report data')}</h3><table><tr><td>${L('Zeitraum','Time range')}</td><td class="num">${x.time} – ${x.time_end}</td></tr><tr><td>${L('Konto','Account')}</td><td class="num">${esc(x.account)}</td></tr><tr><td>${L('Primärer Kommandant','Primary commander')}</td><td>${esc(x.hero1||'–')}</td></tr><tr><td>${L('Sekundärer Kommandant','Secondary commander')}</td><td>${esc(x.hero2||'–')}</td></tr><tr><td>${L('Kämpfe','Battles')}</td><td class="num">${x.battles}</td></tr></table></div>
+ h+=`<div class="two"><div class="card"><h3>${L('Bericht-Daten','Report data')}</h3><table><tr><td>${L('Zeitraum','Time range')}</td><td class="num">${x.time} – ${x.time_end}</td></tr><tr><td>${L('Konto','Account')}</td><td class="num">${esc(x.account_name||x.account)}</td></tr><tr><td>${L('Primärer Kommandant','Primary commander')}</td><td>${esc(x.hero1||'–')}</td></tr><tr><td>${L('Sekundärer Kommandant','Secondary commander')}</td><td>${esc(x.hero2||'–')}</td></tr><tr><td>${L('Kämpfe','Battles')}</td><td class="num">${x.battles}</td></tr></table></div>
  <div class="card sc"><h3>${L('Bilanz der Tour','Tour trades')}</h3><table><tr><th>${L('Wert','Metric')}</th><th>${L('Du','You')}</th><th>${L('Gegner','Enemy')}</th><th>${L('Bilanz / Netto','Trade / net')}</th></tr>
  ${row(L('Kill Points','Kill points'),x.kp_gained,x.kp_lost,false,'y')}${row(L('Tote','Dead'),x.own_dead,x.enemy_dead,true,'bad')}${row(L('Schwer verwundet','Severely wounded'),x.own_severe,x.enemy_severe,true,'bad')}${row(L('Leicht verwundet','Slightly wounded'),x.own_hurt,x.enemy_hurt,true)}</table></div></div>
  <div class="card sc"><h3>${L('Einzelne Kämpfe','Individual battles')}</h3><table><tr><th>${L('Zeit','Time')}</th><th>${L('Gegner','Enemy')}</th><th>${L('Gegner-Kommandanten','Enemy commanders')}</th><th>${L('KP du','KP you')}</th><th>${L('KP Gegner','KP enemy')}</th><th>${L('Tote du / Gegner','Dead you / enemy')}</th><th>${L('Schwer verw. du / Gegner','Severe you / enemy')}</th></tr>`+
