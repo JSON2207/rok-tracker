@@ -261,6 +261,65 @@ SKILL_NAMES = {22: "Indomitable Army", 23: "Barbarossa", 24: "Rain of Arrows", 2
     1840: "Bloodsworn Sovereign", 1841: "Fall of the Mamluks", 1842: "Servant of Holy Cities", 1843: "Heavy Is the Crown",
     1844: "Quick March", 1845: "Impenetrable Borders", 1846: "Unite and Shatter", 1847: "Sustained Momentum"}
 EQUIP_TYPES = {1: "Infantry", 2: "Archer", 3: "Cavalry", 4: "Integration", 5: "Leadership", 16: "Engineering"}
+# Seltenheit (L=Legendaer, E=Episch, U=Elite, A=Fortgeschritten, N=Normal), Macht und Basiswerte je Ausruestungsteil.
+# Seltenheit aus den ROK-Battles-Spieldaten, Werte aus app.rokstats.online/equipment (Namen und Seltenheit gegengeprueft, 148 von 152).
+# Format je Teil: Seltenheit+Macht;Wert+Code;... (Code: i/a/c/t/s=Infanterie/Bogen/Kavallerie/Truppen/Belagerung + a/d/h=Angriff/Verteidigung/Leben,
+# gs=Sammeln, xp=Kommandanten-EXP, bd=Schaden gegen Barbaren, uc=Truppenkapazitaet, ge=Extra-Sammelrohstoffe, ms/msi/msa/msc/mss=Marschtempo)
+EQUIP_INFO = {20001: "L2000;25ca;5ad", 20002: "L2000;25ia;5ah", 20003: "L2000;25ad;5cd", 20004: "L2000;15cd;8ah",
+    20005: "L2000;15id;8ch", 20006: "L2000;15aa;8ia", 20007: "L1600;20ca;5ih;5aa", 20008: "L1600;11cd;4ia;3ad",
+    20009: "L1600;11ch;5ia", 20010: "L1600;7.5cd;3ah", 20011: "L1600;11ca;5id", 20012: "L1600;7.5ch;3aa",
+    20013: "L1600;20ia;5aa;5ca", 20014: "L1600;11id;4ah;3ch", 20015: "L1600;11ia;5ad", 20016: "L1600;7.5id;3ca",
+    20017: "L1600;11ia;5ad", 20018: "L1600;7.5id;3cd", 20019: "L1600;20ad;5ih;5ch", 20020: "L1600;11aa;3ca;4id",
+    20021: "L1600;11ah;5cd", 20022: "L1600;7.5aa;3ia", 20023: "L1600;11aa;5ca", 20024: "L1600;7.5ad;3id",
+    20025: "L1600;12ca;5ia;5aa", 20026: "L1600;12id;5cd;5ad", 20027: "L1600;12ah;6ch;5xp", 20028: "L1600;8ch;5id",
+    20029: "L1600;8id;5aa", 20030: "L1600;8aa;5xp", 20031: "L1600;12aa;5ca;5ia", 20032: "L1600;12id;5cd;5ad",
+    20033: "L1600;12ch;5ih;5xp", 20034: "L1600;8id;5ah", 20035: "L1600;8ca;5aa", 20036: "L1600;8aa;5xp",
+    20037: "L1600", 20038: "L1600", 20039: "L1600", 20040: "L1600", 20041: "L1600", 20042: "L1600", 20043: "L1600",
+    20044: "L1600", 20045: "L1200;15cd;5ih;5aa", 20051: "E800;7.5ad;5id", 20052: "E800;7.5aa;5cd",
+    20053: "E800;4.5aa;3ia;3ca", 20054: "E800;7.5ad;5ca", 20055: "E800;10gs;6sd;6ca", 20056: "E800;8gs;4sa;4ia",
+    20057: "E800;8gs;4sa;4aa", 20058: "E800;6gs;2sd;2sa", 20059: "E800;13ia;6ch;4aa", 20060: "E800;13ad;6id;4ca",
+    20061: "E800;13cd;6ah;4ih", 20062: "E800;8ca;3ia;3aa", 20063: "E800;8ia;3ca;3ad", 20064: "E800;8cd;5aa",
+    20065: "E800;8ia;4ah;5bd", 20066: "E800;3ca;3ch", 20067: "E800;5.5id;2ad;5bd", 20068: "E800;8ih;5ca",
+    20069: "E800;8ad;5cd", 20070: "E800;8ch;4ad;5bd", 20071: "E800;5.5ca;2ah;6gs", 20072: "E800;5.5id;5bd",
+    20073: "E800;5.5ah;3ca", 20074: "E800;5ge", 20075: "E800", 20076: "E800", 20077: "E800;10gs", 20078: "E800;15xp",
+    20079: "U400;5gs;3sa;3sd", 20080: "U400;5gs;3sd;3sh", 20081: "U400;5gs;3sa;3sd", 20082: "U400;5gs;2sd;2sh",
+    20083: "U400;4.5ia;4.5ca;3ms", 20084: "U400;4.5id;4.5cd;3ms", 20085: "U400;2.5ch;2.5ih;3ms",
+    20086: "U400;2.5ch;2.5id;3ms", 20087: "U400;8ca;5aa;3ia", 20088: "U400;8ad;5id;3cd", 20089: "U400;8ih;5ch;3xp",
+    20090: "U400;6cd;2id;3xp", 20091: "U400;6ah;3ia;3xp", 20092: "U400;4aa;2ca;3xp", 20093: "U400;4ia;1ih;1aa",
+    20094: "U400;6ad;3id;3xp", 20095: "U400;6ia;3aa;1cd", 20096: "U400;4ih;3xp", 20097: "U400;5ms",
+    20098: "U400;10xp", 20099: "U400;10bd", 20100: "A200;5cd;4ch", 20101: "A200;4ca;1ch", 20102: "A200;6ih;4aa;3bd",
+    20103: "A200;4ca;2id;3bd", 20104: "A200;4ad;2ih;3bd", 20105: "A200;4id;2ch;3bd", 20106: "A200;4cd;2aa",
+    20107: "A200;4ia;2ad;3bd", 20108: "A200;2.5ah;1id", 20109: "A200;2.5cd;1ih;3bd", 20110: "A200;2.5aa;1ca;3bd",
+    20111: "A200;2.5ia;1ad", 20112: "N100;5cd;2gs", 20113: "N100;3ia", 20114: "N100;3aa", 20115: "N100;3ca;1gs",
+    20116: "N100;2id", 20117: "N100;2ad;1gs", 20118: "L1600", 20119: "L1600", 20120: "E800;8msi", 20121: "E800;3uc",
+    20122: "L2000;25sa;6mss", 20123: "L2000;14.5sa;4mss", 20124: "L2000;14.5sa;4mss", 20125: "L2000;10sd;3mss",
+    20126: "L2000;14.5sh;4mss", 20127: "L2000;10sd;3mss", 20128: "E800;13sa;2mss", 20129: "E800;8sh;2mss",
+    20130: "E800;8sa;2mss", 20131: "E800;5.5sd;2mss", 20132: "E800;8sd;5bd", 20133: "E800;5.5sh;5bd",
+    20134: "L1600;15gs;6sd;3mss", 20135: "L1600;12gs;4sa;2mss", 20136: "L1600;12gs;4sd;2mss",
+    20137: "L1600;8gs;3sh;2mss", 20138: "L1600;12gs;4sh;2mss", 20139: "L1600;8gs;3sa;2mss", 20140: "L1600;15ta;3msi",
+    20141: "L1600;8ta;2msc", 20142: "L1600;8td;2msi", 20143: "L1600;6td;2mss", 20144: "L1600;8th;2msa",
+    20145: "L1600;6th;2mss", 20164: "L1600", 20166: "L1600", 20167: "L1600", 20168: "L", 20201: "L1600;3.5ca",
+    20202: "L1600;3.5ia", 20203: "L1600;3.5aa", 20401: "L1600", 20402: "L1600;3.5ta"}
+EQUIP_RARITY = {"L": "legendary", "E": "epic", "U": "elite", "A": "advanced", "N": "normal"}
+
+
+def equip_info(iid):
+    """Seltenheit, Macht und Basiswerte eines Ausruestungsteils (leer, wenn unbekannt)."""
+    t = EQUIP_INFO.get(iid, "").split(";")
+    if not t[0]:
+        return {}
+    out = {"r": EQUIP_RARITY.get(t[0][:1], "")}
+    if t[0][1:].isdigit():
+        out["p"] = int(t[0][1:])
+    b = []
+    for x in t[1:]:
+        m = re.match(r"([\d.]+)([a-z]+)$", x)
+        if m:
+            v = float(m.group(1))
+            b.append([int(v) if v == int(v) else v, m.group(2)])
+    if b:
+        out["b"] = b
+    return out
 
 HEROES.update(COMMANDERS)
 FOES = {597: "Barbarians", 603: "Bone Archers", 606: "Beast Riders"}
@@ -800,7 +859,7 @@ class DB:
                     h["skn"] = [SKILL_NAMES.get(i, "#%d" % i) for i in h.get("si", [])]
                     eqs = []
                     for slot, iid, craft, attr in h.get("eq", []):
-                        eqs.append(dict(s=slot, id=iid, n=EQUIP_ITEMS.get(iid, "#%d" % iid), st=EQUIP_TYPES.get(attr // 10) if attr >= 10 else None, ic=attr % 10))
+                        eqs.append(dict(s=slot, id=iid, n=EQUIP_ITEMS.get(iid, "#%d" % iid), st=EQUIP_TYPES.get(attr // 10) if attr >= 10 else None, ic=attr % 10, **equip_info(iid)))
                     h["eq"] = eqs
             return d
         names = {r["account"]: r["n"] for r in self.q("SELECT account, MAX(CASE WHEN acc_name<>'' THEN acc_name END) n FROM reports GROUP BY account")}
@@ -2900,6 +2959,15 @@ REPORTS_PAGE = r"""<!doctype html><html lang="de"><head><meta charset="utf-8">
 .hbx{display:flex;flex-wrap:wrap;gap:10px;margin:2px 0 8px}.hb{border:1px solid var(--line);border-radius:12px;padding:8px 10px;flex:1 1 100%;min-width:0}.hp{display:flex;align-items:center;gap:8px}.hp img{width:38px;height:38px;border-radius:10px;object-fit:cover;background:var(--card)}.hm{color:var(--mute);font-size:.8rem;margin:4px 0}.eqd{margin-top:4px;font-size:.8rem}.eqd summary{cursor:pointer;color:var(--mute)}.eqd ul{list-style:none;margin:4px 0 0;padding:0}.eqd li{display:flex;gap:6px;align-items:center;padding:2px 0;border-bottom:1px solid var(--line)}.eqd li img{width:20px;height:20px;border-radius:5px;object-fit:cover}.eqd li .mute{min-width:5.5em}.eqi{position:relative;display:inline-flex;align-items:flex-end;justify-content:flex-end;min-width:30px;height:30px;border:1px solid var(--line);border-radius:8px;background:var(--card);font-size:.7rem;overflow:hidden}.eqi img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover}.eqi em{position:absolute;left:3px;top:2px;font-style:normal;color:var(--mute);font-size:.62rem}.eqi i{position:relative;font-style:normal;padding:0 3px;background:rgba(0,0,0,.55);color:#fff;border-radius:6px 0 0 0}
 .bh{display:flex;flex-wrap:wrap;justify-content:space-between;color:var(--mute);font-size:.82rem;margin-bottom:8px;gap:6px}
 .good{color:var(--good)}.bad{color:var(--bad)}.mute{color:var(--mute)}.y{color:#d9a21b}.o{color:#e4863b}
+:root{--q-l:#e3ae35;--q-e:#b57bee;--q-u:#4c9aff;--q-a:#4cc26b;--q-n:#aab4c3}
+@media(prefers-color-scheme:light){:root:not([data-theme="dark"]){--q-l:#b97f00;--q-e:#8d3fd1;--q-u:#1f6fd6;--q-a:#1f8f45;--q-n:#6b7686}}
+:root[data-theme="light"]{--q-l:#b97f00;--q-e:#8d3fd1;--q-u:#1f6fd6;--q-a:#1f8f45;--q-n:#6b7686}
+.q-legendary{--q:var(--q-l)}.q-epic{--q:var(--q-e)}.q-elite{--q:var(--q-u)}.q-advanced{--q:var(--q-a)}.q-normal{--q:var(--q-n)}.q-x{--q:var(--mute)}
+.eqd li.eql{border-left:3px solid var(--q);padding-left:6px;cursor:help;border-radius:3px}.eqd li.eql:hover,.eqd li.eql:focus-visible{background:var(--soft);outline:none}.eql .en{color:var(--q);font-weight:600}.eql img{outline:1px solid var(--q)}
+.rdots{display:inline-flex;gap:3px;margin-left:6px;vertical-align:middle}.rdots i{width:8px;height:8px;border-radius:50%;background:var(--q);display:inline-block}
+#eqtip{--q-l:#e3ae35;--q-e:#b57bee;--q-u:#4c9aff;--q-a:#4cc26b;--q-n:#aab4c3;position:fixed;z-index:300;max-width:310px;padding:10px 12px;border-radius:12px;background:#060a12;color:#e8edf6;border:1px solid #2b3a57;box-shadow:0 14px 30px -10px rgba(0,0,0,.8);font-size:.82rem;line-height:1.5;pointer-events:none}
+#eqtip .th{display:flex;flex-direction:column;margin-bottom:5px;padding-bottom:5px;border-bottom:1px solid #2b3a57}#eqtip .th b{color:var(--q);font-size:.95rem}#eqtip .th span{color:var(--q);opacity:.85;font-size:.76rem}
+#eqtip .pw{color:#93a1bd}#eqtip .bn{color:#7fe3a6}#eqtip .st{color:#d9a21b}#eqtip .sr{margin-top:6px;color:#6f7e9b;font-size:.68rem}
 @media(max-width:900px){.rsplit,.r2,.bc{grid-template-columns:1fr}.rl{max-height:40vh}}
 </style></head><body><main>
 """ + _SB + r"""
@@ -2916,6 +2984,7 @@ const L=(d,e)=>LANG==='en'?e:d,$=id=>document.getElementById(id),f=n=>n==null?'�
 const CATS=[['field','Field'],['rally','Rally'],['garrison','Garrison']];
 const SLN={1:['Waffe','Weapon'],2:['Helm','Helm'],3:['Brust','Chest'],4:['Handschuhe','Gloves'],5:['Beine','Legs'],6:['Stiefel','Boots'],7:['Accessoire','Accessory'],8:['Accessoire','Accessory']},STN={Infantry:'Infanterie',Archer:'Bogenschützen',Cavalry:'Kavallerie',Integration:'Integration',Leadership:'Führung',Engineering:'Technik'};
 const iso=d=>new Date(d.getTime()-d.getTimezoneOffset()*6e4).toISOString().slice(0,10),ago=n=>{const d=new Date();d.setDate(d.getDate()-n);return iso(d)};
+let lastSg='',lastU='';
 let S={cat:'field',from:ago(30),to:iso(new Date()),account:'',q:'',abbr:'',hero:'',group:'tour',sel:''},D=null,seq=0;
 try{const o=JSON.parse(localStorage.getItem('rokrep')||'{}');if(o.cat)S.cat=o.cat;if(o.group)S.group=o.group}catch(e){}
 function sv(){try{localStorage.setItem('rokrep',JSON.stringify({cat:S.cat,group:S.group}))}catch(e){}}
@@ -2928,13 +2997,31 @@ function flt(){const a=(D&&D.accounts)||[],h=(D&&D.heroes)||[];
  <label>${L('Eigener Kommandant','Own commander')}<select id="fHero"><option value="">${L('Alle','All')}</option>${h.map(x=>`<option value="${x.id}"${String(x.id)===String(S.hero)?' selected':''}>${esc(x.name)}</option>`).join('')}</select></label>
  <label>${L('Gegner','Enemy')}<input id="fQ" value="${esc(S.q)}" placeholder="Name"></label><label>${L('Gegner-Allianz','Enemy alliance')}<input id="fAb" value="${esc(S.abbr)}" placeholder="ABC"></label>
  <label>${L('Gruppieren','Group by')}<select id="fGr"><option value="tour"${S.group==='tour'?' selected':''}>Tour</option><option value="pair"${S.group==='pair'?' selected':''}>${L('Kommandanten-Paar','Commander pair')}</option></select></label>`}
+const EQR=[];
+const RQN={legendary:['Legendär','Legendary'],epic:['Episch','Epic'],elite:['Selten','Elite'],advanced:['Ungewöhnlich','Advanced'],normal:['Gewöhnlich','Normal']};
+const UN={i:['Infanterie','Infantry'],a:['Bogenschützen','Archer'],c:['Kavallerie','Cavalry'],t:['Truppen','Troop'],s:['Belagerungseinheiten','Siege unit']},
+ SN2={a:['Angriff','Attack'],d:['Verteidigung','Defense'],h:['Lebenspunkte','Health']},
+ OTN={gs:['Sammelgeschwindigkeit','Gathering speed'],xp:['Kommandanten-EXP','Commander EXP gain'],bd:['Schaden gegen Barbaren','Damage to barbarians'],uc:['Truppenkapazität','Unit capacity'],ge:['Zusätzliche Rohstoffe beim Sammeln','Extra resources from gathering'],ms:['Marschgeschwindigkeit','March speed']};
+function stN(c){if(OTN[c])return L(OTN[c][0],OTN[c][1]);
+ if(/^ms[iacs]$/.test(c))return L('Marschgeschwindigkeit','March speed')+' ('+L(UN[c[2]][0],UN[c[2]][1])+')';
+ const u=UN[c[0]],t=SN2[c[1]];return u&&t?(LANG==='en'?u[1]+' '+t[1]:u[0]+'-'+t[0]):c}
+function eqTip(e){const q=RQN[e.r],sl=SLN[e.s]?L(SLN[e.s][0],SLN[e.s][1]):'',nf=v=>Number(v).toLocaleString(LANG==='en'?'en-US':'de-DE');
+ let h=`<div class="th q-${e.r||'x'}"><b>${esc(e.n)}</b><span>${q?L(q[0],q[1])+' · ':''}${esc(sl)}</span></div>`;
+ if(e.p)h+=`<div class="pw">${L('Macht','Power')} +${nf(e.p)}</div>`;
+ if(e.b&&e.b.length)h+=e.b.map(x=>`<div class="bn">+${nf(x[0])} % ${esc(stN(x[1]))}</div>`).join('');
+ else if(e.r&&e.s>=7)h+=`<div class="pw">${L('Zusatzeffekt: siehe Spiel','Special effect: see game')}</div>`;
+ if(e.st)h+=`<div class="st">${L('Spezialtalent','Special talent')}: ${esc(L(STN[e.st]||e.st,e.st))}</div>`;
+ if(e.ic)h+=`<div class="st">Iconic ${e.ic}</div>`;
+ if(e.p||e.b)h+=`<div class="sr">${L('Basiswerte laut rokstats.online','Base values per rokstats.online')}</div>`;
+ return h}
 function card(r,x,side){const you=side==='you',hl=(r.hi&&(you?r.hi.me:r.hi.foe))||[];
  const name=you?esc(x.account_name||x.account):esc(r.foe),hs=you?[x.hero1,x.hero2]:[r.eh1,r.eh2];
  const rows=you?[[L('Einheiten','Units'),r.troops],[L('Tote','Dead'),r.dead,'bad'],[L('Schwer verwundet','Severely wounded'),r.severe,'bad'],[L('Leicht verwundet','Slightly wounded'),r.hurt],[L('Kill Points','Kill points'),r.kp,'y']]
   :[[L('Einheiten','Units'),r.etroops],[L('Tote','Dead'),r.edead,'bad'],[L('Schwer verwundet','Severely wounded'),r.esevere,'bad'],[L('Leicht verwundet','Slightly wounded'),r.ehurt],[L('Kill Points','Kill points'),r.kpl,'y']];
- const hb=hl.length?`<div class="hbx">${hl.map(h=>`<div class="hb"><div class="hp"><img src="/icon/hero_${h.id}" alt="" onerror="this.style.display='none'"><b>${esc(h.name)}</b></div><div class="hm" title="${esc((h.skn||[]).join(' · '))}"><span class="y">${h.sk||''}</span> · Lv ${h.lv} · ★${h.st}</div>${h.eq.length?`<details class="eqd"><summary>${L('Ausrüstung','Equipment')} (${h.eq.length})</summary><ul>${h.eq.map(e=>`<li><img src="/icon/equip_${e.id}" alt="" onerror="this.style.display='none'"><span class="mute">${esc(SLN[e.s]?L(SLN[e.s][0],SLN[e.s][1]):e.s)}</span> ${esc(e.n)}${e.st||e.ic?` <i class="y">${e.st?esc(L(STN[e.st]||e.st,e.st)):''}${e.st&&e.ic?' · ':''}${e.ic?'Iconic '+e.ic:''}</i>`:''}</li>`).join('')}</ul></details>`:''}</div>`).join('')}</div>`:`<div class="hs">${hs.filter(Boolean).map(esc).join(' + ')||'–'}</div>`;
+ const hb=hl.length?`<div class="hbx">${hl.map(h=>`<div class="hb"><div class="hp"><img src="/icon/hero_${h.id}" alt="" onerror="this.style.display='none'"><b>${esc(h.name)}</b></div><div class="hm" title="${esc((h.skn||[]).join(' · '))}"><span class="y">${h.sk||''}</span> · Lv ${h.lv} · ★${h.st}</div>${h.eq.length?`<details class="eqd"><summary>${L('Ausrüstung','Equipment')} (${h.eq.length}) <span class="rdots">${h.eq.map(e=>`<i class="q-${e.r||'x'}"></i>`).join('')}</span></summary><ul>${h.eq.map(e=>{EQR.push(e);return `<li class="eql q-${e.r||'x'}" tabindex="0" data-q="${EQR.length-1}"><img src="/icon/equip_${e.id}" alt="" onerror="this.style.display='none'"><span class="mute">${esc(SLN[e.s]?L(SLN[e.s][0],SLN[e.s][1]):e.s)}</span> <span class="en">${esc(e.n)}</span>${e.st||e.ic?` <i class="y">${e.st?esc(L(STN[e.st]||e.st,e.st)):''}${e.st&&e.ic?' · ':''}${e.ic?'Iconic '+e.ic:''}</i>`:''}</li>`}).join('')}</ul></details>`:''}</div>`).join('')}</div>`:`<div class="hs">${hs.filter(Boolean).map(esc).join(' + ')||'–'}</div>`;
  return `<div><h4>${name}</h4>${hb}<table>${rows.map(z=>`<tr><td>${z[0]}</td><td class="num ${z[2]||''}">${z[2]==='y'?'+':''}${f(z[1])}</td></tr>`).join('')}</table></div>`}
 function body(){
+ EQR.length=0;
  const t=D.totals||{};
  let h=`<div class="rs"><div class="k"><b>${f(D.n_tours)}</b><span>${L('Touren','Tours')}</span></div><div class="k"><b>${f(t.battles||0)}</b><span>${L('Kämpfe','Battles')}</span></div>
  <div class="k"><b class="y">+${f(t.kp_gained||0)}</b><span>${L('Kill Points (du)','Kill points (you)')}</span></div><div class="k"><b class="bad">${f(t.kp_lost||0)}</b><span>${L('Kill Points (Gegner)','Kill points (enemy)')}</span></div>
@@ -2952,15 +3039,24 @@ function body(){
  <div class="rp"><h3>SUMMARY TRADES</h3><table><tr><th>${L('Wert','Metric')}</th><th>${L('Du','You')}</th><th>${L('Gegner','Enemy')}</th><th>Trade / Net</th></tr>${row(L('Kill Points','Kill points'),x.kp_gained,x.kp_lost,false,'y')}${row(L('Tote','Dead'),x.own_dead,x.enemy_dead,true,'bad')}${row(L('Schwer verwundet','Severely wounded'),x.own_severe,x.enemy_severe,true,'bad')}${row(L('Leicht verwundet','Slightly wounded'),x.own_hurt,x.enemy_hurt,true)}</table></div></div>`;
  x.rounds.forEach(r=>{h+=`<div class="rp"><div class="bh"><span>${r.time}</span><span>${esc(r.foe)}${r.castle?' · '+L('Burg','Castle')+' '+r.castle:''}</span></div><div class="bc">${card(r,x,'you')}${card(r,x,'foe')}</div></div>`});
  return h+`</div></div>`}
-function render(){tabs();flt();$('rsub').textContent=L('Spielerkämpfe als Touren: Field = du greifst an, Rally = du startest oder trittst bei, Garrison = du verteidigst.','Player battles grouped into tours: Field = you attack, Rally = you host or join, Garrison = you defend.');$('ro').innerHTML=D?body():''}
+function render(){tabs();flt();$('rsub').textContent=L('Spielerkämpfe als Touren: Field = du greifst an, Rally = du startest oder trittst bei, Garrison = du verteidigst.','Player battles grouped into tours: Field = you attack, Rally = you host or join, Garrison = you defend.');const tp=$('eqtip');if(tp)tp.hidden=true;const ol=document.querySelector('#ro .rl'),sc=ol?ol.scrollTop:0;$('ro').innerHTML=D?body():'';const nl=document.querySelector('#ro .rl');if(nl)nl.scrollTop=sc}
 async function load(){const id=++seq,u=`/api/v2?cat=${S.cat}&from=${S.from}&to=${S.to}&account=${encodeURIComponent(S.account)}&q=${encodeURIComponent(S.q)}&abbr=${encodeURIComponent(S.abbr)}&hero=${S.hero||0}`;
- try{const d=await fetch(u).then(r=>r.json());if(id!==seq)return;D=d;render()}catch(e){$('ro').innerHTML='<div class="rp">Fehler beim Laden.</div>'}}
+ try{const d=await fetch(u).then(r=>r.json());if(id!==seq)return;const sg=JSON.stringify(d);if(D&&sg===lastSg&&u===lastU)return;lastSg=sg;lastU=u;D=d;render()}catch(e){$('ro').innerHTML='<div class="rp">Fehler beim Laden.</div>'}}
 $('rtabs').onclick=e=>{const b=e.target.closest('button');if(!b)return;S.cat=b.dataset.c;S.sel='';sv();D=null;load();tabs()};
 let tq=0;
 $('rf').addEventListener('input',e=>{const t=e.target;if(t.id==='fQ')S.q=t.value;else if(t.id==='fAb')S.abbr=t.value;else return;clearTimeout(tq);tq=setTimeout(load,350)});
 $('rf').addEventListener('change',e=>{const t=e.target,m={fFrom:'from',fTo:'to',fAcc:'account',fHero:'hero',fGr:'group'}[t.id];if(!m)return;S[m]=t.value;if(m==='group'){sv();render()}else load()});
 $('rf').addEventListener('click',e=>{const b=e.target.closest('button');if(!b||b.dataset.r===undefined)return;const n=+b.dataset.r;S.from=n?ago(n):'2000-01-01';S.to=iso(new Date());load();flt()});
 $('ro').addEventListener('click',e=>{const t=e.target.closest('.ti');if(t){S.sel=t.dataset.t;render()}});
+const tip=document.createElement('div');tip.id='eqtip';tip.hidden=true;document.body.appendChild(tip);
+function tipPlace(x,y){const w=tip.offsetWidth,h=tip.offsetHeight;let l=x+14,t=y+16;if(l+w>innerWidth-8)l=Math.max(8,x-w-14);if(t+h>innerHeight-8)t=Math.max(8,y-h-14);tip.style.left=l+'px';tip.style.top=t+'px'}
+function tipShow(li,x,y){const e=EQR[+li.dataset.q];if(!e)return;tip.innerHTML=eqTip(e);tip.className='q-'+(e.r||'x');tip.hidden=false;tipPlace(x,y)}
+$('ro').addEventListener('mouseover',e=>{const li=e.target.closest('.eql');if(li)tipShow(li,e.clientX,e.clientY)});
+$('ro').addEventListener('mousemove',e=>{if(!tip.hidden)tipPlace(e.clientX,e.clientY)});
+$('ro').addEventListener('mouseout',e=>{const li=e.target.closest('.eql');if(li&&!(e.relatedTarget&&li.contains(e.relatedTarget)))tip.hidden=true});
+$('ro').addEventListener('focusin',e=>{const li=e.target.closest&&e.target.closest('.eql');if(li){const b=li.getBoundingClientRect();tipShow(li,b.left+24,b.bottom-10)}});
+$('ro').addEventListener('focusout',()=>{tip.hidden=true});
+document.addEventListener('keydown',e=>{if(e.key==='Escape')tip.hidden=true});
 tabs();flt();load();setInterval(()=>{if(!document.hidden)load()},30000);
 """ + _I18N + r"""</script></body></html>"""
 
