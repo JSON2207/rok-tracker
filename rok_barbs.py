@@ -1990,6 +1990,22 @@ details.rep>summary:hover{background:var(--accsoft)}
 .fa{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;margin:0 0 12px}
 .fa div{border:1px dashed var(--dash);border-radius:10px;padding:7px 12px}.fa dt{color:var(--mute);font-size:.8rem}.fa dd{margin:0;font-weight:700;font-variant-numeric:tabular-nums}
 .rb h3,#pf h3{font-size:.95rem;margin:12px 0 6px}.ll{margin:0}
+.msplit{display:grid;grid-template-columns:minmax(280px,390px) minmax(0,1fr);gap:14px;align-items:start}
+.mlist{border:1px solid var(--line);border-radius:14px;background:var(--soft);max-height:80vh;overflow:auto;position:sticky;top:8px}
+.mlist h3{margin:0;padding:11px 14px;font-size:.9rem;border-bottom:1px solid var(--line);display:flex;justify-content:space-between;align-items:baseline;position:sticky;top:0;background:var(--soft);z-index:1}
+.mday{padding:5px 14px;font-size:.74rem;font-weight:700;color:var(--mute);background:var(--card);border-bottom:1px solid var(--line);letter-spacing:.02em}
+.mti{display:block;width:100%;text-align:left;border:0;border-bottom:1px solid var(--line);border-radius:0;background:none;padding:10px 14px;color:var(--ink)}
+.mti:hover{background:var(--accsoft)}.mti.on{background:var(--accsoft);box-shadow:inset 3px 0 var(--acc)}
+.mti .a{display:flex;align-items:baseline;gap:4px 8px;flex-wrap:wrap}.mti .a b{font-weight:600;overflow-wrap:anywhere}.mti .a .tm{min-width:0;font-size:.8rem}.mti .a .note{margin-left:auto}
+.mti .b2{margin-top:2px;font-size:.78rem;color:var(--mute);overflow-wrap:anywhere}
+.mti .b{margin-top:6px;font-size:.8rem;color:var(--ink);display:flex;flex-wrap:wrap;gap:4px 12px}.mti .b .ch{margin-right:0}.mti .b .none{color:var(--mute)}
+.mti .tag{font-size:.7rem;padding:0 8px}
+.mdet{min-width:0}
+.mcard{border:1px solid var(--line);border-radius:14px;background:var(--soft);padding:14px 16px;margin-bottom:12px;min-width:0}
+.mcard h2{margin:0 0 2px;font-size:1.1rem;display:block;overflow-wrap:anywhere}.mcard h3{margin:14px 0 6px;font-size:.95rem}.mcard>.note:first-of-type{margin:0 0 8px}
+.mcard .loot{margin:6px 0 10px}.mcard .l{background:var(--card)}.mcard .fa{margin-top:10px}
+.mcard details.eqd summary{color:var(--mute);font-size:.85rem}.mcard details.eqd[open]>summary{margin-bottom:4px}
+@media(max-width:900px){.msplit{grid-template-columns:1fr}.mlist{max-height:42vh;position:static}}
 [hidden]{display:none!important}
 .tabs{display:flex;gap:6px;overflow-x:auto;padding:6px;margin-top:6px;border:1px solid var(--line);border-radius:16px;background:var(--card)}
 .tabs button{border:0;border-radius:11px;background:none;color:var(--mute);padding:9px 13px;white-space:nowrap;font-weight:600}
@@ -2007,9 +2023,9 @@ details.rep>summary:hover{background:var(--accsoft)}
 .qm{display:inline-grid;place-items:center;width:17px;height:17px;border-radius:50%;background:var(--warn);color:#111;font-size:.72rem}
 .ll li.unk small{margin-left:auto;font-size:.78rem}
 .nmbar{display:flex;flex-wrap:wrap;gap:10px;align-items:center;margin:6px 0 10px}
-tr.flash td,details.flash{animation:fl 2.6s ease-out}
+tr.flash td,details.flash,.mti.flash,.mcard.flash{animation:fl 2.6s ease-out}
 @keyframes fl{0%{box-shadow:0 0 0 3px var(--acc);background:var(--accsoft)}100%{box-shadow:0 0 0 0 transparent}}
-@media(prefers-reduced-motion:reduce){tr.flash td,details.flash{animation:none;outline:2px solid var(--acc)}}
+@media(prefers-reduced-motion:reduce){tr.flash td,details.flash,.mti.flash,.mcard.flash{animation:none;outline:2px solid var(--acc)}}
 @media(max-width:640px){.grid{grid-template-columns:1fr 1fr}.kc{grid-template-columns:1fr}.kc .ic{display:none}.hero{grid-template-columns:1fr}.av{width:64px;height:64px}.av span{font-size:1.2rem}.rb{padding-left:16px}}
 #al td{vertical-align:top}#al th[data-k]{cursor:pointer;user-select:none}#al th.on{color:var(--ink)}
 #al tr.m{cursor:pointer}#al td.n{white-space:nowrap;font-weight:600}
@@ -2094,7 +2110,7 @@ if(location.hash.length>1&&HASHTAB[location.hash.slice(1).toLowerCase()])tab=HAS
 function showTab(t){if(t==='nm')t='loot';const btn=document.querySelector(`button[data-t="${t}"]`);if(!btn||btn.hidden)t='loot';tab=t;
  document.querySelectorAll('button[data-t]').forEach(b=>{const on=b.dataset.t===t;b.classList.toggle('on',on);b.setAttribute('aria-selected',on)});
  document.querySelectorAll('.pane').forEach(p=>p.hidden=p.id!=='p_'+t);
- try{localStorage.setItem('roktab',t)}catch(e){}}
+ $('expand').hidden=(t==='ft'||t==='bt');try{localStorage.setItem('roktab',t)}catch(e){}}
 document.addEventListener('click',e=>{const b=e.target.closest('button[data-t]');if(b)showTab(b.dataset.t)});showTab(tab);
 (function(){const t=$('tabs'),a=document.querySelector('#sb a[data-p="/"]'),st=document.querySelector('#sb a[data-p="/settings"]');if(!t||!a)return;
  let G={};try{G=JSON.parse(localStorage.getItem('roksbg')||'{}')}catch(e){}
@@ -2183,6 +2199,8 @@ try{const g=localStorage.getItem('rokgo');if(g){localStorage.removeItem('rokgo')
 async function goReport(ref){
  if(ref.account&&$('acc').value&&$('acc').value!==ref.account&&[...$('acc').options].some(o=>o.value===ref.account))$('acc').value=ref.account;
  $('range').value='custom';$('d1').value=ref.day;$('d2').value=ref.day;lastSig='';await load();showTab(ref.tab);
+ const li=document.querySelector(`.mti[data-k="${ref.key}"]`);
+ if(li){selMd(ref.tab,ref.key,true);flash(li);const c=li.closest('.msplit')&&li.closest('.msplit').querySelector('.mdet .mcard');if(c){c.classList.remove('flash');void c.offsetWidth;c.classList.add('flash');setTimeout(()=>c.classList.remove('flash'),2800)}return}
  const d=document.querySelector(`details.rep[data-k="${ref.key}"]`);if(d){d.open=true;flash(d)}}
 document.addEventListener('click',e=>{const t=e.target.closest('[data-item]');if(!t)return;e.preventDefault();e.stopPropagation();goItem(t.dataset.item)},true);
 $('p_nm').addEventListener('click',async e=>{const btn=e.target.closest('button');if(!btn)return;
@@ -2215,6 +2233,51 @@ async function lapLoad(force){const n=lapPer==='all'?null:+lapPer,to=iso(new Dat
  el.innerHTML=`<div class="laph"><h3>Beute pro 100 AP</h3><select id="lapsel" aria-label="Zeitraum">${[['1','Heute'],['7','Letzte 7 Tage'],['30','Letzte 30 Tage'],['all','Gesamt']].map(o=>`<option value="${o[0]}"${o[0]===lapPer?' selected':''}>${o[1]}</option>`).join('')}</select></div>`+
   (c.ap?`<div class="loot">${lootHtml(lootBig(c.loot),100/c.ap,'Keine Beute im gewählten Zeitraum.')}</div><p class="note">${LANG==='en'?`Basis: ${f(c.ap)} AP for ${f(c.chains)} chains with ${f(c.barbs)} barbarians (only barbarians up to lvl ${c.maxlvl}, AP after the chain reduction).`.replace('Basis','Based on'):`Basis: ${f(c.ap)} AP für ${f(c.chains)} Chains mit ${f(c.barbs)} Barbaren (nur Barbaren bis Lvl ${c.maxlvl}, AP nach der Chain-Reduktion).`}</p>`:`<p class="note">Im gewählten Zeitraum gibt es keine Barbaren-Chains.</p>`)}
 $('lap').addEventListener('change',e=>{if(e.target.id==='lapsel'){lapPer=e.target.value;try{localStorage.setItem('roklap',lapPer)}catch(x){}lapLoad(true)}});
+// ===== Festungen / Barbarenkämpfe: Liste links, Details rechts =====
+let LS=null;const MS={ft:'',bt:''};
+const cmp=n=>n>=1e6?(n/1e6).toLocaleString(LOC,{maximumFractionDigits:2})+(LANG==='en'?' M':' Mio'):n>=1e4?(n/1e3).toLocaleString(LOC,{maximumFractionDigits:1})+(LANG==='en'?' K':' Tsd'):f(n);
+const dlab=ts=>new Date(ts*1000).toLocaleDateString(LOC,LANG==='en'?{weekday:'short',month:'short',day:'numeric'}:{weekday:'short',day:'2-digit',month:'2-digit'});
+const hhmm=t=>String(t).split(' ')[1]?String(t).split(' ')[1].slice(0,5):String(t);
+const lootAgg=l=>lootBig(l.map(x=>({kind:x.kind,total:x.total,qty:x.qty,name:x.name,item_id:x.id})));
+const aggIcon=x=>`<img class="mi" src="/icon/${x[3]}" alt="" onerror="icoFb(this,'${slug(x[0])}','${LI[x[0]]||'🎁'}')">`;
+const aggTxt=x=>x[2]==='Min'?tfmt(x[1])+(TU==='min'?' Min':''):x[2]==='×'?f(x[1])+'× '+esc(x[0]):cmp(x[1])+(x[2]?' '+x[2]:'');
+const miniLoot=l=>{if(!l.length)return`<span class="none">${'keine Beute'}</span>`;const a=lootAgg(l),u=l.filter(x=>x.unk);
+ return a.map(x=>`<span class="ch" title="${esc(x[0])}">${aggIcon(x)}${aggTxt(x)}</span>`).join('')+(u.length?`<span class="ch unk" title="Noch nicht benannt. Klicken zum Benennen.">? ${u.length}</span>`:'')};
+function lootCard(l){const a=lootAgg(l);
+ return`<div class="mcard"><h2>Das hast du bekommen</h2>`+(l.length?
+  (a.length?`<div class="loot">${lootHtml(a,1,'')}</div>`:'')+
+  `<details class="eqd" open><summary>Einzelne Items (${f(l.length)})</summary>${lootList(l)}</details>`
+  :'<p class="note">Keine Beute in diesem Bericht.</p>')+`</div>`}
+const ftRow=x=>`<button type="button" class="mti${x._k===MS.ft?' on':''}" data-k="${x._k}"><div class="a"><span class="tm">${hhmm(x.time)}</span><b>Barbarenfestung${x.level?' Lvl '+x.level:''}</b>${x.role?role[x.role]:''}<span class="note">${x.pct==null?'':x.pct+' %'}</span></div><div class="b">${miniLoot(x.loot)}</div></button>`;
+const ftDet=x=>`<div class="mcard"><h2>Barbarenfestung${x.level?' Lvl '+x.level:''}</h2><div class="note">${x.time} ${x.role?role[x.role]:''}</div>`+
+  facts([['Position',x.x==null?'–':`${x.x} / ${x.y}`],['Dein Schadensanteil',x.pct==null?'–':x.pct+' %'],['Tier',x.tier==null?'–':x.tier],['Teilnehmer',x.parts||'–'],['Primärer Kommandant',esc(x.hero)||'–'],['Sekundärer Kommandant',esc(x.hero2)||'–']])+
+  (x.level==null?'<p class="note">Zu dieser Festung gibt es keine Belohnungs-Mail im Ordner, deshalb fehlen Level, Position und Beute.</p>':'')+`</div>`+lootCard(x.loot);
+const btRow=x=>`<button type="button" class="mti${x._k===MS.bt?' on':''}" data-k="${x._k}"><div class="a"><span class="tm">${hhmm(x.time)}</span><b>${esc(x.title)}</b></div><div class="b2">${role[x.role]} ${esc(x.hero)}${x.hero2?' + '+esc(x.hero2):''}${x.ck?` · <span class="tag">${x.cnew?'Neustart · ':''}Chain ${x.ck} · ${x.ap} AP</span>`:''}</div><div class="b">${miniLoot(x.loot)}</div></button>`;
+function btDet(x){const so=x.role==='solo',t=x.totals;
+ return`<div class="mcard"><h2>${esc(x.title)}</h2><div class="note">${x.time} ${role[x.role]}${x.ck?` <span class="tag">${x.cnew?'Neustart · ':''}Chain ${x.ck} · ${x.ap} AP</span>`:''}</div>`+
+  facts(so?[['Primärer Kommandant',esc(x.hero)||'–'],['Sekundärer Kommandant',esc(x.hero2)||'–'],['Gegner im Bericht',x.n],['Gegner-Truppen',f(t.foe_troops)],['Leicht verwundet',f(t.hurt)],['Schwer verwundet',f(t.severe),'bad'],['Kommandanten-XP',f(t.xp)]]
+          :[['Primärer Kommandant',esc(x.hero)||'–'],['Sekundärer Kommandant',esc(x.hero2)||'–'],['Teilnehmer',x.parts],['Gegner im Bericht',x.n],['Kommandanten-XP',f(t.xp)]])+
+  (so?`<p><button type="button" class="chr" data-id="${x.mail_id}" data-on="${x.cman?0:1}">${x.cman?'Neustart-Markierung entfernen':'Als Neustart markieren'}</button></p>`:'')+
+  (so?'':'<p class="note">Truppen und Verluste gelten bei Rallys für alle Teilnehmer zusammen und werden nicht einzeln angezeigt.</p>')+`</div>`+
+  lootCard(x.loot)+
+  (so&&x.n>1?`<div class="mcard"><h2>Die einzelnen Gegner</h2>`+tbl(['Gegner','Gegner-Truppen','Eigene Truppen','Leicht verwundet','Schwer verwundet','XP','Beute'],
+        x.rounds.map(r=>`<tr><td>${esc(r.foe)}</td><td>${f(r.foe_troops)}</td><td>${f(r.own_troops)}</td><td>${f(r.hurt)}</td><td class="bad">${f(r.severe)}</td><td>${f(r.xp)}</td><td class="lt">${chipsH(r.loot)}</td></tr>`))+`</div>`:'')}
+function mdBuild(tab,title,items,rowF,empty){
+ if(!items.length)return none(empty);
+ if(!items.some(x=>x._k===MS[tab]))MS[tab]=items[0]._k;
+ let day='',h=`<div class="msplit"><div class="mlist"><h3><span>${title}</span><span class="note">${f(items.length)}</span></h3>`;
+ items.forEach(x=>{const d=new Date(x.ts*1000).toDateString();if(d!==day){day=d;h+=`<div class="mday">${dlab(x.ts)}</div>`}h+=rowF(x)});
+ return h+`</div><div class="mdet">${(tab==='ft'?ftDet:btDet)(items.find(x=>x._k===MS[tab]))}</div></div>`}
+function mdKeep(pane,fn){   // Beim Neuzeichnen die gewaehlte Zeile an derselben Stelle halten, auch wenn oben neue Berichte dazukommen
+ const l=pane.querySelector('.mlist'),on=l&&l.querySelector('.mti.on'),y=l?l.scrollTop:0,o=on?on.offsetTop-y:null;fn();
+ const n=pane.querySelector('.mlist');if(!n)return;const on2=n.querySelector('.mti.on');n.scrollTop=o!==null&&on2?on2.offsetTop-o:y}
+function selMd(tab,key,quiet){MS[tab]=key;const pane=$(tab==='ft'?'p_ft':'p_bt');
+ pane.querySelectorAll('.mti').forEach(b=>b.classList.toggle('on',b.dataset.k===key));
+ const det=pane.querySelector('.mdet'),it=LS&&(tab==='ft'?LS.forts:LS.battles).find(x=>x._k===key);if(!det||!it)return;
+ det.innerHTML=(tab==='ft'?ftDet:btDet)(it);
+ if(!quiet&&window.innerWidth<=900)det.scrollIntoView({behavior:'smooth',block:'start'})}
+$('p_ft').addEventListener('click',e=>{const b=e.target.closest('.mti');if(b)selMd('ft',b.dataset.k)});
+$('p_bt').addEventListener('click',e=>{const b=e.target.closest('.mti');if(b)selMd('bt',b.dataset.k)});
 async function load(){const[a,b]=range();
  localStorage.setItem('rokbarbs',JSON.stringify({range:$('range').value,d1:$('d1').value,d2:$('d2').value}));
  const [s,st]=await Promise.all([fetch(`/api/stats?from=${a}&to=${b}&account=${$('acc').value}`).then(r=>r.json()),fetch('/api/status').then(r=>r.json())]);
@@ -2254,24 +2317,12 @@ async function load(){const[a,b]=range();
  $('ittot').innerHTML='<div class="ittwo"><div>'+ftTotal(lsm('b'),s.totals.battles||0,'Barbaren-Beute insgesamt')+'</div><div>'+ftTotal(lsm('f'),s.forts.length,'Festungs-Beute insgesamt','Festungen')+'</div></div>'+ftTotal(lsm('o'),null,'Sonstige Beute');
  $('apfort').onchange=async e=>{await fetch('/api/chaincfg',{method:'POST',body:JSON.stringify({fort_ap:+e.target.value})});lastSig='';load()};
  $('c_ft').textContent=s.forts.length||'';
- $('ft').innerHTML=s.forts.map(x=>rep('f'+x.key,
-   `<span class="tm">${x.time}</span>${x.role?role[x.role]:''}<b>Barbarenfestung${x.level?' Lvl '+x.level:''}</b><span class="note">${x.pct==null?'':'Anteil '+x.pct+' %'}${x.tier==null?'':', Tier '+x.tier}</span><span class="sm">${chipsH(x.loot)}</span>`,
-   facts([['Position',x.x==null?'–':`${x.x} / ${x.y}`],['Dein Schadensanteil',x.pct==null?'–':x.pct+' %'],['Tier',x.tier==null?'–':x.tier],['Teilnehmer',x.parts||'–'],['Primärer Kommandant',esc(x.hero)||'–'],['Sekundärer Kommandant',esc(x.hero2)||'–']])+
-   (x.level==null?'<p class="note">Zu dieser Festung gibt es keine Belohnungs-Mail im Ordner, deshalb fehlen Level, Position und Beute.</p>':'')+
-   '<h3>Das hast du bekommen</h3>'+lootList(x.loot))).join('')||none('Keine Festungen im gewählten Zeitraum.');
+ LS=s;s.forts.forEach(x=>{x._k='f'+x.key});s.battles.forEach(x=>{x._k='b'+x.mail_id});
+ mdKeep($('p_ft'),()=>{$('ft').innerHTML=mdBuild('ft','Festungen',s.forts,ftRow,'Keine Festungen im gewählten Zeitraum.')});
  // Barbarenkämpfe (ein Bericht = eine Zeile, die Runden/Gegner stehen darin)
  $('c_bt').textContent=s.battles.length?(s.battles.length>=200?'letzte 200':s.battles.length):'';
  renderChain(s.chain);
- $('bt').innerHTML=s.battles.map(x=>{const so=x.role==='solo',t=x.totals;
-  return rep('b'+x.mail_id,
-   `<span class="tm">${x.time}</span>${role[x.role]}<b>${esc(x.title)}</b><span class="note">${esc(x.hero)}${x.hero2?' + '+esc(x.hero2):''}</span>${x.ck?`<span class="tag">${x.cnew?'Neustart · ':''}Chain ${x.ck} · ${x.ap} AP</span>`:''}<span class="sm">${chipsH(x.loot)}</span>`,
-   facts(so?[['Primärer Kommandant',esc(x.hero)||'–'],['Sekundärer Kommandant',esc(x.hero2)||'–'],['Gegner im Bericht',x.n],['Gegner-Truppen',f(t.foe_troops)],['Leicht verwundet',f(t.hurt)],['Schwer verwundet',f(t.severe),'bad'],['Kommandanten-XP',f(t.xp)]]
-           :[['Primärer Kommandant',esc(x.hero)||'–'],['Sekundärer Kommandant',esc(x.hero2)||'–'],['Teilnehmer',x.parts],['Gegner im Bericht',x.n],['Kommandanten-XP',f(t.xp)]])+
-   (so?`<p><button type="button" class="chr" data-id="${x.mail_id}" data-on="${x.cman?0:1}">${x.cman?'Neustart-Markierung entfernen':'Als Neustart markieren'}</button></p>`:'')+
-   (so?(x.n>1?'<h3>Die einzelnen Gegner</h3>'+tbl(['Gegner','Gegner-Truppen','Eigene Truppen','Leicht verwundet','Schwer verwundet','XP','Beute'],
-        x.rounds.map(r=>`<tr><td>${esc(r.foe)}</td><td>${f(r.foe_troops)}</td><td>${f(r.own_troops)}</td><td>${f(r.hurt)}</td><td class="bad">${f(r.severe)}</td><td>${f(r.xp)}</td><td class="lt">${chipsH(r.loot)}</td></tr>`)):'')
-      :'<p class="note">Truppen und Verluste gelten bei Rallys für alle Teilnehmer zusammen und werden nicht einzeln angezeigt.</p>')+
-   '<h3>Das hast du bekommen</h3>'+lootList(x.loot))}).join('')||none('Keine Kämpfe im gewählten Zeitraum.');
+ mdKeep($('p_bt'),()=>{$('bt').innerHTML=mdBuild('bt','Barbarenkämpfe',s.battles,btRow,'Keine Kämpfe im gewählten Zeitraum.')});
  // Spielerkämpfe (ein Bericht = eine Zeile, alle Runden/Gegner darin)
 const pvList=l=>l.map(x=>{const so=x.role==='solo',t=x.totals;
   return rep('p'+x.key,
@@ -2331,7 +2382,7 @@ const EN=[
 [`Ranglisten deiner Allianz aus Screenshots (ohne Resource Assistance und Armory Contributions). Die Datei, die ich dir schicke, fügst du hier ein. Frühere Stände bleiben gespeichert, so siehst du, wer wie viel dazugewonnen hat.`,`Rankings of your alliance from screenshots (without Resource Assistance and Armory Contributions). Import the file I send you here. Earlier snapshots are kept, so you can see who gained how much.`],
 [`Noch keine Allianz-Daten. Schick mir Screenshots der Ranglisten, ich erstelle dir die Datei zum Einfügen.`,`No alliance data yet. Send me screenshots of the rankings and I will create the file to import.`],
 [`Nicht mehr in der Liste, zuletzt gesehen`,`No longer listed, last seen`],[`Klick auf einen Namen zeigt den Verlauf.`,`Click a name to see the history.`],[`Noch keine Daten`,`No data yet`],
-[`Mitgliedern`,`members`],[`Rang`,`Rank`],[`Wert`,`Value`],[`Veränderung`,`Change`],[`Avatar ändern`,`Change avatar`],[`Avatar zurücksetzen`,`Reset avatar`],[`Alle Berichte aufklappen`,`Expand all reports`],[`zuklappen`,`Collapse all`],
+[`Mitgliedern`,`members`],[`Rang`,`Rank`],[`Wert`,`Value`],[`Veränderung`,`Change`],[`Avatar ändern`,`Change avatar`],[`Avatar zurücksetzen`,`Reset avatar`],[`Einzelne Items`,`Individual items`],[`Alle Berichte aufklappen`,`Expand all reports`],[`zuklappen`,`Collapse all`],
 [`Beute`,`Loot`],[`Festungen`,`Forts`],[`Barbarenkämpfe`,`Barbarian Battles`],[`Spielerkämpfe`,`PvP Battles`],[`Profil`,`Profile`],[`Pro Tag`,`Per Day`],[`Namen eintragen`,`Enter Names`],
 [`offen`,`open`],[`weitere`,`more`],[`letzte`,`last`],
 [`Solo-Berichte`,`Solo reports`],[`Rallys`,`Rallies`],[`Festungen zerstört`,`Forts destroyed`],[`Gegner besiegt (solo)`,`Enemies defeated (solo)`],
