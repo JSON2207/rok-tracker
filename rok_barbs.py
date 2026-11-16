@@ -171,7 +171,7 @@ def extract_battle(mail):
     except (IndexError, ValueError):
         start = None
     return dict(kind="battle", mail_id=str(mail["id"]), ts=mail["time"] / 1e6, account=acc, start=start,
-                acc_name=mine.get("PName", ""), role=role, parts=parts, hero1=int(mine.get("HId", 0)),
+                acc_name=mine.get("PName", ""), role=role, parts=parts, hero1=int(mine.get("HId", 0)), hero2=int(mine.get("HId2", 0) or 0),
                 battles=battles, pvp=pvp)
 
 def extract_fort_reward(mail):
@@ -211,7 +211,7 @@ def extract(mail):
 
 # ---------------------------------------------------------------- Datenbank
 class DB:
-    VERSION = 5
+    VERSION = 6
 
     def __init__(self, path):
         self.lock = threading.Lock()
@@ -258,6 +258,12 @@ class DB:
             self.c.execute("ALTER TABLE battles ADD COLUMN start REAL")
         except sqlite3.OperationalError:
             pass
+        try:
+            self.c.execute("ALTER TABLE battles ADD COLUMN hero2 INT")
+        except sqlite3.OperationalError:
+            pass
+        if self.c.execute("PRAGMA user_version").fetchone()[0] < 6:
+            self.c.execute("DELETE FROM processed")         # Version 6: alle Dateien einmal lesen, um den zweiten Kommandanten nachzutragen (nichts wird geloescht)
         if self.c.execute("PRAGMA user_version").fetchone()[0] < 5:
             # Version 5: Spielerkämpfe werden mit korrekter Feldzuordnung neu eingelesen (alle Dateien einmal neu)
             for col in ("enemy_hurt INT", "enemy_severe INT", "mode TEXT"):
@@ -303,6 +309,9 @@ class DB:
         acc = r["account"]
         with self.lock:
             if self.c.execute("SELECT 1 FROM reports WHERE mail_id=?", (r["mail_id"],)).fetchone():
+                if r["kind"] == "battle" and r.get("hero2") is not None:     # zweiten Kommandanten bei alten Berichten nachtragen
+                    self.c.execute("UPDATE battles SET hero2=? WHERE mail_id=? AND hero2 IS NULL", (r["hero2"], r["mail_id"]))
+                    self.c.commit()
                 return False
             self.c.execute("INSERT INTO reports VALUES(?,?,?,?,?)", (r["mail_id"], r["ts"], day, acc, r.get("acc_name", "")))
             lp = lambda src, i, loot: [self.c.execute("INSERT INTO loot VALUES(?,?,?,?,?,?)", (src, i, day, acc, it, q))
@@ -311,11 +320,11 @@ class DB:
                 for b in r["battles"]:
                     cur = self.c.execute(
                         "INSERT INTO battles(mail_id,ts,day,account,role,parts,hero1,foe_hid,foe_kind,foe_lvl,"
-                        "foe_troops,own_troops,remaining,hurt,severe,heal,dead,power,xp,start) "
-                        "VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+                        "foe_troops,own_troops,remaining,hurt,severe,heal,dead,power,xp,start,hero2) "
+                        "VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
                         (r["mail_id"], r["ts"], day, acc, r["role"], r["parts"], r["hero1"], b["foe_hid"],
                          b["foe_kind"], b["foe_lvl"], b["foe_troops"], b["own_troops"], b["remaining"], b["hurt"],
-                         b["severe"], b["heal"], b["dead"], b["power"], b["xp"], r.get("start")))
+                         b["severe"], b["heal"], b["dead"], b["power"], b["xp"], r.get("start"), r.get("hero2")))
                     lp("b", cur.lastrowid, b["loot"])
                 for x in r["pvp"]:
                     self.c.execute(
@@ -398,9 +407,17 @@ class DB:
                         continue
                 out.append(e)
             return out
-        heroes = split("hero", [{"id": r["hero1"], "n": r["n"]} for r in self.q(
-            "SELECT hero1, COUNT(*) n FROM battles GROUP BY hero1 ORDER BY n DESC") if r["hero1"] not in HEROES])
-        foes = split("foe", [{"id": r["foe_hid"], "lvl": r["lvl"], "n": r["n"]} for r in self.q(
+        def bref(where, *arg):            # neuester Kampfbericht dazu, fuer "Zum Bericht"
+            b = self.q("SELECT id, mail_id, foe_kind, day, account FROM battles WHERE " + where + " ORDER BY ts DESC LIMIT 1", arg)
+            if not b:
+                return None
+            b = b[0]
+            ref = dict(tab="ft", key="fb%d" % b["id"]) if b["foe_kind"] == "fort" else dict(tab="bt", key="b" + b["mail_id"])
+            return dict(ref, day=b["day"], account=b["account"])
+        heroes = split("hero", [{"id": r["h"], "n": r["n"], "ref": bref("(hero1=? OR hero2=?)", r["h"], r["h"])} for r in self.q(
+            "SELECT h, COUNT(*) n FROM (SELECT hero1 h FROM battles UNION ALL SELECT hero2 FROM battles WHERE hero2>0) "
+            "GROUP BY h ORDER BY n DESC") if r["h"] not in HEROES])
+        foes = split("foe", [{"id": r["foe_hid"], "lvl": r["lvl"], "n": r["n"], "ref": bref("foe_kind='camp' AND foe_hid=?", r["foe_hid"])} for r in self.q(
             "SELECT foe_hid, MAX(foe_lvl) lvl, COUNT(*) n FROM battles WHERE foe_kind='camp' GROUP BY foe_hid "
             "ORDER BY n DESC") if r["foe_hid"] not in FOES])
         return dict(items=items, heroes=heroes, foes=foes, ignored=ignored)
@@ -415,7 +432,7 @@ class DB:
         cur, k = self.ign_other(), "%s:%s" % (kind, iid)
         if flag:
             if kind == "hero":
-                n = self.q("SELECT COUNT(*) n FROM battles WHERE hero1=?", (iid,))[0]["n"]
+                n = self.q("SELECT COUNT(*) n FROM battles WHERE hero1=? OR hero2=?", (iid, iid))[0]["n"]
             else:
                 n = self.q("SELECT COUNT(*) n FROM battles WHERE foe_kind='camp' AND foe_hid=?", (iid,))[0]["n"]
             cur[k] = n
@@ -453,13 +470,13 @@ class DB:
             if r:
                 used.add(r["id"])
             out.append(dict(key="b%d" % b["id"], rid=r["id"] if r else None, ts=b["ts"], day=b["day"], account=b["account"], role=b["role"],
-                            parts=b["parts"], hero1=b["hero1"], level=r["level"] if r else None,
+                            parts=b["parts"], hero1=b["hero1"], hero2=b["hero2"], level=r["level"] if r else None,
                             x=r["x"] if r else None, y=r["y"] if r else None, pct=r["pct"] if r else None,
                             tier=r["tier"] if r else None, loot=self.loot_of("f", r["id"]) if r else []))
         for r in rs:
             if r["id"] not in used:
                 out.append(dict(key="f%d" % r["id"], rid=r["id"], ts=r["ts"], day=r["day"], account=r["account"], role=None,
-                                parts=None, hero1=None, level=r["level"], x=r["x"], y=r["y"], pct=r["pct"],
+                                parts=None, hero1=None, hero2=None, level=r["level"], x=r["x"], y=r["y"], pct=r["pct"],
                                 tier=r["tier"], loot=self.loot_of("f", r["id"])))
         out.sort(key=lambda e: e["ts"], reverse=True)
         return out
@@ -502,9 +519,9 @@ class DB:
             rounds = [dict(foe="Lvl %d %s" % (b["foe_lvl"], FOES.get(b["foe_hid"], "NPC #%d" % b["foe_hid"])),
                            foe_troops=b["foe_troops"], own_troops=b["own_troops"], hurt=b["hurt"],
                            severe=b["severe"], xp=b["xp"], loot=self.loot_of("b", b["id"])) for b in rs]
-            h = rs[0]["hero1"]
+            h, h2 = rs[0]["hero1"], rs[0]["hero2"]
             out.append(dict(mail_id=mid, ts=rs[0]["ts"], time=fmt(rs[0]["ts"]), role=rs[0]["role"], parts=rs[0]["parts"],
-                            hero=HEROES.get(h, "Kommandant #%d" % h), n=len(rs), title=self._title(r["foe"] for r in rounds),
+                            hero=HEROES.get(h, "Kommandant #%d" % h), hero2=HEROES.get(h2, "Kommandant #%d" % h2) if h2 else "", n=len(rs), title=self._title(r["foe"] for r in rounds),
                             totals={k: sum(r[k] for r in rounds) for k in ("foe_troops", "hurt", "severe", "xp")},
                             rounds=rounds, loot=self.merge_loot(r["loot"] for r in rounds)))
         return out
@@ -1128,6 +1145,7 @@ class DB:
         for f in forts:
             f["time"] = fmt(f["ts"])
             f["hero"] = HEROES.get(f["hero1"], "Kommandant #%d" % f["hero1"]) if f["hero1"] is not None else ""
+            f["hero2"] = HEROES.get(f["hero2"], "Kommandant #%d" % f["hero2"]) if f.get("hero2") else ""
         pvps, aoos = self.report_pvp(oth_sess, fmt), self.report_pvp(aoo_sess, fmt)
         wa, aa = ("WHERE account=?", (account,)) if account else ("", ())
         days = {d["day"]: d for d in self.q(
@@ -1588,11 +1606,11 @@ let lastNames={items:[]};
 function renderNames(u){lastNames=u;const sig=JSON.stringify([u,nmSort]);if(sig===nmSig)return;nmSig=sig;
  const n=u.items.length+u.heroes.length+u.foes.length;$('nmsec').hidden=!n&&!u.ignored.length;$('c_nm').textContent=n?`${n} offen`:'';
  const ks=k=>KINDS.map(x=>`<option value="${x[0]}"${x[0]===k?' selected':''}>${x[1]}</option>`).join('');
- const row=(kind,id,label,extra)=>`<tr data-kind="${kind}" data-id="${id}"><td class="t">${label}</td><td class="t"><input class="n" placeholder="Name" value="${esc(extra.guess)}"> ${extra.item?`<input class="u" type="number" step="any" style="width:90px" placeholder="Wert/Stück" value="${extra.unit??''}" title="Wert pro Stück, z. B. 5 für 5 Min oder 1000 für 1.000 Holz"> <select class="k">${ks(extra.kind||'other')}</select>`:''} <button class="sv">Speichern</button>${extra.ref?` <button class="go" data-ref='${esc(JSON.stringify(extra.ref))}' title="Neuester Bericht mit diesem Item">Zum Bericht</button>`:''}<button class="ig" title="Vorerst ignorieren: nicht in der Liste offener Namen. Taucht er in einem neuen Bericht auf, erscheint er wieder.">Ignorieren</button> <span class="note"></span></td></tr>`;
+ const row=(kind,id,label,extra)=>`<tr data-kind="${kind}" data-id="${id}"><td class="t">${label}</td><td class="t"><input class="n" placeholder="Name" value="${esc(extra.guess)}"> ${extra.item?`<input class="u" type="number" step="any" style="width:90px" placeholder="Wert/Stück" value="${extra.unit??''}" title="Wert pro Stück, z. B. 5 für 5 Min oder 1000 für 1.000 Holz"> <select class="k">${ks(extra.kind||'other')}</select>`:''} <button class="sv">Speichern</button>${extra.ref?` <button class="go" data-ref='${esc(JSON.stringify(extra.ref))}' title="${extra.rt||'Neuester Bericht mit diesem Item'}">Zum Bericht</button>`:''}<button class="ig" title="Vorerst ignorieren: nicht in der Liste offener Namen. Taucht er in einem neuen Bericht auf, erscheint er wieder.">Ignorieren</button> <span class="note"></span></td></tr>`;
  const items=u.items.slice().sort((a,b)=>nmSort==='new'?(b.last_day.localeCompare(a.last_day)||b.qty-a.qty):nmSort==='old'?(a.first_day.localeCompare(b.first_day)||b.qty-a.qty):b.qty-a.qty);
  $('nm').innerHTML=items.map(x=>row('item',x.id,`Item #${x.id}${x.fresh?' <span class="cnt">neu</span>':''}<br><small>${f(x.qty)}× gefunden · ${x.first_day===x.last_day?dm(x.last_day):dm(x.first_day)+' bis '+dm(x.last_day)}</small>`,{item:1,guess:x.guess,unit:x.unit,kind:x.kind,ref:x.ref})).join('')+
-  u.heroes.map(x=>row('hero',x.id,`Kommandant #${x.id}${x.fresh?' <span class="cnt">neu</span>':''}<br><small>${f(x.n)} Kämpfe</small>`,{})).join('')+
-  u.foes.map(x=>row('foe',x.id,`Gegner #${x.id}${x.fresh?' <span class="cnt">neu</span>':''} (Lvl ${x.lvl})<br><small>${f(x.n)} Kämpfe</small>`,{})).join('');
+  u.heroes.map(x=>row('hero',x.id,`Kommandant #${x.id}${x.fresh?' <span class="cnt">neu</span>':''}<br><small>${f(x.n)} Kämpfe</small>`,{ref:x.ref,rt:'Neuester Bericht mit diesem Kommandanten'})).join('')+
+  u.foes.map(x=>row('foe',x.id,`Gegner #${x.id}${x.fresh?' <span class="cnt">neu</span>':''} (Lvl ${x.lvl})<br><small>${f(x.n)} Kämpfe</small>`,{ref:x.ref,rt:'Neuester Bericht mit diesem Gegner'})).join('');
  $('nmign').innerHTML=u.ignored.length?`<details class="rep" style="margin-top:14px"><summary><b>Ignoriert</b> <span class="cnt">${u.ignored.length}</span></summary><div class="rb">${u.ignored.map(x=>`<div style="margin:6px 0">${x.kind==='hero'?'Kommandant':x.kind==='foe'?'Gegner':'Item'} #${x.id} <span class="note">${x.kind==='item'?f(x.qty)+'× gefunden':f(x.n)+' Kämpfe'}</span> <button class="un" data-id="${x.id}" data-kind="${x.kind}">Wieder anzeigen</button></div>`).join('')}</div></details>`:''}
 function flash(el){el.classList.remove('flash');void el.offsetWidth;el.classList.add('flash');el.scrollIntoView({block:'center',behavior:'smooth'});setTimeout(()=>el.classList.remove('flash'),2800)}
 function goItem(id){location.href='/settings#item-'+id}
@@ -1673,7 +1691,7 @@ async function load(){const[a,b]=range();
  $('c_ft').textContent=s.forts.length||'';
  $('ft').innerHTML=s.forts.map(x=>rep('f'+x.key,
    `<span class="tm">${x.time}</span>${x.role?role[x.role]:''}<b>Barbarenfestung${x.level?' Lvl '+x.level:''}</b><span class="note">${x.pct==null?'':'Anteil '+x.pct+' %'}${x.tier==null?'':', Tier '+x.tier}</span><span class="sm">${chipsH(x.loot)}</span>`,
-   facts([['Position',x.x==null?'–':`${x.x} / ${x.y}`],['Dein Schadensanteil',x.pct==null?'–':x.pct+' %'],['Tier',x.tier==null?'–':x.tier],['Teilnehmer',x.parts||'–'],['Kommandant',esc(x.hero)||'–']])+
+   facts([['Position',x.x==null?'–':`${x.x} / ${x.y}`],['Dein Schadensanteil',x.pct==null?'–':x.pct+' %'],['Tier',x.tier==null?'–':x.tier],['Teilnehmer',x.parts||'–'],['Primärer Kommandant',esc(x.hero)||'–'],['Sekundärer Kommandant',esc(x.hero2)||'–']])+
    (x.level==null?'<p class="note">Zu dieser Festung gibt es keine Belohnungs-Mail im Ordner, deshalb fehlen Level, Position und Beute.</p>':'')+
    '<h3>Das hast du bekommen</h3>'+lootList(x.loot))).join('')||none('Keine Festungen im gewählten Zeitraum.');
  // Barbarenkämpfe (ein Bericht = eine Zeile, die Runden/Gegner stehen darin)
@@ -1681,9 +1699,9 @@ async function load(){const[a,b]=range();
  renderChain(s.chain);
  $('bt').innerHTML=s.battles.map(x=>{const so=x.role==='solo',t=x.totals;
   return rep('b'+x.mail_id,
-   `<span class="tm">${x.time}</span>${role[x.role]}<b>${esc(x.title)}</b><span class="note">${esc(x.hero)}</span>${x.ck?`<span class="tag">${x.cnew?'Neustart · ':''}Chain ${x.ck} · ${x.ap} AP</span>`:''}<span class="sm">${chipsH(x.loot)}</span>`,
-   facts(so?[['Gegner im Bericht',x.n],['Gegner-Truppen',f(t.foe_troops)],['Leicht verwundet',f(t.hurt)],['Schwer verwundet',f(t.severe),'bad'],['Kommandanten-XP',f(t.xp)]]
-           :[['Teilnehmer',x.parts],['Gegner im Bericht',x.n],['Kommandanten-XP',f(t.xp)]])+
+   `<span class="tm">${x.time}</span>${role[x.role]}<b>${esc(x.title)}</b><span class="note">${esc(x.hero)}${x.hero2?' + '+esc(x.hero2):''}</span>${x.ck?`<span class="tag">${x.cnew?'Neustart · ':''}Chain ${x.ck} · ${x.ap} AP</span>`:''}<span class="sm">${chipsH(x.loot)}</span>`,
+   facts(so?[['Primärer Kommandant',esc(x.hero)||'–'],['Sekundärer Kommandant',esc(x.hero2)||'–'],['Gegner im Bericht',x.n],['Gegner-Truppen',f(t.foe_troops)],['Leicht verwundet',f(t.hurt)],['Schwer verwundet',f(t.severe),'bad'],['Kommandanten-XP',f(t.xp)]]
+           :[['Primärer Kommandant',esc(x.hero)||'–'],['Sekundärer Kommandant',esc(x.hero2)||'–'],['Teilnehmer',x.parts],['Gegner im Bericht',x.n],['Kommandanten-XP',f(t.xp)]])+
    (so?`<p><button type="button" class="chr" data-id="${x.mail_id}" data-on="${x.cman?0:1}">${x.cman?'Neustart-Markierung entfernen':'Als Neustart markieren'}</button></p>`:'')+
    (so?(x.n>1?'<h3>Die einzelnen Gegner</h3>'+tbl(['Gegner','Gegner-Truppen','Eigene Truppen','Leicht verwundet','Schwer verwundet','XP','Beute'],
         x.rounds.map(r=>`<tr><td>${esc(r.foe)}</td><td>${f(r.foe_troops)}</td><td>${f(r.own_troops)}</td><td>${f(r.hurt)}</td><td class="bad">${f(r.severe)}</td><td>${f(r.xp)}</td><td class="lt">${chipsH(r.loot)}</td></tr>`)):'')
@@ -1939,7 +1957,7 @@ const EN=[
 [`Datei unvollständig`,`File incomplete`],
 [`Alle Einträge dieser Seite löschen und auf den Anfangszustand zurücksetzen?`,`Delete all entries on this page and reset to the initial state?`],[`Items insgesamt`,`Total items`],
 [`AP-Verbrauch`,`AP usage`],[`Barbaren-Beute insgesamt`,`Total barbarian loot`],[`Festungs-Beute insgesamt`,`Total fort loot`],[`Sonstige Beute`,`Other loot`],[`AP pro Festung`,`AP per fort`],[`AP gesamt`,`AP total`],[`Barbaren-AP sind geschätzt (Chain-Einstellungen im Tab Barbarenkämpfe), Festungen zählen auch beigetretene Rallys.`,`Barbarian AP are estimated (chain settings in the Barbarian fights tab), forts also include joined rallies.`],
-[`Arten`,`types`],[`Vergleich mit`,`Compare with`],[`Liste`,`List`],[`Mindestpunkte`,`Minimum points`],[`Fehlt`,`Missing`],[`Platz vorher #`,`Previously #`],[`Neue Liste`,`New list`],[`Liste löschen`,`Delete list`],[`Aktuelle Liste`,`Current list`],[`Vorheriger Stand`,`Previous snapshot`],[`Diesen Stand löschen`,`Delete this snapshot`],
+[`Arten`,`types`],[`Vergleich mit`,`Compare with`],[`Liste`,`List`],[`Primärer Kommandant`,`Primary commander`],[`Sekundärer Kommandant`,`Secondary commander`],[`Mindestpunkte`,`Minimum points`],[`Fehlt`,`Missing`],[`Platz vorher #`,`Previously #`],[`Neue Liste`,`New list`],[`Liste löschen`,`Delete list`],[`Aktuelle Liste`,`Current list`],[`Vorheriger Stand`,`Previous snapshot`],[`Diesen Stand löschen`,`Delete this snapshot`],
 [`Speedups:`,`Speedups:`],[`Heilung`,`Healing`],
 ];
 const ENM=new Map(EN.map(([a,b])=>[a,b]));
@@ -2150,11 +2168,11 @@ let nmSig='',lastNames={items:[],heroes:[],foes:[],ignored:[]},nmSort='qty';try{
 function flash(el){el.classList.remove('flash');void el.offsetWidth;el.classList.add('flash');el.scrollIntoView({block:'center',behavior:'smooth'});setTimeout(()=>el.classList.remove('flash'),2800)}
 function renderNames(u){lastNames=u;const sig=JSON.stringify([u,nmSort]);if(sig===nmSig)return;nmSig=sig;
  const ks=k=>KINDS.map(x=>`<option value="${x[0]}"${x[0]===k?' selected':''}>${x[1]}</option>`).join('');
- const row=(kind,id,label,extra)=>`<tr data-kind="${kind}" data-id="${id}"><td class="t">${label}</td><td class="t"><input class="n" placeholder="Name" value="${esc(extra.guess)}"> ${extra.item?`<input class="u" type="number" step="any" style="width:90px" placeholder="Wert/Stück" value="${extra.unit??''}" title="Wert pro Stück, z. B. 5 für 5 Min oder 1000 für 1.000 Holz"> <select class="k">${ks(extra.kind||'other')}</select>`:''} <button class="sv">Speichern</button>${extra.ref?` <button class="go" data-ref='${esc(JSON.stringify(extra.ref))}' title="Neuester Bericht mit diesem Item">Zum Bericht</button>`:''}<button class="ig" title="Vorerst ignorieren: nicht in der Liste offener Namen. Taucht er in einem neuen Bericht auf, erscheint er wieder.">Ignorieren</button> <span class="note"></span></td></tr>`;
+ const row=(kind,id,label,extra)=>`<tr data-kind="${kind}" data-id="${id}"><td class="t">${label}</td><td class="t"><input class="n" placeholder="Name" value="${esc(extra.guess)}"> ${extra.item?`<input class="u" type="number" step="any" style="width:90px" placeholder="Wert/Stück" value="${extra.unit??''}" title="Wert pro Stück, z. B. 5 für 5 Min oder 1000 für 1.000 Holz"> <select class="k">${ks(extra.kind||'other')}</select>`:''} <button class="sv">Speichern</button>${extra.ref?` <button class="go" data-ref='${esc(JSON.stringify(extra.ref))}' title="${extra.rt||'Neuester Bericht mit diesem Item'}">Zum Bericht</button>`:''}<button class="ig" title="Vorerst ignorieren: nicht in der Liste offener Namen. Taucht er in einem neuen Bericht auf, erscheint er wieder.">Ignorieren</button> <span class="note"></span></td></tr>`;
  const items=u.items.slice().sort((a,b)=>nmSort==='new'?(b.last_day.localeCompare(a.last_day)||b.qty-a.qty):nmSort==='old'?(a.first_day.localeCompare(b.first_day)||b.qty-a.qty):b.qty-a.qty);
  $('nm').innerHTML=items.map(x=>row('item',x.id,`Item #${x.id}${x.fresh?' <span class="cnt">neu</span>':''}<br><small>${f(x.qty)}× gefunden · ${x.first_day===x.last_day?dm(x.last_day):dm(x.first_day)+' bis '+dm(x.last_day)}</small>`,{item:1,guess:x.guess,unit:x.unit,kind:x.kind,ref:x.ref})).join('')+
-  u.heroes.map(x=>row('hero',x.id,`Kommandant #${x.id}${x.fresh?' <span class="cnt">neu</span>':''}<br><small>${f(x.n)} Kämpfe</small>`,{})).join('')+
-  u.foes.map(x=>row('foe',x.id,`Gegner #${x.id}${x.fresh?' <span class="cnt">neu</span>':''} (Lvl ${x.lvl})<br><small>${f(x.n)} Kämpfe</small>`,{})).join('');
+  u.heroes.map(x=>row('hero',x.id,`Kommandant #${x.id}${x.fresh?' <span class="cnt">neu</span>':''}<br><small>${f(x.n)} Kämpfe</small>`,{ref:x.ref,rt:'Neuester Bericht mit diesem Kommandanten'})).join('')+
+  u.foes.map(x=>row('foe',x.id,`Gegner #${x.id}${x.fresh?' <span class="cnt">neu</span>':''} (Lvl ${x.lvl})<br><small>${f(x.n)} Kämpfe</small>`,{ref:x.ref,rt:'Neuester Bericht mit diesem Gegner'})).join('');
  $('nmempty').hidden=!!(u.items.length+u.heroes.length+u.foes.length);
  $('nmign').innerHTML=u.ignored.length?`<details class="rep" style="margin-top:14px"><summary><b>Ignoriert</b> <span class="cnt">${u.ignored.length}</span></summary><div class="rb">${u.ignored.map(x=>`<div style="margin:6px 0">${x.kind==='hero'?'Kommandant':x.kind==='foe'?'Gegner':'Item'} #${x.id} <span class="note">${x.kind==='item'?f(x.qty)+'× gefunden':f(x.n)+' Kämpfe'}</span> <button class="un" data-id="${x.id}" data-kind="${x.kind}">Wieder anzeigen</button></div>`).join('')}</div></details>`:''}
 let nmFirst=true;
