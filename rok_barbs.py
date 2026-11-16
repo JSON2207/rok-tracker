@@ -44,7 +44,225 @@ BUILTIN_ICONS = {
     "silver_key": "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",
 }
 
-HEROES = {8: "Richard I", 6: "Yi Seong-Gye", 7: "Cao Cao", 141: "Minamoto"}
+HEROES = {}
+# ---------------------------------------------------------------- Spieldaten: Kommandanten, Ausruestung, Fertigkeiten
+# Zuordnung Nummer -> Name. Quelle: ROK Battles (github.com/rokbattles/rokbattles, datasets/commanders.yaml und equipment.yaml,
+# Stand 09.11.2026, damals unter MIT oder Apache-2.0). Die Zuordnung wurde gegen echte Berichte geprueft: die Fertigkeits-Nummern
+# in den Mails passen bei jedem gefundenen Kommandanten zu den Fertigkeiten des Namens.
+COMMANDERS = {1: "Julius Caesar", 3: "Sun Tzu", 4: "Frederick I", 5: "Constantine I", 6: "Yi Seong-Gye", 7: "Cao Cao", 8: "Richard I",
+    9: "Minamoto no Yoshitsune", 10: "Charles Martel", 11: "El Cid", 12: "Hermann", 13: "Kusunoki Masashige", 14: "Scipio Africanus",
+    15: "Joan of Arc", 16: "Eulji Mundeok", 17: "Boudica", 18: "Pelagius", 22: "City Keeper", 23: "Markswoman", 24: "Centurion",
+    25: "Dragon Lancer", 30: "Hannibal Barca", 32: "Cleopatra VII", 33: "Constance", 34: "Gaius Marius", 35: "Tomoe Gozen",
+    36: "Lancelot", 37: "Lohar", 38: "Šárka", 61: "Belisarius", 62: "Baibars", 63: "Osman I", 64: "Saladin", 65: "Mehmed II",
+    66: "Mulan", 95: "Wu Zetian", 96: "Genghis Khan", 97: "Charlemagne", 98: "Alexander the Great", 99: "Æthelflæd", 100: "Tomyris",
+    101: "Edward of Woodstock", 102: "Seondeok", 103: "Attila", 104: "Takeda Shingen", 105: "Ishida Mitsunari", 106: "Theodora",
+    108: "Guan Yu", 109: "Leonidas I", 110: "Ramesses II", 111: "Artemisia I", 112: "Keira", 113: "Yi Sun-sin",
+    114: "Chandragupta Maurya", 115: "William I", 116: "Matilda of Flanders", 117: "Harald Sigurdsson", 118: "Zenobia", 119: "Lu Bu",
+    120: "Diaochan", 121: "Cyrus the Great", 122: "Nebuchadnezzar II", 124: "Moctezuma I", 125: "Trajan", 126: "Jadwiga",
+    127: "Xiang Yu", 128: "Björn Ironside", 129: "Ragnar Lodbrok", 130: "Cheok Jun-gyeong", 131: "Kʼinich Janaabʼ Pakal",
+    132: "Gilgamesh", 133: "Amanitore", 134: "Queen Tamar of Georgia", 135: "Honda Tadakatsu", 136: "Suleiman I",
+    137: "Bertrand du Guesclin", 138: "Alexander Nevsky", 139: "Flavius Aetius", 140: "Scipio Africanus", 141: "Thutmose III",
+    142: "Imhotep", 145: "Henry V", 146: "Boudica", 147: "Jan Žižka", 148: "Joan of Arc", 161: "Tariq ibn Ziyad",
+    162: "Sargon the Great", 175: "Margaret I", 176: "Babur", 177: "Heraclius", 178: "Dido", 179: "Zhuge Liang", 180: "Pyrrhus",
+    181: "Pericles", 182: "Huo Qubing", 183: "Justinian I", 184: "Gorgo", 185: "Liu Che", 186: "Ashurbanipal", 187: "Hermann",
+    188: "Lapulapu", 189: "Gonzalo de Córdoba", 190: "Gajah Mada", 191: "Eleanor of Aquitaine", 192: "Belisarius",
+    194: "William Wallace", 195: "Shajar al-Durr", 196: "Choe Yeong", 197: "Scipio Aemilianus", 198: "Ragnar Lodbrok", 459: "Philip II",
+    460: "Stephen III", 461: "John Hunyadi", 462: "Siyaj K'ak'", 463: "Wak Chanil Ajaw", 503: "Tokugawa Ieyasu", 506: "Shapur I",
+    509: "Qin Shi Huang", 510: "Matthias I", 536: "Catherine de' Medici", 537: "Narses", 539: "Subutai", 540: "Arthur Pendragon",
+    545: "Bai Qi", 546: "Afonso de Albuquerque", 564: "Archimedes", 565: "Mary I", 572: "Casimir III", 573: "Pepin III", 575: "Achilles",
+    576: "Hector", 578: "David IV", 579: "Gang Gamchan", 595: "Sun Tzu", 596: "Ivar", 611: "Alp Arslan", 612: "Hayam Wuruk",
+    616: "Vercingetorix", 617: "Elizabeth I", 618: "Pelagius", 619: "Ivan IV", 620: "William Marshal", 621: "Yi To", 622: "Selim I",
+    627: "Yahya ibn Khalid"}
+EQUIP_ITEMS = {20001: "Sacred Dominion", 20002: "Hammer of the Sun and Moon", 20003: "The Hydra's Blast", 20004: "Pride of the Khan",
+    20005: "Helm of the Conqueror", 20006: "Ancestral Mask of Night", 20007: "Lance of the Hellish Wasteland",
+    20008: "War Helm of the Hellish Wasteland", 20009: "Heavy Armor of the Hellish Wasteland", 20010: "Armband of the Hellish Wasteland",
+    20011: "Tassets of the Hellish Wasteland", 20012: "Boots of the Hellish Wasteland", 20013: "Shield of the Eternal Empire",
+    20014: "Gold Helm of the Eternal Empire", 20015: "Plate of the Eternal Empire", 20016: "Vambraces of the Eternal Empire",
+    20017: "Greaves of the Eternal Empire", 20018: "Sturdy Boots of the Eternal Empire", 20019: "Dragon's Breath Bow",
+    20020: "Dragon's Breath Helm", 20021: "Dragon's Breath Plate", 20022: "Dragon's Breath Vambraces", 20023: "Dragon's Breath Tassets",
+    20024: "Dragon's Breath Boots", 20025: "Shadow Legion's Retribution", 20026: "Hope Cloak", 20027: "The Milky Way",
+    20028: "Navar's Control", 20029: "Sacred Grips", 20030: "Ian's Choice", 20031: "Tassets of the War God", 20032: "Eternal Night",
+    20033: "Ash of the Dawn", 20034: "Shio's Return", 20035: "Mountain Crushers", 20036: "Commander's Boots", 20037: "Ring of Doom",
+    20038: "Greatest Glory", 20039: "Pendant of Eternal Night", 20040: "Horn of Fury", 20041: "Concealed Dagger", 20042: "Mora's Web",
+    20043: "Scolas' Lucky Coin", 20044: "Vengeance", 20045: "Trial of the Lost Kingdom", 20051: "Revival Helm", 20052: "Revival Plate",
+    20053: "Revival Gauntlets", 20054: "Revival Greaves", 20055: "Scepter of the Forest Guardian", 20056: "Mask of the Forest Guardian",
+    20057: "Robe of the Forest Guardian", 20058: "Claws of the Forest Guardian", 20059: "Sakura Fubuki", 20060: "Golden Age",
+    20061: "Heart of the Saint", 20062: "Abyssal Visage", 20063: "Witch's Lineage", 20064: "Dark Lord's Blessing", 20065: "Quinn's Soul",
+    20066: "Iset's Sufferance", 20067: "Seth's Brutality", 20068: "Karuak's Humility", 20069: "Fanatic's Tassets", 20070: "Gladiator",
+    20071: "Cloud Racers", 20072: "Frost Treads", 20073: "Flame Treads", 20074: "The Bard's Pendant", 20075: "Silent Trial",
+    20076: "Delane's Amulet", 20077: "Peter's Sickle", 20078: "Crimson Ring", 20079: "Harvester's Headscarf", 20080: "Harvester Robes",
+    20081: "Harvester Breeches", 20082: "Harvester Boots", 20083: "Windswept War Helm", 20084: "Windswept Breastplate",
+    20085: "Windswept Bracers", 20086: "Windswept Boots", 20087: "Blazing Axe", 20088: "Staff of the Lost", 20089: "Gatekeeper's Shield",
+    20090: "Expedition War Helm", 20091: "Commander's Heavy Armor", 20092: "Saint's Song", 20093: "Calvin's Hand",
+    20094: "Greaves of the Exile", 20095: "Sentry Breeches", 20096: "The Scarlet Hounds", 20097: "Call of the Loyal",
+    20098: "Lohar's Bone Necklace", 20099: "Savage Totem", 20100: "Vanguard Halberd", 20101: "Vanguard Greaves", 20102: "Blessed Blade",
+    20103: "Helm of Fear", 20104: "Helm of the Phoenix", 20105: "Infantry Breastplate", 20106: "Milanese Plate",
+    20107: "Ranger Trousers", 20108: "Leather Gloves", 20109: "Bronze Bracers", 20110: "Edged Boots", 20111: "Boots of Reverence",
+    20112: "Sharp Longsword", 20113: "Iron Helm", 20114: "Chain Mail", 20115: "Coarse Breeches", 20116: "Cloth Gloves",
+    20117: "Sturdy Boots", 20118: "Karuak's War Drums", 20119: "Seth's Call", 20120: "Wind Scars", 20121: "Ancient Stratagems",
+    20122: "Twilight Epiphany", 20123: "Fierce Wolf's Helmet", 20124: "Vigilant Wolf's Leather Armor", 20125: "Wailing Wolf's Gauntlets",
+    20126: "Lone Wolf's Leather Tassets", 20127: "Roaring Wolf's Claws", 20128: "Knight's Oathsworn Bow", 20129: "Knight's Steel Diadem",
+    20130: "Knight's Valorous Cloak", 20131: "Knight's Battleworn Gauntlets", 20132: "Knight's Triumphant Tassets",
+    20133: "Knight's Winter Sabatons", 20134: "Witch's Feathered Staff", 20135: "Witch's Deadwood Crown", 20136: "Witch's Hexed Cloak",
+    20137: "Witch's Crimson Bracers", 20138: "Witch's Ornamented Pants", 20139: "Witch's Mire-Waders",
+    20140: "Scepter of the Glorious Goddess", 20141: "Diadem of the Glorious Goddess", 20142: "Plate of the Glorious Goddess",
+    20143: "Gauntlets of the Glorious Goddess", 20144: "Chausses of the Glorious Goddess", 20145: "Greaves of the Glorious Goddess",
+    20164: "Immolating Plume", 20166: "Hero's Hilt", 20167: "Saddle of a Thousand Blessings", 20168: "Timeless Amber",
+    20201: "Artifact - Lancer's Banner", 20202: "Artifact - Berserker's Brooch", 20203: "Artifact - Sniper's Fletch",
+    20401: "Artifact - Megingjörð", 20402: "Artifact - Emblem of Nike"}
+EQUIP_SLOTS = {"1": "Weapons", "2": "Helms", "3": "Chest", "4": "Gloves", "5": "Legs", "6": "Boots", "7": "Accessories", "8": "Accessories"}
+SKILL_NAMES = {22: "Indomitable Army", 23: "Barbarossa", 24: "Rain of Arrows", 25: "Dragon Rider", 26: "Soul of the Crusaders",
+    27: "Kyohachiryu", 28: "Shield of Francia", 29: "Famous Warrior", 30: "Art of War", 31: "Ambush", 32: "Shichisei Hōkoku",
+    33: "Military Life", 34: "Divine Revelation", 35: "Water Attack", 36: "Lament of the Insurgent", 37: "Charge", 41: "Bloody Battle",
+    42: "Hard Shield", 43: "Raid", 44: "Deterrent", 49: "War Elephants", 51: "Queen of Kings", 52: "Struggling Poison",
+    53: "Savior of Italy", 54: "Blood Sakura", 55: "Quarrel", 56: "Overwhelming Force", 57: "Enchantment", 61: "Ahead of His Time",
+    62: "Furious Barbarossa", 63: "Arrow Storm", 64: "Kyohachiryu Kiwami", 65: "War Elephant Trample", 66: "Descent of the Goddess",
+    67: "Roar of the Insurgent", 68: "Dead End", 69: "Book of Aeons", 82: "Deception", 83: "Sandstorm", 84: "The Empire Awakens",
+    85: "Edict of Milan", 86: "Hold Fast", 87: "Ottoman Cannons", 88: "Blot Out The Sun", 89: "Rising Empire", 90: "Praise the Creator",
+    91: "Orban Bombard", 120: "Chosen One", 121: "Filial Piety", 122: "Defender of the Empire", 128: "Shield of the King",
+    129: "Son of Amun", 135: "Arrow of Iron", 137: "Eagle of Jupiter", 139: "Arrow of Vengeance", 140: "Archer's Honor", 141: "Modest",
+    142: "Mandate of Heaven", 143: "King of the Huns", 144: "Fierce as the Fire", 145: "Battle of Sekigahara", 146: "Byzantine Empress",
+    147: "Honor to the Last", 148: "Saint of War", 149: "King of Sparta", 150: "Ceremony of Karnak", 151: "King of Kings",
+    152: "Battle of Salamis", 153: "Dance of the Flametongue", 154: "Undying Flames", 155: "Duke of Loyalty and Warfare",
+    157: "Hidden Moon", 158: "Hidden Bloodline", 160: "Maurya's Might", 161: "Daughter of Flanders", 162: "Berserker",
+    164: "Queen of Palmyra", 165: "Ascending Augusta", 168: "Sky Piercer", 169: "Sky Scorcher", 170: "Dance of Chaos",
+    171: "Chain Stratagems", 172: "The Immortals", 173: "Babylonian", 174: "King of Babylon", 176: "Land of the Prickly",
+    177: "Trajan's Column", 178: "Five Good Emperors", 179: "Might of the Pious", 180: "Warlord's Courage", 181: "Fearless Fighter",
+    182: "Booming Warsong", 183: "Power of the King", 184: "Odin's Might", 185: "Courageous", 187: "Balanced Strategy",
+    188: "Roar of the Lion", 189: "Glorious Arrows", 191: "Ode to Freedom", 192: "Glory of Faith", 193: "Dragonfly Cutter",
+    194: "Magnificent Sultan", 195: "Battle Hungry", 196: "Hero of Peipus", 197: "Spear of the Empire", 198: "Unmatched Strength",
+    202: "The High Priest", 203: "Stairway to Heaven", 204: "Brave Ruler", 205: "Divine Right", 206: "Revenge of the Iceni",
+    207: "One-Eyed Knight", 208: "Cry of Bohemia", 209: "Sacred Banner", 219: "Victory or Death", 220: "Keen Berber Blade",
+    221: "Sar Kissatim", 236: "Glory of Greece", 237: "Golden Age of Athens", 238: "Achilles Reborn", 239: "Semiramis of the North",
+    240: "Victor of Panipat", 241: "Hammer of Nineveh", 242: "Soul of Carthage", 243: "Burning of Xinye",
+    246: "General of Agile Cavalry", 247: "Light of Rome", 251: "Glory of Shizong", 252: "Queen of Sparta",
+    254: "Forest of Fallen Eagles", 258: "Bas Agus Buaidh", 306: "From the Nile to the Tigris", 307: "Blade of Mactan",
+    308: "Unyielding and Undaunted", 309: "Africanus", 311: "Rampaging Elephant", 314: "Pike-and-Shot Pioneer",
+    315: "Custodian of the Empire", 316: "Lily of the Wilds", 356: "Aoi Over Sekigahara", 359: "Might of the Shahanshah",
+    362: "One Conquers Six", 363: "Ever Faithful", 364: "Tree of Life", 372: "Raven's Call", 373: "Standing Firm",
+    377: "Macedonian Phalanx", 378: "Victor of Vaslui", 379: "Raven's Wings", 383: "Veiled Threat", 384: "All-Knowing", 386: "Flameborn",
+    387: "Wayeb'", 388: "Thundering Hooves", 389: "Excalibur", 393: "Let Heaven and Earth Grieve", 406: "Giant of Geometry",
+    407: "Fidei Defensatrix", 409: "Let Others Make War", 410: "Thalassocracy", 411: "Pelian Spear", 412: "Shepherd of His People",
+    413: "Wiślica Statutes", 414: "Papal Anointment", 415: "Wolf of Didgori", 416: "Geomcha Charge", 417: "Great Victory at Gwiju",
+    419: "Fluid Formation", 420: "Tactician's Tome", 423: "Falcon's Judgement", 426: "Heroic Lion", 427: "Garuda's Gift",
+    429: "Alesia Fortifications", 432: "Sovereign's Glory", 434: "Reconquista", 435: "Reclaimed Soil", 436: "Reign of the Barmakids",
+    437: "Ivory Throne", 438: "Reigning Champion", 444: "Prince of Trebizond", 449: "Fortified Kingdom", 1006: "City Killer",
+    1007: "The Founders", 1008: "Never Give Up", 1009: "Art of Archery", 1010: "Joseon Dynasty", 1011: "Destiny",
+    1012: "Master of Kendo", 1013: "Tiger Knight", 1014: "Battle-Hardened", 1015: "Trial in Kurama-dera", 1016: "Warlord",
+    1017: "Heavy Infantry", 1018: "The Uncrowned King", 1019: "Martel's Counterattack", 1020: "Guardian of Valencia",
+    1021: "Poem of El Cid", 1022: "Philosophy of War", 1023: "Master Strategist", 1024: "Military Genius", 1025: "Legend of Teutoburg",
+    1026: "The Worthy Man", 1027: "Bravery and Wisdom", 1028: "Conqueror of Africa", 1029: "Genuine Aristocracy",
+    1030: "The Maid of Orléans", 1031: "Holy Refuge", 1032: "Cold Welcome", 1033: "Strike Back", 1034: "Group Battle",
+    1035: "Celtic Blood", 1036: "Founder of Asturias", 1037: "Retaking Lost Territory", 1040: "Battle of Salsu", 1041: "Divine Julius",
+    1042: "Lofty Ambition", 1043: "Chivalry", 1044: "Unyielding", 1045: "Ever-changing Tactics", 1046: "National Hero", 1047: "Saint",
+    1048: "Tragedy's End", 1049: "Patient Warrior", 1050: "The Mutineer", 1051: "Queen of the Iceni", 1054: "Excitement",
+    1055: "Army Management", 1056: "Courageous Fighter", 1057: "Vitality", 1058: "Sharp Blade", 1059: "Resilient", 1060: "Poison Arrow",
+    1061: "Accuracy", 1062: "Agility", 1063: "Fine Horse", 1064: "Lance of Freedom", 1065: "Metal Armor", 1066: "The Lionheart",
+    1067: "King of Deutschland", 1071: "Envelopment Tactics", 1072: "Siege", 1073: "Expedition", 1075: "Invasion",
+    1076: "End of Ptolemy", 1077: "Beauty and Wisdom", 1078: "The Last Pharaoh", 1079: "The Regent", 1080: "Loving Mother",
+    1081: "Queen of Sicily", 1082: "Founder of Empire", 1083: "Marius's Reform", 1084: "Conqueror of Numidia", 1085: "Divine Bow",
+    1086: "Beauty in Chaos", 1087: "Eternal Love", 1088: "Knight of the Round Table", 1089: "Forbidden Love", 1090: "Battle of Sorrow",
+    1091: "Sanction", 1092: "Lohar's Trial", 1093: "Unruly Blood", 1094: "The Maidens' War", 1095: "Lost Treasure",
+    1096: "Short-lived Heroine", 1101: "The Qingzhou Army", 1102: "Rise from the Ashes", 1103: "Emperor Wu of Wei",
+    1104: "Tyrannical Lion", 1105: "Out of Control", 1106: "Gifts of the Nile", 1107: "Oath of Asseuua", 1108: "War and Peace",
+    1109: "Soul of the Samurai", 1110: "Utter Annihilation", 1111: "Unyielding Spirit", 1129: "Irresistible", 1130: "Bucellarii",
+    1131: "Oblique Tactics", 1132: "Arabian Knights", 1133: "No Escape", 1134: "Great Panther", 1135: "Radiance of Bursa",
+    1136: "Sword of Osman", 1137: "Sultan's Glory", 1138: "Allegiance", 1139: "Impasse", 1140: "Cross of the Divine", 1141: "Ghulams",
+    1142: "Generosity", 1143: "Bond of Fate", 1144: "Lord of Land and Sea", 1145: "Fatih", 1146: "Sage King",
+    1147: "Bloodthirsty Bucellarii", 1148: "Sole Augustus", 1191: "Cyclone of the Steppes", 1192: "Nomadic Empire",
+    1193: "Military Lifestyle", 1194: "Second to None", 1195: "Heart of a Warrior", 1196: "Khan Slayer", 1197: "One-of-a-kind General",
+    1199: "Lead the Charge", 1200: "Frontline Commander", 1201: "Battle of Chaeronea", 1217: "Thunderous Force", 1218: "Synergy",
+    1219: "Fortress of Mercia", 1220: "Warrior Queen", 1223: "Happy Home", 1224: "Paladin", 1225: "Plot Maneuvers",
+    1226: "Carolingian Renaissance", 1238: "Payback", 1239: "For the Sun", 1240: "Massagetae's Counterattack", 1241: "Vengeful Crusade",
+    1242: "Crécy's Campaign", 1243: "Limoges' Ambush", 1244: "Pouch of Blood", 1245: "All or Nothing", 1249: "Insightful",
+    1250: "Magnanimous", 1251: "Incisive", 1252: "Honoring the Heavens", 1254: "Lion Rider", 1255: "Tears of Blood", 1256: "Legacy",
+    1257: "Brightest Sky", 1258: "The Siege of Constantinople", 1259: "Honoria", 1260: "Battle of the Catalaunian Plains",
+    1261: "The Scourge of God", 1262: "Swift as the Wind", 1263: "Gentle as the Forest", 1264: "Immovable as the Mountain",
+    1265: "Kōshū-ryū Gungaku", 1266: "Go-Bugyō", 1267: "Taiko-kenchi", 1268: "Indispensable", 1269: "Three Cups of Tea",
+    1270: "Keeper Of Secrets", 1271: "Co-Ruler", 1272: "Royal Power", 1273: "Five Tiger Generals", 1274: "The Slaying of Hua Xiong",
+    1275: "Green Dragon Crescent Blade", 1276: "Lone Rider", 1277: "Three Hundred Spartans", 1278: "Honorable Sacrifice",
+    1279: "Son of the Lion", 1280: "Battle of Thermopylae", 1284: "The Poem of Pentaur", 1285: "Army of Amun",
+    1286: "Nefertari's Companionship", 1287: "Ally of Xerxes", 1288: "Bow and Mount", 1289: "Rules of Survival", 1290: "Queen of Caria",
+    1302: "Allies or Enemies?", 1303: "Ceroli Sharpshooter", 1304: "The Mutineer", 1305: "Battle of Myeongnyang", 1306: "Geobukseon",
+    1307: "Winged Formation", 1308: "Broken Moon", 1309: "Royal Elephant Brigade", 1310: "Arthashastra", 1311: "Self-Control",
+    1312: "Maurya's Might", 1313: "Charge of Hastings", 1314: "Norman Conquest", 1315: "Scourge of the North", 1316: "Judgement Day",
+    1318: "Clever Heart", 1319: "The Mora", 1320: "Wise Ruler", 1321: "Flanders' Gift", 1322: "Viking Battleaxe",
+    1323: "Varangian Guard", 1324: "Stamford Bridge", 1325: "Conqueror's Ambition", 1326: "Unmatched Beauty", 1327: "Pluralistic Reign",
+    1328: "Valhalla", 1329: "Horse of Horses", 1330: "Man of Men", 1331: "Flying General", 1332: "Dance of the Silver Lotus",
+    1333: "Dance of the Rose", 1334: "Dance of the Cherry Blossom", 1335: "Battle of Thymbra", 1336: "Persian Bow",
+    1337: "The Cyrus Cylinder", 1338: "King of the World", 1339: "Chaldean Archers", 1340: "Destroyer of Carchemish",
+    1341: "Blessing of Marduk", 1342: "Flower War", 1343: "Jaguar Warrior", 1344: "Triple Alliance", 1345: "Worship the Divine",
+    1346: "Expanding Borders", 1347: "Great Expeditions", 1348: "Battle of Tapae", 1349: "Oath of Loyalty", 1350: "Holy Blessing",
+    1351: "Blade of Dodging", 1352: "Holy Lord of Poland", 1353: "Snow-hooved Stallion", 1354: "Conqueror of All",
+    1355: "Forceful Spearhead", 1356: "Unbeatable Warlord", 1357: "Longboat Marauder", 1358: "Viking Lord", 1359: "Ambush",
+    1360: "The Raven", 1361: "The Horn's Call", 1362: "Lord of the North", 1363: "Byeolmuban", 1364: "Stalwart", 1365: "Born to Die",
+    1366: "Vow to the Death", 1367: "Ruler of Palenque", 1368: "Divine Sovereignty", 1369: "Holy Tree's Blessings",
+    1370: "Mayan Strength", 1371: "Bowman of Uruk", 1372: "A King's Right", 1373: "Enkidu's Path", 1374: "Demigod", 1375: "Line Breaker",
+    1376: "Resilience of Ta-Seti", 1377: "A Kandake's Wrath", 1378: "Nubian Willpower", 1379: "Age of Plenty", 1380: "Tadzreuli Strike",
+    1381: "One Heart, One Mind", 1382: "Samurai of the East", 1383: "Tokugawa Heavenly King", 1384: "Samurai Among Samurai",
+    1385: "The Undefeated", 1386: "Annexation", 1387: "The Siege of Vienna", 1388: "Janissary", 1389: "Master of Europe",
+    1391: "Seigneur's Sympathy", 1392: "Fabian Strategy", 1393: "Blade of Brocéliande", 1394: "Royal Constable", 1395: "Expeditionary",
+    1396: "Guard of the Republic", 1397: "Knight of Iron", 1398: "Winter's Storm", 1400: "Shield of Eagles", 1401: "Defense of Gaul",
+    1402: "Victory at Chalons", 1403: "Song of the Nibelungs", 1404: "All-Conquering", 1405: "Strategic Pressure",
+    1406: "Testudo Formation", 1407: "Fiery Rage", 1417: "Talented Vizier", 1418: "God of Medicine", 1419: "Sage of Peace",
+    1420: "Empire Builder", 1421: "Conquest of Mitanni", 1422: "Vast Territory", 1423: "Might of Thebes", 1424: "Welsh Longbows",
+    1425: "Road to Empire", 1426: "Battle of Agincourt", 1427: "Hundred Years' War", 1428: "Unending Struggle",
+    1429: "Blessing of the Forest", 1430: "Shield of the Ancestors", 1431: "Rage of the Iceni", 1432: "Sword Held High", 1433: "Unbowed",
+    1434: "Battle of Grunwald", 1435: "Hundred-Year Dawn", 1436: "The Blessed", 1437: "Return of the Saint", 1465: "Unyielding Martyr",
+    1466: "Bane of the Visigoths", 1467: "Gate Crasher", 1468: "Battle of Guadalete", 1469: "Standing Army", 1470: "Conqueror of Sumer",
+    1471: "Anu's Fury", 1472: "Enlil's Blessings", 1504: "Battlefield Orator", 1505: "First Citizen", 1506: "Call for Peace",
+    1507: "Marching to Victory", 1508: "Shield and Sarissa", 1509: "Military Maestro", 1510: "Battle of Asculum",
+    1511: "Conqueror Queen", 1512: "Iron Hand, Velvet Glove", 1513: "Obedience is Power", 1514: "The Kalmar Union",
+    1515: "The Baburnama", 1516: "The Tiger's Roar", 1517: "Stoneshaker", 1518: "Amir of Fergana", 1519: "Themata",
+    1520: "Skouton of Byzantium", 1521: "Basileus", 1522: "The Eagle Banner", 1523: "Weeping Queen", 1524: "Queenly Zeal",
+    1525: "Beacon of Byrsa", 1526: "Queen's Malediction", 1528: "Borrowing Arrows", 1529: "Longzhong Plan", 1530: "Marquis Zhongwu",
+    1531: "Chu Shi Biao", 1533: "Ferghana Horses", 1534: "Dragon of the Desert", 1535: "Battlefield Appropriations",
+    1536: "Conquerer of Khentii", 1537: "Renovatio Imperii", 1538: "Corpus Juris Civilis", 1539: "Restless Emperor",
+    1540: "Sleepless Emperor", 1544: "Mighty Pen, Mighty Sword", 1545: "Overawing Presence", 1546: "Expansionist",
+    1547: "Above All Kings", 1548: "Agoge", 1549: "With Your Shield, Or On It", 1550: "Illuminator", 1551: "Luminary Lioness",
+    1552: "Huntmaster", 1553: "Dawn of Rome", 1554: "Salt the Earth", 1555: "Tit for Tat", 1560: "Scots Wha Hae",
+    1561: "Lion of the North", 1562: "Battle of Stirling Bridge", 1563: "Pro Libertate", 1564: "Germania", 1565: "Alpha Wolf",
+    1566: "Mandrake Root", 1567: "Give Me Back My Legions!", 1582: "Hawk-Eyed", 1583: "Conqueror of Elam", 1584: "Chosen of Ashur",
+    1585: "Omnipotent", 1586: "Rise Against", 1587: "Heart of a Datu", 1588: "Situational Awareness", 1589: "Swift and Sturdy",
+    1590: "Sumpah Palapa", 1591: "Majapahit", 1592: "Bedil Barrage", 1593: "Conqueror of Granada", 1594: "Viceroy of Naples",
+    1595: "Order of Santiago", 1596: "El Gran Capitán", 1597: "Press the Advantage", 1598: "To the Last Man",
+    1599: "Pacification of Nika", 1600: "Roman Devotion", 1601: "Lionmother", 1602: "Rock Crystal Vase", 1603: "Grandmother of Europe",
+    1604: "Duchess of Aquitaine", 1649: "Mikawa Bushi", 1650: "Nikkō Tōshō", 1651: "Nagashino Gambit", 1652: "Siege of Osaka",
+    1661: "Humiliation of Rome", 1662: "Blessed By the Atash", 1663: "Stout Walls of Bishapur", 1664: "All Must Submit",
+    1673: "Iron Pierces Bronze", 1674: "Thunder Shakes Earth", 1675: "Valor Bests Despair", 1676: "Seal Governs All", 1677: "Black Army",
+    1678: "Bibliotheca Corviniana", 1679: "Shield of Hungary", 1680: "Matthias the Just", 1685: "Defender of Hongsan",
+    1686: "Guardian of Goryeo", 1687: "White-Haired Warrior", 1688: "Vengeance of Jeokbun", 1689: "Strength of the Sultana",
+    1690: "Braving the Danger", 1691: "Dew of Devotion", 1692: "Pearlescent Heart", 1699: "Ride the Whale-Road", 1700: "Sea-King",
+    1701: "In Odin's Hall", 1702: "Sarissa", 1703: "League of Corinth", 1704: "Conqueror of Chaeronea", 1705: "Vergina Sun",
+    1706: "No Rest for the Righteous", 1707: "Defender of Lipnic", 1708: "All Men Must Serve", 1709: "Cosmin Forest",
+    1710: "Sword in the Sky", 1711: "Shield of Belgrade", 1712: "Knight of the Noon Bell", 1713: "Glory Eternal", 1714: "Star Scryer",
+    1715: "Lethal Concoction", 1716: "Royal Banquet", 1718: "Shadow of the Throne", 1719: "Wheeler Dealer",
+    1720: "Western Wall of the Empire", 1721: "Ambition is Divine", 1722: "Conqueror of the Sunset", 1723: "Golden Feathers",
+    1724: "Herald of the Owl", 1725: "Obsidian Light", 1726: "Hunter's Patience", 1727: "Dance of the Maize God",
+    1728: "By Grace of the Stars", 1729: "Revival of Wak Kab'nal", 1730: "Blessed By the Divine Cosmos", 1731: "Circling Vultures",
+    1732: "Wherever the Whip Points", 1733: "Daring Raid", 1734: "Hound of Temujin", 1735: "Y Ddraig Goch", 1736: "Scabbard of Avalon",
+    1737: "Merlin's Magick", 1738: "Mab Darogan", 1751: "Breaker of Battle Lines", 1752: "Ravager of Land and Spirit",
+    1753: "Martial Culture", 1754: "Blood Upon Blood", 1755: "Eureka!", 1756: "Moment of Force", 1757: "Claw of Archimedes",
+    1758: "Noli Turbare Circulos Meos!", 1759: "Back Into the Fold", 1760: "Tudor Cannons", 1761: "Iron Queen", 1762: "Fire and Faith",
+    1763: "Duke of Goa", 1764: "Hormuz Six", 1765: "Mare Clausum", 1766: "Lion of the Sea", 1767: "Treaty of Kalisz",
+    1768: "University of Krakow", 1769: "The Last Piast", 1770: "The Peasants' King", 1783: "First Carolingian",
+    1784: "Lombard Expedition", 1785: "Patricius Romanorum", 1786: "Donation of Pepin", 1787: "Wings of Arke", 1788: "Hephaestian Armor",
+    1789: "Sing the Wrath of Achilles", 1790: "Divine Heritage", 1791: "Beneath the Scaean Gate", 1792: "Favored of Apollo",
+    1793: "Valiant Mortal", 1794: "Blood of Dardanus", 1795: "Valiant Monaspa", 1796: "Basileus of the East",
+    1797: "Retaking the Caucasus", 1798: "Restorer of the Kingdom", 1799: "Gaemamusa", 1800: "Starlight", 1801: "Open the Floodgates",
+    1802: "War for Peace", 1803: "Surprise Strike", 1804: "Myriad Maneuvers", 1805: "Ironheart Vow", 1806: "Flames of York",
+    1807: "Odin's Stratagem", 1808: "Destined Defense", 1809: "Oghuz Archery", 1810: "Two-Headed Eagle", 1811: "Parthian Shot",
+    1812: "Father of Conquests", 1813: "Majapahit Crown", 1814: "Trowulan Gate", 1815: "Keris Cut", 1816: "Airavata's Triumph",
+    1817: "Battle of Gergovia", 1818: "Uniter of Tribes", 1819: "Cornered Beast", 1820: "Heart of Gaul", 1821: "Imperial Instruments",
+    1822: "Let Tyrants Fear", 1823: "Secret Service", 1824: "Eternal Empire", 1825: "Mountain Monarch", 1826: "Rough Terrain",
+    1827: "Covadonga Victory", 1828: "Empire's Lost Treasures", 1829: "Age of Translation", 1830: "Across Seas of Sand",
+    1831: "Cradle of Two Rivers", 1832: "Gilded Saddle", 1833: "Victory at Molodi", 1834: "Oprichniki Operations",
+    1835: "The First Tsar", 1836: "Le Mans Legend", 1837: "The King's Regent", 1838: "Earl Marshal", 1839: "Knight Templar",
+    1840: "Bloodsworn Sovereign", 1841: "Fall of the Mamluks", 1842: "Servant of Holy Cities", 1843: "Heavy Is the Crown",
+    1844: "Quick March", 1845: "Impenetrable Borders", 1846: "Unite and Shatter", 1847: "Sustained Momentum"}
+EQUIP_TYPES = {1: "Infantry", 2: "Archer", 3: "Cavalry", 4: "Integration", 5: "Leadership", 16: "Engineering"}
+
+HEROES.update(COMMANDERS)
 FOES = {597: "Barbarians", 603: "Bone Archers", 606: "Beast Riders"}
 PROFILE_FIELDS = [("power", "Macht"), ("highest_power", "Höchste Macht"), ("kill_points", "Kill Points"), ("dead", "Tote"),
                   ("healed", "Geheilt"), ("building_power", "Gebäude-Macht"), ("tech_power", "Technologie-Macht"),
@@ -74,6 +292,7 @@ def load_names(path):
         HEROES[int(k)] = v
     for k, v in d.get("foes", {}).items():
         FOES[int(k)] = v
+    HEROES.update(COMMANDERS)       # die geprueften Spieldaten haben Vorrang vor eigenen Eintraegen
 
 _names_lock = threading.Lock()
 def save_name(kind, key, name, unit=None, ikind=None):
@@ -141,7 +360,8 @@ def _hinfo(d, sfx):
     sk = d.get("HSS" + sfx) or {}
     skills = "".join(str(int(v.get("SkillLevel", 0))) for _, v in sorted(sk.items(), key=lambda kv: float(kv[0]))) if isinstance(sk, dict) else ""
     eq = [[int(a), int(b), int(c), int(e)] for a, b, c, e in re.findall(r"(\d+):(\d+)_(\d+):(\d+)", str(d.get("HEq" + sfx, "")))]
-    return dict(id=hid, lv=int(d.get("HLv" + sfx, 0) or 0), st=int(d.get("HSt" + sfx, 0) or 0), sk=skills, eq=eq)
+    si = [int(v.get("SkillId", 0)) for _, v in sorted(sk.items(), key=lambda kv: float(kv[0]))] if isinstance(sk, dict) else []
+    return dict(id=hid, lv=int(d.get("HLv" + sfx, 0) or 0), st=int(d.get("HSt" + sfx, 0) or 0), sk=skills, si=si, eq=eq)
 
 def extract_battle(mail):
     """Kampfbericht: Barbaren (Lager/Festung) und Spieler, solo oder Rally."""
@@ -223,7 +443,7 @@ def extract(mail):
 
 # ---------------------------------------------------------------- Datenbank
 class DB:
-    VERSION = 8
+    VERSION = 9
 
     def __init__(self, path):
         self.lock = threading.Lock()
@@ -279,6 +499,8 @@ class DB:
                 self.c.execute("ALTER TABLE pvp ADD COLUMN " + col)
             except sqlite3.OperationalError:
                 pass
+        if self.c.execute("PRAGMA user_version").fetchone()[0] < 9:
+            self.c.execute("DELETE FROM processed")         # Version 9: Fertigkeits-Nummern der Kommandanten nachtragen
         if self.c.execute("PRAGMA user_version").fetchone()[0] < 8:
             self.c.execute("DELETE FROM processed")         # Kommandanten-Details (Stufe, Fertigkeiten, Ausruestung) einmal nachtragen
         if self.c.execute("PRAGMA user_version").fetchone()[0] < 7:
@@ -330,7 +552,7 @@ class DB:
             if self.c.execute("SELECT 1 FROM reports WHERE mail_id=?", (r["mail_id"],)).fetchone():
                 if r["kind"] == "battle" and r.get("hero2") is not None:     # zweiten Kommandanten bei alten Berichten nachtragen
                     self.c.execute("UPDATE battles SET hero2=? WHERE mail_id=? AND hero2 IS NULL", (r["hero2"], r["mail_id"]))
-                    ids = [x[0] for x in self.c.execute("SELECT id FROM pvp WHERE mail_id=? AND (hero1 IS NULL OR hinfo IS NULL) ORDER BY id", (r["mail_id"],))]
+                    ids = [x[0] for x in self.c.execute("SELECT id FROM pvp WHERE mail_id=? AND (hero1 IS NULL OR hinfo IS NULL OR hinfo NOT LIKE '%\"si\"%') ORDER BY id", (r["mail_id"],))]
                     if ids and len(ids) == len(r["pvp"]):
                         for i, x in zip(ids, r["pvp"]):
                             self.c.execute("UPDATE pvp SET hero1=?, hero2=?, ehero1=?, ehero2=?, hinfo=? WHERE id=?",
@@ -575,6 +797,11 @@ class DB:
             for side in (d or {}).values():
                 for h in side:
                     h["name"] = hn(h["id"])
+                    h["skn"] = [SKILL_NAMES.get(i, "#%d" % i) for i in h.get("si", [])]
+                    eqs = []
+                    for slot, iid, craft, attr in h.get("eq", []):
+                        eqs.append(dict(s=slot, id=iid, n=EQUIP_ITEMS.get(iid, "#%d" % iid), st=EQUIP_TYPES.get(attr // 10) if attr >= 10 else None, ic=attr % 10))
+                    h["eq"] = eqs
             return d
         names = {r["account"]: r["n"] for r in self.q("SELECT account, MAX(CASE WHEN acc_name<>'' THEN acc_name END) n FROM reports GROUP BY account")}
         tours, cur = [], None
@@ -2670,7 +2897,7 @@ REPORTS_PAGE = r"""<!doctype html><html lang="de"><head><meta charset="utf-8">
 .bc{display:grid;grid-template-columns:1fr 1fr;gap:14px}.bc>div{border:1px solid var(--line);border-radius:14px;background:var(--soft);padding:12px 14px;min-width:0}
 .bc h4{margin:0 0 6px;font-size:.95rem;overflow-wrap:anywhere}.bc .hs{color:var(--mute);font-size:.82rem;margin-bottom:6px}
 .bc table td,.bc table th{padding:5px 0;border-bottom:1px solid var(--line)}.bc table tr:last-child td{border:0}
-.hbx{display:flex;flex-wrap:wrap;gap:10px;margin:2px 0 8px}.hb{border:1px solid var(--line);border-radius:12px;padding:8px 10px;min-width:150px;flex:1}.hp{display:flex;align-items:center;gap:8px}.hp img{width:38px;height:38px;border-radius:10px;object-fit:cover;background:var(--card)}.hm{color:var(--mute);font-size:.8rem;margin:4px 0}.eq{display:flex;flex-wrap:wrap;gap:4px}.eqi{position:relative;display:inline-flex;align-items:flex-end;justify-content:flex-end;min-width:30px;height:30px;border:1px solid var(--line);border-radius:8px;background:var(--card);font-size:.7rem;overflow:hidden}.eqi img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover}.eqi em{position:absolute;left:3px;top:2px;font-style:normal;color:var(--mute);font-size:.62rem}.eqi i{position:relative;font-style:normal;padding:0 3px;background:rgba(0,0,0,.55);color:#fff;border-radius:6px 0 0 0}
+.hbx{display:flex;flex-wrap:wrap;gap:10px;margin:2px 0 8px}.hb{border:1px solid var(--line);border-radius:12px;padding:8px 10px;flex:1 1 100%;min-width:0}.hp{display:flex;align-items:center;gap:8px}.hp img{width:38px;height:38px;border-radius:10px;object-fit:cover;background:var(--card)}.hm{color:var(--mute);font-size:.8rem;margin:4px 0}.eqd{margin-top:4px;font-size:.8rem}.eqd summary{cursor:pointer;color:var(--mute)}.eqd ul{list-style:none;margin:4px 0 0;padding:0}.eqd li{display:flex;gap:6px;align-items:center;padding:2px 0;border-bottom:1px solid var(--line)}.eqd li img{width:20px;height:20px;border-radius:5px;object-fit:cover}.eqd li .mute{min-width:5.5em}.eqi{position:relative;display:inline-flex;align-items:flex-end;justify-content:flex-end;min-width:30px;height:30px;border:1px solid var(--line);border-radius:8px;background:var(--card);font-size:.7rem;overflow:hidden}.eqi img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover}.eqi em{position:absolute;left:3px;top:2px;font-style:normal;color:var(--mute);font-size:.62rem}.eqi i{position:relative;font-style:normal;padding:0 3px;background:rgba(0,0,0,.55);color:#fff;border-radius:6px 0 0 0}
 .bh{display:flex;flex-wrap:wrap;justify-content:space-between;color:var(--mute);font-size:.82rem;margin-bottom:8px;gap:6px}
 .good{color:var(--good)}.bad{color:var(--bad)}.mute{color:var(--mute)}.y{color:#d9a21b}.o{color:#e4863b}
 @media(max-width:900px){.rsplit,.r2,.bc{grid-template-columns:1fr}.rl{max-height:40vh}}
@@ -2687,6 +2914,7 @@ let LANG='de';try{LANG=localStorage.getItem('roklang')==='en'?'en':'de'}catch(e)
 const L=(d,e)=>LANG==='en'?e:d,$=id=>document.getElementById(id),f=n=>n==null?'–':Number(n).toLocaleString(LANG==='en'?'en-US':'de-DE'),
  esc=s=>String(s==null?'':s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
 const CATS=[['field','Field'],['rally','Rally'],['garrison','Garrison']];
+const SLN={1:['Waffe','Weapon'],2:['Helm','Helm'],3:['Brust','Chest'],4:['Handschuhe','Gloves'],5:['Beine','Legs'],6:['Stiefel','Boots'],7:['Accessoire','Accessory'],8:['Accessoire','Accessory']},STN={Infantry:'Infanterie',Archer:'Bogenschützen',Cavalry:'Kavallerie',Integration:'Integration',Leadership:'Führung',Engineering:'Technik'};
 const iso=d=>new Date(d.getTime()-d.getTimezoneOffset()*6e4).toISOString().slice(0,10),ago=n=>{const d=new Date();d.setDate(d.getDate()-n);return iso(d)};
 let S={cat:'field',from:ago(30),to:iso(new Date()),account:'',q:'',abbr:'',hero:'',group:'tour',sel:''},D=null,seq=0;
 try{const o=JSON.parse(localStorage.getItem('rokrep')||'{}');if(o.cat)S.cat=o.cat;if(o.group)S.group=o.group}catch(e){}
@@ -2704,7 +2932,7 @@ function card(r,x,side){const you=side==='you',hl=(r.hi&&(you?r.hi.me:r.hi.foe))
  const name=you?esc(x.account_name||x.account):esc(r.foe),hs=you?[x.hero1,x.hero2]:[r.eh1,r.eh2];
  const rows=you?[[L('Einheiten','Units'),r.troops],[L('Tote','Dead'),r.dead,'bad'],[L('Schwer verwundet','Severely wounded'),r.severe,'bad'],[L('Leicht verwundet','Slightly wounded'),r.hurt],[L('Kill Points','Kill points'),r.kp,'y']]
   :[[L('Einheiten','Units'),r.etroops],[L('Tote','Dead'),r.edead,'bad'],[L('Schwer verwundet','Severely wounded'),r.esevere,'bad'],[L('Leicht verwundet','Slightly wounded'),r.ehurt],[L('Kill Points','Kill points'),r.kpl,'y']];
- const hb=hl.length?`<div class="hbx">${hl.map(h=>`<div class="hb"><div class="hp"><img src="/icon/hero_${h.id}" alt="" onerror="this.style.display='none'"><b>${esc(h.name)}</b></div><div class="hm"><span class="y">${h.sk||''}</span> · Lv ${h.lv} · ★${h.st}</div><div class="eq">${h.eq.map(e=>`<span class="eqi" title="${L('Ausrüstung','Equipment')} ${e[1]}"><em>${String(e[1]).slice(-3)}</em><img src="/icon/equip_${e[1]}" alt="" onerror="this.style.display='none'"><i>${e[3]}</i></span>`).join('')}</div></div>`).join('')}</div>`:`<div class="hs">${hs.filter(Boolean).map(esc).join(' + ')||'–'}</div>`;
+ const hb=hl.length?`<div class="hbx">${hl.map(h=>`<div class="hb"><div class="hp"><img src="/icon/hero_${h.id}" alt="" onerror="this.style.display='none'"><b>${esc(h.name)}</b></div><div class="hm" title="${esc((h.skn||[]).join(' · '))}"><span class="y">${h.sk||''}</span> · Lv ${h.lv} · ★${h.st}</div>${h.eq.length?`<details class="eqd"><summary>${L('Ausrüstung','Equipment')} (${h.eq.length})</summary><ul>${h.eq.map(e=>`<li><img src="/icon/equip_${e.id}" alt="" onerror="this.style.display='none'"><span class="mute">${esc(SLN[e.s]?L(SLN[e.s][0],SLN[e.s][1]):e.s)}</span> ${esc(e.n)}${e.st||e.ic?` <i class="y">${e.st?esc(L(STN[e.st]||e.st,e.st)):''}${e.st&&e.ic?' · ':''}${e.ic?'Iconic '+e.ic:''}</i>`:''}</li>`).join('')}</ul></details>`:''}</div>`).join('')}</div>`:`<div class="hs">${hs.filter(Boolean).map(esc).join(' + ')||'–'}</div>`;
  return `<div><h4>${name}</h4>${hb}<table>${rows.map(z=>`<tr><td>${z[0]}</td><td class="num ${z[2]||''}">${z[2]==='y'?'+':''}${f(z[1])}</td></tr>`).join('')}</table></div>`}
 function body(){
  const t=D.totals||{};
