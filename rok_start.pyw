@@ -4,7 +4,9 @@ Doppelklick genuegt (kein Konsolenfenster). Lege diese Datei in denselben Ordner
 Ohne tkinter oder bei einem Fehler im Fenster startet der Tracker wie frueher direkt."""
 import hashlib, json, math, os, queue, re, struct, subprocess, sys, threading, time, traceback, urllib.request, webbrowser, zlib
 
-UPDATE_URL = "https://raw.githubusercontent.com/JSON2207/rok-tracker/main/"
+UPDATE_BASIS = "https://raw.githubusercontent.com/JSON2207/rok-tracker/"
+KANAELE = {"classic": "Classic (Stand 16.11.2026, Backup)", "main": "Aktuell (main)", "v2": "Neu (v2)"}   # Version = Branch auf GitHub; Ordner/Datenbank bleiben gleich
+UPDATE_URL = UPDATE_BASIS + "main/"
 DATEIEN = ["rok_barbs.py", "rok_diagnose.py", "rok_start.pyw"]      # fehlt eine online, wird sie uebersprungen
 
 HIER = os.path.dirname(os.path.abspath(__file__))
@@ -39,6 +41,12 @@ def config_lesen():
             return json.load(f)
     except Exception:
         return {}
+
+def kanal_lesen():
+    k = config_lesen().get("kanal")
+    return k if k in KANAELE else "main"
+
+UPDATE_URL = UPDATE_BASIS + kanal_lesen() + "/"
 
 def _sprache():
     """Sprache des Launchers: gespeicherte Wahl, sonst die Windows-Sprache (Deutsch oder Englisch)."""
@@ -1013,6 +1021,26 @@ def mit_fenster():
 
     menue.add_command(label=TR("Neu starten", "Restart"), command=lambda: arbeit(neu_starten, TR("Starte neu ...", "Restarting ...")))
     menue.add_command(label=TR("Nach Update suchen", "Check for updates"), command=lambda: arbeit(update_ausfuehren, TR("Suche nach Updates ...", "Checking for updates ...")))
+    menue.add_separator()
+    kanal_var = tk.StringVar(value=kanal_lesen())
+    def kanal_wechseln():
+        global UPDATE_URL
+        k = kanal_var.get()
+        c = config_lesen()
+        c["kanal"] = k
+        config_schreiben(c)
+        UPDATE_URL = UPDATE_BASIS + k + "/"
+        log("Version gewechselt: " + k)
+        melden(TR("Wechsle Version: ", "Switching version: ") + KANAELE[k])
+        update_ausfuehren()
+        melden(TR("Starte neu ...", "Restarting ..."))
+        beenden()
+        st["veraltet"] = False
+        start_und_oeffnen(oeffnen=False)
+    vmenue = tk.Menu(menue, tearoff=0, bg=C["card"], fg=C["ink"], activebackground=C["soft2"], activeforeground=C["ink"], bd=0, font=(FONT, 10), selectcolor=C["ink"])
+    for k, name in (("classic", TR("Classic (Backup vom 16.11.2026)", "Classic (backup of 16 Nov 2026)")), ("main", TR("Aktuell (main)", "Current (main)")), ("v2", TR("Neu (v2)", "New (v2)"))):
+        vmenue.add_radiobutton(label=name, variable=kanal_var, value=k, command=lambda: arbeit(kanal_wechseln, TR("Wechsle Version ...", "Switching version ...")))
+    menue.add_cascade(label=TR("Version wechseln", "Switch version"), menu=vmenue)
     menue.add_separator()
     menue.add_command(label=TR("Tracker beenden", "Stop tracker"), command=lambda: arbeit(tracker_beenden, TR("Beende Tracker ...", "Stopping tracker ...")))
 
