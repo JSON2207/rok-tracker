@@ -159,6 +159,7 @@ def extract_battle(mail):
                 # Damage = eigene Seite, Kill = Gegner-Seite; KillScore in Damage = deine Kill Points.
             pvp.append(dict(
                 foe_name=str(foe.get("PName", "")), foe_abbr=str(foe.get("Abbr", "")),
+                ehero1=int(foe.get("HId", 0) or 0), ehero2=int(foe.get("HId2", 0) or 0),
                 foe_castle=int(foe.get("CastleLevel", 0)), side=int(att.get("Def", 0)),
                 own_troops=int(d["Max"]), own_dead=int(d["Death"]), own_hurt=int(d["Hurt"]),
                 own_severe=int(d["BadHurt"]), enemy_troops=int(k["Max"]), enemy_dead=int(k["Death"]),
@@ -211,7 +212,7 @@ def extract(mail):
 
 # ---------------------------------------------------------------- Datenbank
 class DB:
-    VERSION = 6
+    VERSION = 7
 
     def __init__(self, path):
         self.lock = threading.Lock()
@@ -262,7 +263,12 @@ class DB:
             self.c.execute("ALTER TABLE battles ADD COLUMN hero2 INT")
         except sqlite3.OperationalError:
             pass
-        if self.c.execute("PRAGMA user_version").fetchone()[0] < 6:
+        for col in ("hero1 INT", "hero2 INT", "ehero1 INT", "ehero2 INT"):
+            try:
+                self.c.execute("ALTER TABLE pvp ADD COLUMN " + col)
+            except sqlite3.OperationalError:
+                pass
+        if self.c.execute("PRAGMA user_version").fetchone()[0] < 7:
             self.c.execute("DELETE FROM processed")         # Version 6: alle Dateien einmal lesen, um den zweiten Kommandanten nachzutragen (nichts wird geloescht)
         if self.c.execute("PRAGMA user_version").fetchone()[0] < 5:
             # Version 5: Spielerkämpfe werden mit korrekter Feldzuordnung neu eingelesen (alle Dateien einmal neu)
@@ -311,6 +317,11 @@ class DB:
             if self.c.execute("SELECT 1 FROM reports WHERE mail_id=?", (r["mail_id"],)).fetchone():
                 if r["kind"] == "battle" and r.get("hero2") is not None:     # zweiten Kommandanten bei alten Berichten nachtragen
                     self.c.execute("UPDATE battles SET hero2=? WHERE mail_id=? AND hero2 IS NULL", (r["hero2"], r["mail_id"]))
+                    ids = [x[0] for x in self.c.execute("SELECT id FROM pvp WHERE mail_id=? AND hero1 IS NULL ORDER BY id", (r["mail_id"],))]
+                    if ids and len(ids) == len(r["pvp"]):
+                        for i, x in zip(ids, r["pvp"]):
+                            self.c.execute("UPDATE pvp SET hero1=?, hero2=?, ehero1=?, ehero2=? WHERE id=?",
+                                           (r["hero1"], r["hero2"], x.get("ehero1"), x.get("ehero2"), i))
                     self.c.commit()
                 return False
             self.c.execute("INSERT INTO reports VALUES(?,?,?,?,?)", (r["mail_id"], r["ts"], day, acc, r.get("acc_name", "")))
@@ -329,12 +340,12 @@ class DB:
                 for x in r["pvp"]:
                     self.c.execute(
                         "INSERT INTO pvp(mail_id,ts,day,account,role,parts,foe_name,foe_abbr,foe_castle,side,own_troops,"
-                        "own_dead,own_hurt,own_severe,enemy_troops,enemy_dead,kp_gained,kp_lost,power,enemy_hurt,enemy_severe,mode) "
-                        "VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+                        "own_dead,own_hurt,own_severe,enemy_troops,enemy_dead,kp_gained,kp_lost,power,enemy_hurt,enemy_severe,mode,"
+                        "hero1,hero2,ehero1,ehero2) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
                         (r["mail_id"], r["ts"], day, acc, r["role"], r["parts"], x["foe_name"], x["foe_abbr"],
                          x["foe_castle"], x["side"], x["own_troops"], x["own_dead"], x["own_hurt"], x["own_severe"],
                          x["enemy_troops"], x["enemy_dead"], x["kp_gained"], x["kp_lost"], x["power"],
-                         x["enemy_hurt"], x["enemy_severe"], x["mode"]))
+                         x["enemy_hurt"], x["enemy_severe"], x["mode"], r["hero1"], r.get("hero2"), x.get("ehero1"), x.get("ehero2")))
             elif r["kind"] == "fort":
                 cur = self.c.execute("INSERT INTO forts(mail_id,ts,day,account,level,x,y,pct,tier) VALUES(?,?,?,?,?,?,?,?,?)",
                                      (r["mail_id"], r["ts"], day, acc, r["level"], r["x"], r["y"], r["pct"], r["tier"]))
@@ -525,6 +536,110 @@ class DB:
                             totals={k: sum(r[k] for r in rounds) for k in ("foe_troops", "hurt", "severe", "xp")},
                             rounds=rounds, loot=self.merge_loot(r["loot"] for r in rounds)))
         return out
+
+    # ---- v2: Analyse-Seite (Reiter Field / Rally / Garrison / Gathering / Barbs)
+    V2_KINDS = ("gems", "speed_training", "speed_universal", "speed_healing", "food", "wood", "stone", "gold", "xp_books")
+
+    @staticmethod
+    def v2_cat(r):
+        """Einordnung eines Spielerkampf-Eintrags: Garrison (du verteidigst), Rally (du hast gestartet oder bist beigetreten), sonst Field."""
+        if r["side"] == 1:
+            return "garrison"
+        return "rally" if r["role"] in ("host", "joined") else "field"
+
+    def v2_pvp(self, cat, d_from, d_to, account, f):
+        w, a = "day BETWEEN ? AND ? AND (mode IS NULL OR mode!='dungeon')", [d_from, d_to]
+        if account:
+            w += " AND account=?"; a.append(account)
+        rows = [r for r in self.q("SELECT * FROM pvp WHERE " + w + " ORDER BY account, ts, id", a) if self.v2_cat(r) == cat]
+        q, ab = (f.get("q") or "").lower(), (f.get("abbr") or "").lower()
+        hid, ehid = f.get("hero"), f.get("ehero")
+        rows = [r for r in rows if (not q or q in (r["foe_name"] or "").lower()) and (not ab or ab in (r["foe_abbr"] or "").lower())
+                and (not hid or hid in (r["hero1"], r["hero2"])) and (not ehid or ehid in (r["ehero1"], r["ehero2"]))]
+        hn = lambda h: (HEROES.get(h, "#%d" % h) if h else "")
+        tours, cur = [], None
+        for r in rows:
+            if cur and cur["account"] == r["account"] and r["ts"] - cur["end"] <= self.PVP_GAP:
+                cur["rows"].append(r); cur["end"] = r["ts"]
+            else:
+                cur = dict(account=r["account"], start=r["ts"], end=r["ts"], rows=[r]); tours.append(cur)
+        S = ("kp_gained", "kp_lost", "own_dead", "own_hurt", "own_severe", "enemy_dead", "enemy_hurt", "enemy_severe", "own_troops", "enemy_troops")
+        def ratio(x, y):
+            return round(x / y, 2) if y else None
+        def fin(t, rs):
+            t.update({k: sum((r[k] or 0) for r in rs) for k in S})
+            t["battles"] = len(rs)
+            t["kpr"], t["deadr"] = ratio(t["kp_gained"], t["kp_lost"]), ratio(t["enemy_dead"], t["own_dead"])
+            return t
+        out, groups = [], {}
+        for t in tours:
+            rs = t.pop("rows")
+            t["id"] = "%s_%d" % (t["account"], int(t["start"] * 1000))
+            t["time"] = datetime.fromtimestamp(t["start"]).strftime("%d.%m.%Y %H:%M:%S")
+            t["time_end"] = datetime.fromtimestamp(t["end"]).strftime("%H:%M:%S")
+            h1, h2 = rs[0]["hero1"], rs[0]["hero2"]
+            t["hero1"], t["hero2"] = hn(h1), hn(h2)
+            fin(t, rs)
+            t["enemies"] = sorted({("[%s] " % r["foe_abbr"] if r["foe_abbr"] else "") + (r["foe_name"] or "?") for r in rs})
+            t["rounds"] = [dict(time=datetime.fromtimestamp(r["ts"]).strftime("%H:%M:%S"), foe=("[%s] " % r["foe_abbr"] if r["foe_abbr"] else "") + (r["foe_name"] or "?"),
+                                castle=r["foe_castle"], eh1=hn(r["ehero1"]), eh2=hn(r["ehero2"]), kp=r["kp_gained"] or 0, kpl=r["kp_lost"] or 0,
+                                dead=r["own_dead"] or 0, edead=r["enemy_dead"] or 0, severe=r["own_severe"] or 0, esevere=r["enemy_severe"] or 0) for r in rs]
+            out.append(t)
+            g = groups.setdefault((h1, h2), dict(hero1=hn(h1), hero2=hn(h2), tours=0, rows=[]))
+            g["tours"] += 1; g["rows"].extend(rs)
+        gl = []
+        for g in groups.values():
+            rs = g.pop("rows"); fin(g, rs); gl.append(g)
+        gl.sort(key=lambda g: -g["kp_gained"])
+        out.sort(key=lambda t: -t["start"])
+        tot = fin(dict(), rows)
+        tot["tours"] = len(out)
+        return dict(tours=out[:300], groups=gl, totals=tot, n_tours=len(out))
+
+    def v2_barbs(self, d_from, d_to, account, f):
+        w, a = "b.day BETWEEN ? AND ? AND b.foe_kind='camp'", [d_from, d_to]
+        if account:
+            w += " AND b.account=?"; a.append(account)
+        if f.get("hero"):
+            w += " AND (b.hero1=? OR b.hero2=?)"; a += [f["hero"], f["hero"]]
+        lv = {}
+        for r in self.q("SELECT b.foe_lvl lvl, COUNT(*) n FROM battles b WHERE " + w + " GROUP BY b.foe_lvl", a):
+            lv[r["lvl"]] = dict(lvl=r["lvl"], n=r["n"], tot={})
+        for r in self.q("SELECT b.foe_lvl lvl, l.item_id, SUM(l.qty) qty FROM loot l JOIN battles b ON l.src='b' AND l.src_id=b.id WHERE " + w +
+                        " GROUP BY b.foe_lvl, l.item_id", a):
+            it = ITEMS.get(r["item_id"])
+            if it and it["kind"] in self.V2_KINDS:
+                t = lv[r["lvl"]]["tot"]
+                t[it["kind"]] = t.get(it["kind"], 0) + r["qty"] * it["unit"]
+        groups = {}
+        for l in sorted(lv.values(), key=lambda x: -x["lvl"]):
+            lo = (l["lvl"] - 1) // 5 * 5 + 1
+            g = groups.setdefault(lo, dict(label="%d-%d" % (lo, lo + 4), n=0, tot={}, levels=[]))
+            g["n"] += l["n"]; g["levels"].append(l)
+            for k, v in l["tot"].items():
+                g["tot"][k] = g["tot"].get(k, 0) + v
+        gl = sorted(groups.values(), key=lambda g: -int(g["label"].split("-")[0]))
+        total = dict(n=sum(g["n"] for g in gl), tot={})
+        for g in gl:
+            for k, v in g["tot"].items():
+                total["tot"][k] = total["tot"].get(k, 0) + v
+        return dict(kinds=list(self.V2_KINDS), total=total, groups=gl)
+
+    def v2(self, cat, d_from, d_to, account="", f=None):
+        f = f or {}
+        accs = [r["account"] for r in self.q("SELECT DISTINCT account FROM reports ORDER BY account")]
+        heroes = {}
+        for r in self.q("SELECT hero1 h FROM battles UNION SELECT hero2 FROM battles UNION SELECT hero1 FROM pvp UNION SELECT hero2 FROM pvp"):
+            if r["h"]:
+                heroes[r["h"]] = HEROES.get(r["h"], "#%d" % r["h"])
+        base = dict(cat=cat, accounts=accs, heroes=[dict(id=k, name=v) for k, v in sorted(heroes.items(), key=lambda kv: kv[1])])
+        if cat == "barbs":
+            base.update(self.v2_barbs(d_from, d_to, account, f))
+        elif cat in ("field", "rally", "garrison"):
+            base.update(self.v2_pvp(cat, d_from, d_to, account, f))
+        else:
+            base.update(supported=False)
+        return base
 
     PVP_GAP = 300   # Sekunden: Mails desselben Accounts mit weniger Abstand gehören zu einem Kampf-Block
 
@@ -1456,7 +1571,7 @@ tr.flash td,details.flash{animation:fl 2.6s ease-out}
 .mbtn{position:fixed;top:12px;left:12px;z-index:60;padding:5px 11px;font-size:1.2rem;line-height:1.2;cursor:pointer}body.sbopen .mbtn#mbtn{display:none}.sb{position:fixed;top:0;left:0;bottom:0;width:260px;z-index:70;background:var(--card);border-right:1px solid var(--line);display:flex;flex-direction:column;transform:translateX(-102%);transition:transform .18s ease;overflow-y:auto}body.sbopen .sb{transform:none}.sbh{display:flex;align-items:center;justify-content:space-between;padding:16px 14px 12px 18px}.sbt{font-weight:800;font-size:1.15rem;letter-spacing:.02em}.sbh .mbtn{position:static;padding:3px 9px;font-size:1rem}.sbn{display:flex;flex-direction:column;padding:6px 10px 20px;gap:2px}.sbl{font-size:.72rem;color:var(--mute);padding:10px 8px 4px}.sbn a{display:flex;align-items:center;gap:10px;padding:9px 10px;border-radius:9px;text-decoration:none;color:var(--ink)}.sbn a svg{flex:none;color:var(--mute)}.sbn a:hover{background:var(--soft)}.sbn a.cur{background:var(--accsoft);color:var(--acc);font-weight:700}.sbn a.cur svg{color:var(--acc)}.msep{height:1px;background:var(--line);margin:10px 2px 4px}.mrow{display:flex;flex-direction:column;gap:5px;padding:6px 8px;font-size:.82rem;color:var(--mute)}.mrow select{width:100%}.seg{display:flex;gap:4px}.seg button{flex:1;padding:5px 2px;font-size:.78rem;cursor:pointer}.seg button.on{background:var(--acc);border-color:var(--acc);color:#fff}.sbov{display:none}body{transition:padding-left .18s ease}@media(min-width:1100px){body.sbopen{padding-left:260px}}@media(max-width:1099px){body.sbopen .sbov{display:block;position:fixed;inset:0;background:#0007;z-index:65}}
 
 </style></head><body><main>
-<button type="button" id="mbtn" class="mbtn" aria-label="Menü" aria-expanded="true" title="Menü">☰</button><aside id="sb" class="sb" aria-label="Menü"><div class="sbh"><span class="sbt">RoK&nbsp;Tracker</span><button type="button" id="sbx" class="mbtn" aria-label="Menü schließen" title="Menü schließen">⇤</button></div><nav class="sbn"><div class="sbl">Seiten</div><a href="/" data-p="/" data-k="loot"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l8 4v5c0 4.5-3.2 7.8-8 9-4.8-1.2-8-4.5-8-9V7z"/><path d="M9 12l2 2 4-4"/></svg><span>Loot-Tracker</span></a><a href="/allianz" data-p="/allianz" data-k="ali"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20V10M10 20V4M16 20v-8M22 20H2"/></svg><span>Allianz-Ranking</span></a><a href="/kvk1" data-p="/kvk1" data-k="kvk"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M14.5 17.5L3 6V3h3l11.5 11.5M13 19l6-6M16 16l4 4M19 21l2-2M14.5 6.5L18 3h3v3l-3.5 3.5M5 14l4 4M7 17l-3 3M3 19l2 2"/></svg><span>KVK1</span></a><a href="/kvk2" data-p="/kvk2" data-k="kvk2"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3a14 14 0 0 1 0 18M12 3a14 14 0 0 0 0 18"/></svg><span>KVK2</span></a><a href="/woche" data-p="/woche" data-k="wb"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="17" rx="2"/><path d="M3 9h18M8 2v4M16 2v4M8 14h3M13 14h3M8 17h3"/></svg><span>Wochenbericht</span></a><a href="/kalender" data-p="/kalender" data-k="kal"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg><span>Event-Kalender</span></a><a href="/settings" data-p="/settings" data-k="set"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.9l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.9-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1-1.5 1.7 1.7 0 0 0-1.9.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.9 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1 1.7 1.7 0 0 0-.3-1.9l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.9.3h0a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5h0a1.7 1.7 0 0 0 1.9-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.9v0a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg><span>Einstellungen</span><b class="sbb" id="sbbadge" hidden></b></a><div class="sbdiv" data-k="d1"></div><div class="sbdiv" data-k="d2"></div><div class="sbstat" data-k="prof"><div class="sbgh0">Profil</div><a href="/#profil"><span>Profil</span></a><a href="/#tag"><span>Pro Tag</span></a></div></nav></aside><div id="sbov" class="sbov"></div><script>try{var th=localStorage.getItem("roktheme");if(th)document.documentElement.dataset.theme=th}catch(e){}window.sbOrd=function(){var A=["loot","ali","kvk","kvk2","wb","kal"],o=A.slice();try{var v=JSON.parse(localStorage.getItem("roksbo")||"null");if(v&&v.length){v=v.filter(function(x){return A.indexOf(x)>=0});o=v.concat(A.filter(function(x){return v.indexOf(x)<0}))}}catch(e){}var m={d1:6,prof:7,d2:8,set:9};o.forEach(function(k,i){m[k]=i});document.querySelectorAll("#sb [data-k]").forEach(function(e){e.style.order=m[e.dataset.k]})};sbOrd();window.sbUnk=function(){fetch("/api/unk").then(r=>r.json()).then(u=>{var b=document.getElementById("sbbadge");b.textContent=u.n;b.hidden=!u.n;try{var R=JSON.parse(localStorage.getItem("rokrem")||"{}"),el=document.getElementById("sbrem"),hr=(u.now-u.last)/3600;if(R.on&&u.last&&hr>=(R.h||12)&&localStorage.getItem("rokremx")!=String(u.last)){if(!el){el=document.createElement("div");el.id="sbrem";el.style.cssText="position:fixed;top:12px;left:50%;transform:translateX(-50%);z-index:80;padding:9px 14px;border-radius:12px;background:var(--card);color:var(--ink);border:1px solid var(--warn);box-shadow:0 6px 24px rgba(0,0,0,.25);font-size:.9rem;display:flex;gap:10px;align-items:center";document.body.appendChild(el)}el.innerHTML="<span>⏰ Seit "+(hr<48?Math.floor(hr)+" Std":Math.floor(hr/24)+" Tagen")+" keine neuen Berichte.</span>";var x=document.createElement("button");x.textContent="Ausblenden";x.onclick=function(){try{localStorage.setItem("rokremx",String(u.last))}catch(e){}el.remove()};el.appendChild(x)}else if(el)el.remove()}catch(e){}}).catch(function(){})};sbUnk();setInterval(sbUnk,30000)</script><script>(function(){const b=document.getElementById("mbtn"),x=document.getElementById("sbx"),ov=document.getElementById("sbov"),n=document.getElementById("sb"),R=document.documentElement,B=document.body;n.querySelectorAll("a[data-p]").forEach(a=>{if(a.dataset.p===(location.pathname.replace(/\/+$/,"")||"/"))a.className="cur"});let V={w:"1600",a:"c"},O=window.innerWidth>=1100;try{V=Object.assign(V,JSON.parse(localStorage.getItem("rokview")||"{}"));const o=localStorage.getItem("roksb");if(o!==null)O=o==="1"}catch(e){}const ap=()=>{R.style.setProperty("--mw",V.w==="100%"?"100%":V.w+"px");R.style.setProperty("--ml",V.a==="l"?"0":"auto");R.style.setProperty("--mr",V.a==="r"?"0":"auto");document.querySelectorAll("#mw button").forEach(y=>y.classList.toggle("on",y.dataset.v===V.w));document.querySelectorAll("#ma button").forEach(y=>y.classList.toggle("on",y.dataset.v===V.a))};const so=v=>{O=v;B.classList.toggle("sbopen",O);b.setAttribute("aria-expanded",O);try{localStorage.setItem("roksb",O?"1":"0")}catch(e){}};document.addEventListener("DOMContentLoaded",ap);
+<button type="button" id="mbtn" class="mbtn" aria-label="Menü" aria-expanded="true" title="Menü">☰</button><aside id="sb" class="sb" aria-label="Menü"><div class="sbh"><span class="sbt">RoK&nbsp;Tracker</span><button type="button" id="sbx" class="mbtn" aria-label="Menü schließen" title="Menü schließen">⇤</button></div><nav class="sbn"><div class="sbl">Seiten</div><a href="/" data-p="/" data-k="loot"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l8 4v5c0 4.5-3.2 7.8-8 9-4.8-1.2-8-4.5-8-9V7z"/><path d="M9 12l2 2 4-4"/></svg><span>Loot-Tracker</span></a><a href="/allianz" data-p="/allianz" data-k="ali"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20V10M10 20V4M16 20v-8M22 20H2"/></svg><span>Allianz-Ranking</span></a><a href="/kvk1" data-p="/kvk1" data-k="kvk"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M14.5 17.5L3 6V3h3l11.5 11.5M13 19l6-6M16 16l4 4M19 21l2-2M14.5 6.5L18 3h3v3l-3.5 3.5M5 14l4 4M7 17l-3 3M3 19l2 2"/></svg><span>KVK1</span></a><a href="/kvk2" data-p="/kvk2" data-k="kvk2"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3a14 14 0 0 1 0 18M12 3a14 14 0 0 0 0 18"/></svg><span>KVK2</span></a><a href="/woche" data-p="/woche" data-k="wb"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="17" rx="2"/><path d="M3 9h18M8 2v4M16 2v4M8 14h3M13 14h3M8 17h3"/></svg><span>Wochenbericht</span></a><a href="/v2" data-p="/v2" data-k="ana"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3v18h18"/><path d="M7 15l4-5 3 3 5-7"/></svg><span>Analyse</span></a><a href="/kalender" data-p="/kalender" data-k="kal"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg><span>Event-Kalender</span></a><a href="/settings" data-p="/settings" data-k="set"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.9l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.9-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1-1.5 1.7 1.7 0 0 0-1.9.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.9 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1 1.7 1.7 0 0 0-.3-1.9l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.9.3h0a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5h0a1.7 1.7 0 0 0 1.9-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.9v0a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg><span>Einstellungen</span><b class="sbb" id="sbbadge" hidden></b></a><div class="sbdiv" data-k="d1"></div><div class="sbdiv" data-k="d2"></div><div class="sbstat" data-k="prof"><div class="sbgh0">Profil</div><a href="/#profil"><span>Profil</span></a><a href="/#tag"><span>Pro Tag</span></a></div></nav></aside><div id="sbov" class="sbov"></div><script>try{var th=localStorage.getItem("roktheme");if(th)document.documentElement.dataset.theme=th}catch(e){}window.sbOrd=function(){var A=["loot","ali","kvk","kvk2","wb","ana","kal"],o=A.slice();try{var v=JSON.parse(localStorage.getItem("roksbo")||"null");if(v&&v.length){v=v.filter(function(x){return A.indexOf(x)>=0});o=v.concat(A.filter(function(x){return v.indexOf(x)<0}))}}catch(e){}var m={d1:6,prof:7,d2:8,set:9};o.forEach(function(k,i){m[k]=i});document.querySelectorAll("#sb [data-k]").forEach(function(e){e.style.order=m[e.dataset.k]})};sbOrd();window.sbUnk=function(){fetch("/api/unk").then(r=>r.json()).then(u=>{var b=document.getElementById("sbbadge");b.textContent=u.n;b.hidden=!u.n;try{var R=JSON.parse(localStorage.getItem("rokrem")||"{}"),el=document.getElementById("sbrem"),hr=(u.now-u.last)/3600;if(R.on&&u.last&&hr>=(R.h||12)&&localStorage.getItem("rokremx")!=String(u.last)){if(!el){el=document.createElement("div");el.id="sbrem";el.style.cssText="position:fixed;top:12px;left:50%;transform:translateX(-50%);z-index:80;padding:9px 14px;border-radius:12px;background:var(--card);color:var(--ink);border:1px solid var(--warn);box-shadow:0 6px 24px rgba(0,0,0,.25);font-size:.9rem;display:flex;gap:10px;align-items:center";document.body.appendChild(el)}el.innerHTML="<span>⏰ Seit "+(hr<48?Math.floor(hr)+" Std":Math.floor(hr/24)+" Tagen")+" keine neuen Berichte.</span>";var x=document.createElement("button");x.textContent="Ausblenden";x.onclick=function(){try{localStorage.setItem("rokremx",String(u.last))}catch(e){}el.remove()};el.appendChild(x)}else if(el)el.remove()}catch(e){}}).catch(function(){})};sbUnk();setInterval(sbUnk,30000)</script><script>(function(){const b=document.getElementById("mbtn"),x=document.getElementById("sbx"),ov=document.getElementById("sbov"),n=document.getElementById("sb"),R=document.documentElement,B=document.body;n.querySelectorAll("a[data-p]").forEach(a=>{if(a.dataset.p===(location.pathname.replace(/\/+$/,"")||"/"))a.className="cur"});let V={w:"1600",a:"c"},O=window.innerWidth>=1100;try{V=Object.assign(V,JSON.parse(localStorage.getItem("rokview")||"{}"));const o=localStorage.getItem("roksb");if(o!==null)O=o==="1"}catch(e){}const ap=()=>{R.style.setProperty("--mw",V.w==="100%"?"100%":V.w+"px");R.style.setProperty("--ml",V.a==="l"?"0":"auto");R.style.setProperty("--mr",V.a==="r"?"0":"auto");document.querySelectorAll("#mw button").forEach(y=>y.classList.toggle("on",y.dataset.v===V.w));document.querySelectorAll("#ma button").forEach(y=>y.classList.toggle("on",y.dataset.v===V.a))};const so=v=>{O=v;B.classList.toggle("sbopen",O);b.setAttribute("aria-expanded",O);try{localStorage.setItem("roksb",O?"1":"0")}catch(e){}};document.addEventListener("DOMContentLoaded",ap);
 document.addEventListener("click",e=>{const y=e.target.closest(".seg button");if(!y||!y.parentNode.id.match(/^m[wa]$/))return;if(y.parentNode.id==="mw")V.w=y.dataset.v;else V.a=y.dataset.v;try{localStorage.setItem("rokview",JSON.stringify(V))}catch(e){}ap()});ap();B.classList.toggle("sbopen",O);b.onclick=()=>so(!O);x.onclick=()=>so(false);ov.onclick=()=>so(false);document.addEventListener("keydown",e=>{if(e.key==="Escape"&&window.innerWidth<1100)so(false)})})()</script>@@QP@@
 <section class="hero"><div class="avc"><div class="av" id="avbox" tabindex="0" role="button" title="Avatar ändern"><span id="hav">⚔</span></div><button id="avreset" hidden>Avatar zurücksetzen</button><input type="file" id="avfile" accept="image/*" hidden></div><div>
 <div class="hrow"><div><h1 id="hname">Barbaren-Tracker</h1><div id="per"></div><div id="st"></div></div>
@@ -2004,7 +2119,7 @@ a.btn{font:inherit;color:var(--ink);background:var(--soft);border:1px solid var(
 .ra{font-size:.72rem;font-weight:600;margin-left:5px;white-space:nowrap}.ra.good{color:var(--good,#4ade80)}.ra.bad{color:var(--bad,#f87171)}
 .tg{font-size:.7rem;border-radius:999px;padding:1px 7px;margin-left:6px;border:1px solid var(--line);color:var(--mute);white-space:nowrap}.tg.nat{color:var(--acc);border-color:var(--acc)}#al td.r{color:var(--mute);width:2.5em;text-align:right}#al td.n{text-align:left}
 </style></head><body><main>
-<button type="button" id="mbtn" class="mbtn" aria-label="Menü" aria-expanded="true" title="Menü">☰</button><aside id="sb" class="sb" aria-label="Menü"><div class="sbh"><span class="sbt">RoK&nbsp;Tracker</span><button type="button" id="sbx" class="mbtn" aria-label="Menü schließen" title="Menü schließen">⇤</button></div><nav class="sbn"><div class="sbl">Seiten</div><a href="/" data-p="/" data-k="loot"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l8 4v5c0 4.5-3.2 7.8-8 9-4.8-1.2-8-4.5-8-9V7z"/><path d="M9 12l2 2 4-4"/></svg><span>Loot-Tracker</span></a><a href="/allianz" data-p="/allianz" data-k="ali"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20V10M10 20V4M16 20v-8M22 20H2"/></svg><span>Allianz-Ranking</span></a><a href="/kvk1" data-p="/kvk1" data-k="kvk"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M14.5 17.5L3 6V3h3l11.5 11.5M13 19l6-6M16 16l4 4M19 21l2-2M14.5 6.5L18 3h3v3l-3.5 3.5M5 14l4 4M7 17l-3 3M3 19l2 2"/></svg><span>KVK1</span></a><a href="/kvk2" data-p="/kvk2" data-k="kvk2"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3a14 14 0 0 1 0 18M12 3a14 14 0 0 0 0 18"/></svg><span>KVK2</span></a><a href="/woche" data-p="/woche" data-k="wb"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="17" rx="2"/><path d="M3 9h18M8 2v4M16 2v4M8 14h3M13 14h3M8 17h3"/></svg><span>Wochenbericht</span></a><a href="/kalender" data-p="/kalender" data-k="kal"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg><span>Event-Kalender</span></a><a href="/settings" data-p="/settings" data-k="set"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.9l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.9-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1-1.5 1.7 1.7 0 0 0-1.9.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.9 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1 1.7 1.7 0 0 0-.3-1.9l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.9.3h0a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5h0a1.7 1.7 0 0 0 1.9-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.9v0a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg><span>Einstellungen</span><b class="sbb" id="sbbadge" hidden></b></a><div class="sbdiv" data-k="d1"></div><div class="sbdiv" data-k="d2"></div><div class="sbstat" data-k="prof"><div class="sbgh0">Profil</div><a href="/#profil"><span>Profil</span></a><a href="/#tag"><span>Pro Tag</span></a></div></nav></aside><div id="sbov" class="sbov"></div><script>try{var th=localStorage.getItem("roktheme");if(th)document.documentElement.dataset.theme=th}catch(e){}window.sbOrd=function(){var A=["loot","ali","kvk","kvk2","wb","kal"],o=A.slice();try{var v=JSON.parse(localStorage.getItem("roksbo")||"null");if(v&&v.length){v=v.filter(function(x){return A.indexOf(x)>=0});o=v.concat(A.filter(function(x){return v.indexOf(x)<0}))}}catch(e){}var m={d1:6,prof:7,d2:8,set:9};o.forEach(function(k,i){m[k]=i});document.querySelectorAll("#sb [data-k]").forEach(function(e){e.style.order=m[e.dataset.k]})};sbOrd();window.sbUnk=function(){fetch("/api/unk").then(r=>r.json()).then(u=>{var b=document.getElementById("sbbadge");b.textContent=u.n;b.hidden=!u.n;try{var R=JSON.parse(localStorage.getItem("rokrem")||"{}"),el=document.getElementById("sbrem"),hr=(u.now-u.last)/3600;if(R.on&&u.last&&hr>=(R.h||12)&&localStorage.getItem("rokremx")!=String(u.last)){if(!el){el=document.createElement("div");el.id="sbrem";el.style.cssText="position:fixed;top:12px;left:50%;transform:translateX(-50%);z-index:80;padding:9px 14px;border-radius:12px;background:var(--card);color:var(--ink);border:1px solid var(--warn);box-shadow:0 6px 24px rgba(0,0,0,.25);font-size:.9rem;display:flex;gap:10px;align-items:center";document.body.appendChild(el)}el.innerHTML="<span>⏰ Seit "+(hr<48?Math.floor(hr)+" Std":Math.floor(hr/24)+" Tagen")+" keine neuen Berichte.</span>";var x=document.createElement("button");x.textContent="Ausblenden";x.onclick=function(){try{localStorage.setItem("rokremx",String(u.last))}catch(e){}el.remove()};el.appendChild(x)}else if(el)el.remove()}catch(e){}}).catch(function(){})};sbUnk();setInterval(sbUnk,30000)</script><script>(function(){const b=document.getElementById("mbtn"),x=document.getElementById("sbx"),ov=document.getElementById("sbov"),n=document.getElementById("sb"),R=document.documentElement,B=document.body;n.querySelectorAll("a[data-p]").forEach(a=>{if(a.dataset.p===(location.pathname.replace(/\/+$/,"")||"/"))a.className="cur"});let V={w:"1600",a:"c"},O=window.innerWidth>=1100;try{V=Object.assign(V,JSON.parse(localStorage.getItem("rokview")||"{}"));const o=localStorage.getItem("roksb");if(o!==null)O=o==="1"}catch(e){}const ap=()=>{R.style.setProperty("--mw",V.w==="100%"?"100%":V.w+"px");R.style.setProperty("--ml",V.a==="l"?"0":"auto");R.style.setProperty("--mr",V.a==="r"?"0":"auto");document.querySelectorAll("#mw button").forEach(y=>y.classList.toggle("on",y.dataset.v===V.w));document.querySelectorAll("#ma button").forEach(y=>y.classList.toggle("on",y.dataset.v===V.a))};const so=v=>{O=v;B.classList.toggle("sbopen",O);b.setAttribute("aria-expanded",O);try{localStorage.setItem("roksb",O?"1":"0")}catch(e){}};document.addEventListener("DOMContentLoaded",ap);
+<button type="button" id="mbtn" class="mbtn" aria-label="Menü" aria-expanded="true" title="Menü">☰</button><aside id="sb" class="sb" aria-label="Menü"><div class="sbh"><span class="sbt">RoK&nbsp;Tracker</span><button type="button" id="sbx" class="mbtn" aria-label="Menü schließen" title="Menü schließen">⇤</button></div><nav class="sbn"><div class="sbl">Seiten</div><a href="/" data-p="/" data-k="loot"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l8 4v5c0 4.5-3.2 7.8-8 9-4.8-1.2-8-4.5-8-9V7z"/><path d="M9 12l2 2 4-4"/></svg><span>Loot-Tracker</span></a><a href="/allianz" data-p="/allianz" data-k="ali"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20V10M10 20V4M16 20v-8M22 20H2"/></svg><span>Allianz-Ranking</span></a><a href="/kvk1" data-p="/kvk1" data-k="kvk"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M14.5 17.5L3 6V3h3l11.5 11.5M13 19l6-6M16 16l4 4M19 21l2-2M14.5 6.5L18 3h3v3l-3.5 3.5M5 14l4 4M7 17l-3 3M3 19l2 2"/></svg><span>KVK1</span></a><a href="/kvk2" data-p="/kvk2" data-k="kvk2"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3a14 14 0 0 1 0 18M12 3a14 14 0 0 0 0 18"/></svg><span>KVK2</span></a><a href="/woche" data-p="/woche" data-k="wb"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="17" rx="2"/><path d="M3 9h18M8 2v4M16 2v4M8 14h3M13 14h3M8 17h3"/></svg><span>Wochenbericht</span></a><a href="/v2" data-p="/v2" data-k="ana"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3v18h18"/><path d="M7 15l4-5 3 3 5-7"/></svg><span>Analyse</span></a><a href="/kalender" data-p="/kalender" data-k="kal"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg><span>Event-Kalender</span></a><a href="/settings" data-p="/settings" data-k="set"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.9l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.9-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1-1.5 1.7 1.7 0 0 0-1.9.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.9 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1 1.7 1.7 0 0 0-.3-1.9l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.9.3h0a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5h0a1.7 1.7 0 0 0 1.9-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.9v0a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg><span>Einstellungen</span><b class="sbb" id="sbbadge" hidden></b></a><div class="sbdiv" data-k="d1"></div><div class="sbdiv" data-k="d2"></div><div class="sbstat" data-k="prof"><div class="sbgh0">Profil</div><a href="/#profil"><span>Profil</span></a><a href="/#tag"><span>Pro Tag</span></a></div></nav></aside><div id="sbov" class="sbov"></div><script>try{var th=localStorage.getItem("roktheme");if(th)document.documentElement.dataset.theme=th}catch(e){}window.sbOrd=function(){var A=["loot","ali","kvk","kvk2","wb","ana","kal"],o=A.slice();try{var v=JSON.parse(localStorage.getItem("roksbo")||"null");if(v&&v.length){v=v.filter(function(x){return A.indexOf(x)>=0});o=v.concat(A.filter(function(x){return v.indexOf(x)<0}))}}catch(e){}var m={d1:6,prof:7,d2:8,set:9};o.forEach(function(k,i){m[k]=i});document.querySelectorAll("#sb [data-k]").forEach(function(e){e.style.order=m[e.dataset.k]})};sbOrd();window.sbUnk=function(){fetch("/api/unk").then(r=>r.json()).then(u=>{var b=document.getElementById("sbbadge");b.textContent=u.n;b.hidden=!u.n;try{var R=JSON.parse(localStorage.getItem("rokrem")||"{}"),el=document.getElementById("sbrem"),hr=(u.now-u.last)/3600;if(R.on&&u.last&&hr>=(R.h||12)&&localStorage.getItem("rokremx")!=String(u.last)){if(!el){el=document.createElement("div");el.id="sbrem";el.style.cssText="position:fixed;top:12px;left:50%;transform:translateX(-50%);z-index:80;padding:9px 14px;border-radius:12px;background:var(--card);color:var(--ink);border:1px solid var(--warn);box-shadow:0 6px 24px rgba(0,0,0,.25);font-size:.9rem;display:flex;gap:10px;align-items:center";document.body.appendChild(el)}el.innerHTML="<span>⏰ Seit "+(hr<48?Math.floor(hr)+" Std":Math.floor(hr/24)+" Tagen")+" keine neuen Berichte.</span>";var x=document.createElement("button");x.textContent="Ausblenden";x.onclick=function(){try{localStorage.setItem("rokremx",String(u.last))}catch(e){}el.remove()};el.appendChild(x)}else if(el)el.remove()}catch(e){}}).catch(function(){})};sbUnk();setInterval(sbUnk,30000)</script><script>(function(){const b=document.getElementById("mbtn"),x=document.getElementById("sbx"),ov=document.getElementById("sbov"),n=document.getElementById("sb"),R=document.documentElement,B=document.body;n.querySelectorAll("a[data-p]").forEach(a=>{if(a.dataset.p===(location.pathname.replace(/\/+$/,"")||"/"))a.className="cur"});let V={w:"1600",a:"c"},O=window.innerWidth>=1100;try{V=Object.assign(V,JSON.parse(localStorage.getItem("rokview")||"{}"));const o=localStorage.getItem("roksb");if(o!==null)O=o==="1"}catch(e){}const ap=()=>{R.style.setProperty("--mw",V.w==="100%"?"100%":V.w+"px");R.style.setProperty("--ml",V.a==="l"?"0":"auto");R.style.setProperty("--mr",V.a==="r"?"0":"auto");document.querySelectorAll("#mw button").forEach(y=>y.classList.toggle("on",y.dataset.v===V.w));document.querySelectorAll("#ma button").forEach(y=>y.classList.toggle("on",y.dataset.v===V.a))};const so=v=>{O=v;B.classList.toggle("sbopen",O);b.setAttribute("aria-expanded",O);try{localStorage.setItem("roksb",O?"1":"0")}catch(e){}};document.addEventListener("DOMContentLoaded",ap);
 document.addEventListener("click",e=>{const y=e.target.closest(".seg button");if(!y||!y.parentNode.id.match(/^m[wa]$/))return;if(y.parentNode.id==="mw")V.w=y.dataset.v;else V.a=y.dataset.v;try{localStorage.setItem("rokview",JSON.stringify(V))}catch(e){}ap()});ap();B.classList.toggle("sbopen",O);b.onclick=()=>so(!O);x.onclick=()=>so(false);ov.onclick=()=>so(false);document.addEventListener("keydown",e=>{if(e.key==="Escape"&&window.innerWidth<1100)so(false)})})()</script>@@QP@@
 <section class="ah"><div><h1>Allianz-Tracker</h1><div class="sub" id="asub">Member-Rangliste</div></div>
 <div class="bar"><a class="btn" id="aexp" href="/allianz/export?lang=de" title="Speichert die Rangliste als eigenständige Datei, die du weitergeben kannst">Als HTML exportieren</a><button id="abtn">Allianz-Daten einfügen …</button><input type="file" id="afile" accept=".json" multiple hidden></div></section>
@@ -2749,6 +2864,119 @@ def alliance_export_html(db, lang):
     return h.replace("@@CATS@@", js(cats)).replace("@@DATA@@", js(data))
 
 
+# ---------------------------------------------------------------- v2: Analyse-Seite (eigenes Design)
+V2_PAGE = r"""<!doctype html><html lang="de"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1"><title>RoK Tracker · Analyse</title>
+<style>
+:root{--bg:#0a1411;--bg2:#0e1c17;--pan:#11221c;--pan2:#152b23;--line:#1f3a2f;--ink:#dcebe4;--mute:#82a095;--acc:#52c7a0;--acc2:#2f8f72;--good:#4fd08a;--bad:#ff6b5e;--warn:#e6b85c;--mono:ui-monospace,SFMono-Regular,Consolas,"Liberation Mono",monospace}
+*{box-sizing:border-box}html{color-scheme:dark}body{margin:0;background:radial-gradient(1200px 600px at 12% -10%,#16342a 0,transparent 60%),var(--bg);color:var(--ink);font:14px/1.45 "Segoe UI",system-ui,sans-serif;min-height:100vh}
+a{color:inherit;text-decoration:none}button,select,input{font:inherit;color:var(--ink)}
+.top{display:flex;flex-wrap:wrap;gap:14px 28px;align-items:center;padding:16px max(20px,4vw);border-bottom:1px solid var(--line)}
+.brand{font-weight:700;letter-spacing:.02em;font-size:1.05rem}.brand span{color:var(--acc);font-weight:600;margin-left:6px}.ver{font:600 .7rem var(--mono);border:1px solid var(--acc2);color:var(--acc);border-radius:4px;padding:2px 7px}
+.top nav{display:flex;gap:6px;flex:1}.top nav a{padding:7px 12px;border-radius:6px;color:var(--mute)}.top nav a:hover{color:var(--ink);background:var(--pan)}
+.wrap{padding:0 max(20px,4vw) 60px}
+.tabs{display:flex;gap:4px;margin:22px 0 0;border-bottom:1px solid var(--line);flex-wrap:wrap}.tabs button{background:none;border:0;border-bottom:3px solid transparent;padding:11px 22px;color:var(--mute);cursor:pointer;font-weight:600}.tabs button:hover{color:var(--ink)}.tabs button.on{color:var(--acc);border-bottom-color:var(--acc)}
+.flt{display:flex;flex-wrap:wrap;gap:12px 16px;align-items:flex-end;padding:18px 0;border-bottom:1px solid var(--line)}
+.flt label{display:flex;flex-direction:column;gap:5px;color:var(--mute);font-size:.78rem}
+.flt input,.flt select{background:var(--pan);border:1px solid var(--line);border-radius:7px;padding:8px 10px;min-width:9em}.flt input:focus,.flt select:focus{outline:2px solid var(--acc2);border-color:var(--acc2)}
+.btn{background:var(--pan2);border:1px solid var(--line);border-radius:7px;padding:8px 14px;cursor:pointer}.btn:hover{border-color:var(--acc2)}.btn.on{background:var(--acc2);border-color:var(--acc)}
+.quick{display:flex;gap:6px}
+.sum{display:flex;flex-wrap:wrap;gap:12px;margin:20px 0}.kpi{background:var(--pan);border:1px solid var(--line);border-radius:10px;padding:12px 16px;min-width:130px}.kpi small{display:block;color:var(--mute);font-size:.74rem}.kpi b{font:600 1.3rem var(--mono)}
+.good{color:var(--good)}.bad{color:var(--bad)}.mute{color:var(--mute)}
+.split{display:grid;grid-template-columns:minmax(280px,380px) 1fr;gap:16px;align-items:start}
+.list{background:var(--pan);border:1px solid var(--line);border-radius:12px;max-height:75vh;overflow:auto}
+.list h3{margin:0;padding:12px 14px;font-size:.85rem;border-bottom:1px solid var(--line);position:sticky;top:0;background:var(--pan);display:flex;justify-content:space-between}
+.tour{display:block;width:100%;text-align:left;background:none;border:0;border-bottom:1px solid var(--line);padding:11px 14px;cursor:pointer}.tour:hover{background:var(--pan2)}.tour.on{background:var(--pan2);box-shadow:inset 3px 0 var(--acc)}
+.tour .t1{display:flex;justify-content:space-between;gap:8px}.tour .t2{color:var(--mute);font-size:.8rem;margin-top:2px}
+.badge{font:600 .75rem var(--mono);border-radius:5px;padding:2px 7px;border:1px solid}.badge.good{background:rgba(79,208,138,.12);border-color:rgba(79,208,138,.4)}.badge.bad{background:rgba(255,107,94,.12);border-color:rgba(255,107,94,.4)}
+.card{background:var(--pan);border:1px solid var(--line);border-radius:12px;margin-bottom:14px;overflow:hidden}.card h3{margin:0;padding:12px 16px;font-size:.8rem;letter-spacing:.06em;text-transform:uppercase;color:var(--mute);border-bottom:1px solid var(--line)}
+.two{display:grid;grid-template-columns:minmax(340px,1.2fr) 1.5fr;gap:14px}.two .card:first-child td{white-space:normal}.two .card:first-child td:last-child{text-align:right}
+table{border-collapse:collapse;width:100%}th,td{padding:9px 14px;text-align:right;border-bottom:1px solid var(--line);white-space:nowrap}th{color:var(--mute);font-weight:600;font-size:.78rem;background:var(--bg2)}td:first-child,th:first-child{text-align:left}
+td.num,.num{font-family:var(--mono)}.sc{overflow-x:auto}
+#bt th.l,#bt td.l{text-align:left}#bt tr.g td{background:var(--pan2);cursor:pointer;font-weight:600}#bt tr.tot td{background:#173328;font-weight:700}#bt tr.c td:first-child{padding-left:34px;color:var(--mute)}
+.ea{display:block;font:.7rem var(--mono);color:var(--mute)}
+.empty{padding:40px 20px;text-align:center;color:var(--mute);border:1px dashed var(--line);border-radius:12px}
+.note{color:var(--mute);font-size:.8rem;margin:10px 2px}
+.tabs2{display:flex;gap:6px;margin:0 0 14px}
+@media(max-width:900px){.split,.two{grid-template-columns:1fr}.list{max-height:40vh}}
+</style></head><body>
+<header class="top"><div class="brand">RoK Tracker<span>Analyse</span></div><nav><a href="/" id="n1">Loot-Tracker</a><a href="/allianz" id="n2">Allianz</a><a href="/woche" id="n3">Wochenbericht</a><a href="/settings" id="n4">Einstellungen</a></nav><span class="ver">v2</span></header>
+<div class="wrap">
+<div class="tabs" id="tabs" role="tablist"></div>
+<div class="flt" id="flt"></div>
+<div id="out"></div>
+</div>
+<script>
+let LANG='de';try{LANG=localStorage.getItem('roklang')==='en'?'en':'de'}catch(e){}
+const L=(d,e)=>LANG==='en'?e:d,$=id=>document.getElementById(id),f=n=>n==null?'–':Number(n).toLocaleString(LANG==='en'?'en-US':'de-DE'),
+ esc=s=>String(s==null?'':s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const CATS=[['field','Field'],['rally','Rally'],['garrison','Garrison'],['gathering','Gathering'],['barbs','Barbs']];
+const today=new Date(),iso=d=>new Date(d.getTime()-d.getTimezoneOffset()*6e4).toISOString().slice(0,10),ago=n=>{const d=new Date();d.setDate(d.getDate()-n);return iso(d)};
+let S={cat:'field',from:ago(30),to:iso(today),account:'',q:'',abbr:'',hero:'',group:'tour',sel:'',open:{}};
+try{const o=JSON.parse(localStorage.getItem('rokv2')||'{}');Object.assign(S,{cat:o.cat||S.cat,group:o.group||S.group})}catch(e){}
+let D=null,seq=0;
+function save(){try{localStorage.setItem('rokv2',JSON.stringify({cat:S.cat,group:S.group}))}catch(e){}}
+function tabs(){$('tabs').innerHTML=CATS.map(c=>`<button type="button" role="tab" class="${S.cat===c[0]?'on':''}" data-c="${c[0]}">${c[1]}</button>`).join('')}
+function flt(){const a=(D&&D.accounts)||[],h=(D&&D.heroes)||[],pv=['field','rally','garrison'].includes(S.cat);
+ $('flt').innerHTML=`<label>${L('Von','From')}<input type="date" id="fFrom" value="${S.from}"></label><label>${L('Bis','To')}<input type="date" id="fTo" value="${S.to}"></label>
+ <div class="quick"><button class="btn" data-r="7">7 ${L('Tage','days')}</button><button class="btn" data-r="30">30 ${L('Tage','days')}</button><button class="btn" data-r="0">${L('Alles','All')}</button></div>
+ <label>${L('Konto','Account')}<select id="fAcc"><option value="">${L('Alle','All')}</option>${a.map(x=>`<option value="${x}"${x===S.account?' selected':''}>${x}</option>`).join('')}</select></label>
+ <label>${L('Eigener Kommandant','Own commander')}<select id="fHero"><option value="">${L('Alle','All')}</option>${h.map(x=>`<option value="${x.id}"${String(x.id)===String(S.hero)?' selected':''}>${esc(x.name)}</option>`).join('')}</select></label>
+ ${pv?`<label>${L('Gegner (Name)','Enemy (name)')}<input id="fQ" value="${esc(S.q)}" placeholder="Name"></label><label>${L('Gegner-Allianz','Enemy alliance')}<input id="fAb" value="${esc(S.abbr)}" placeholder="Tag"></label>
+ <label>${L('Gruppieren','Group by')}<select id="fGr"><option value="tour"${S.group==='tour'?' selected':''}>${L('Tour','Tour')}</option><option value="pair"${S.group==='pair'?' selected':''}>${L('Kommandanten-Paar','Commander pair')}</option></select></label>`:''}
+ <button class="btn" id="fReset">${L('Filter zurücksetzen','Reset filters')}</button>`}
+const ratio=(v)=>v==null?'–':`<span class="${v>=1?'good':'bad'}">${v.toFixed(2)}</span>`;
+function pvp(d){
+ const t=d.totals||{};
+ let h=`<div class="sum"><div class="kpi"><small>${L('Touren','Tours')}</small><b>${f(d.n_tours)}</b></div><div class="kpi"><small>${L('Kämpfe','Battles')}</small><b>${f(t.battles||0)}</b></div>
+ <div class="kpi"><small>${L('Kill Points (du)','Kill points (you)')}</small><b class="good">${f(t.kp_gained||0)}</b></div><div class="kpi"><small>${L('Kill Points (Gegner)','Kill points (enemy)')}</small><b class="bad">${f(t.kp_lost||0)}</b></div>
+ <div class="kpi"><small>KP ratio</small><b>${ratio(t.kpr)}</b></div><div class="kpi"><small>${L('Tote (du / Gegner)','Dead (you / enemy)')}</small><b>${f(t.own_dead||0)} / ${f(t.enemy_dead||0)}</b></div></div>`;
+ if(!d.tours.length)return h+`<div class="empty">${L('Keine Kämpfe in dieser Auswahl. Zeitraum oder Filter ändern.','No battles for this selection. Change the range or filters.')}</div>`+note();
+ if(S.group==='pair'){
+  h+=`<div class="card sc"><h3>${L('Nach Kommandanten-Paar','By commander pair')}</h3><table><tr><th>${L('Kommandanten','Commanders')}</th><th>${L('Touren','Tours')}</th><th>${L('Kämpfe','Battles')}</th><th>KP ratio</th><th>${L('Tote-Ratio','Dead ratio')}</th><th>${L('Kill Points','Kill points')}<br>${L('du / Gegner','you / enemy')}</th><th>${L('Verwundet','Wounded')}<br>${L('du / Gegner','you / enemy')}</th><th>${L('Tote','Dead')}<br>${L('du / Gegner','you / enemy')}</th></tr>`+
+   d.groups.map(g=>`<tr><td>${esc(g.hero1||'–')} + ${esc(g.hero2||'–')}</td><td class="num">${f(g.tours)}</td><td class="num">${f(g.battles)}</td><td class="num">${ratio(g.kpr)}</td><td class="num">${ratio(g.deadr)}</td><td class="num"><span class="good">${f(g.kp_gained)}</span><span class="ea">${f(g.kp_lost)}</span></td><td class="num">${f(g.own_severe+g.own_hurt)}<span class="ea">${f(g.enemy_severe+g.enemy_hurt)}</span></td><td class="num">${f(g.own_dead)}<span class="ea">${f(g.enemy_dead)}</span></td></tr>`).join('')+`</table></div>`+note();return h}
+ if(!S.sel||!d.tours.some(x=>x.id===S.sel))S.sel=d.tours[0].id;
+ const x=d.tours.find(z=>z.id===S.sel);
+ h+=`<div class="split"><div class="list"><h3><span>${L('Touren','Tours')}</span><span class="mute">${f(d.n_tours)}${d.n_tours>d.tours.length?' ('+L('neueste ','latest ')+d.tours.length+')':''}</span></h3>`+
+  d.tours.map(z=>`<button type="button" class="tour ${z.id===S.sel?'on':''}" data-t="${z.id}"><div class="t1"><b>${esc(z.hero1||'–')}${z.hero2?' + '+esc(z.hero2):''}</b><span class="badge ${z.kpr!=null&&z.kpr>=1?'good':'bad'}">${z.kpr==null?'–':z.kpr.toFixed(2)}</span></div><div class="t2">${z.time} · ${z.battles} ${L('Kämpfe','battles')} · ${esc(z.enemies.slice(0,2).join(', '))}${z.enemies.length>2?' +'+(z.enemies.length-2):''}</div></button>`).join('')+`</div><div>`;
+ const row=(m,a,b,lossy)=>{const net=lossy?b-a:a-b;return `<tr><td>${m}</td><td class="num">${f(a)}</td><td class="num">${f(b)}</td><td class="num ${net>0?'good':net<0?'bad':''}">${net>0?'+':''}${f(net)}</td></tr>`};
+ h+=`<div class="two"><div class="card"><h3>${L('Bericht-Daten','Report data')}</h3><table><tr><td>${L('Zeitraum','Time range')}</td><td class="num">${x.time} – ${x.time_end}</td></tr><tr><td>${L('Konto','Account')}</td><td class="num">${esc(x.account)}</td></tr><tr><td>${L('Primärer Kommandant','Primary commander')}</td><td>${esc(x.hero1||'–')}</td></tr><tr><td>${L('Sekundärer Kommandant','Secondary commander')}</td><td>${esc(x.hero2||'–')}</td></tr><tr><td>${L('Kämpfe','Battles')}</td><td class="num">${x.battles}</td></tr></table></div>
+ <div class="card sc"><h3>${L('Bilanz der Tour','Tour trades')}</h3><table><tr><th>${L('Wert','Metric')}</th><th>${L('Du','You')}</th><th>${L('Gegner','Enemy')}</th><th>${L('Bilanz / Netto','Trade / net')}</th></tr>
+ ${row(L('Kill Points','Kill points'),x.kp_gained,x.kp_lost,false)}${row(L('Tote','Dead'),x.own_dead,x.enemy_dead,true)}${row(L('Schwer verwundet','Severely wounded'),x.own_severe,x.enemy_severe,true)}${row(L('Leicht verwundet','Slightly wounded'),x.own_hurt,x.enemy_hurt,true)}${row(L('Verluste gesamt','Total losses'),x.own_dead+x.own_severe,x.enemy_dead+x.enemy_severe,true)}</table></div></div>
+ <div class="card sc"><h3>${L('Einzelne Kämpfe','Individual battles')}</h3><table><tr><th>${L('Zeit','Time')}</th><th>${L('Gegner','Enemy')}</th><th>${L('Gegner-Kommandanten','Enemy commanders')}</th><th>${L('KP du','KP you')}</th><th>${L('KP Gegner','KP enemy')}</th><th>${L('Tote du / Gegner','Dead you / enemy')}</th><th>${L('Schwer verw. du / Gegner','Severe you / enemy')}</th></tr>`+
+ x.rounds.map(r=>`<tr><td class="num">${r.time}</td><td>${esc(r.foe)}</td><td>${esc(r.eh1||'–')}${r.eh2?' + '+esc(r.eh2):''}</td><td class="num good">${f(r.kp)}</td><td class="num bad">${f(r.kpl)}</td><td class="num">${f(r.dead)} / ${f(r.edead)}</td><td class="num">${f(r.severe)} / ${f(r.esevere)}</td></tr>`).join('')+`</table></div></div></div>`;
+ return h+note()}
+function note(){return `<p class="note">${L('Field = du greifst allein an, Rally = du startest oder trittst bei, Garrison = du verteidigst. Ark of Osiris ist ausgenommen. Eine Tour sind aufeinanderfolgende Kämpfe desselben Kontos mit höchstens 5 Minuten Abstand.','Field = you attack alone, Rally = you host or join, Garrison = you defend. Ark of Osiris is excluded. A tour is consecutive battles of one account within 5 minutes of each other.')}</p>`}
+const KL={gems:'Gems',speed_training:L('Training','Training'),speed_universal:'Universal',speed_healing:'Healing',food:'Food',wood:'Wood',stone:'Stone',gold:'Gold',xp_books:'Exp'};
+function barbs(d){
+ const ks=d.kinds,tot=d.total;
+ if(!tot.n)return `<div class="empty">${L('Keine Barbaren in dieser Auswahl.','No barbarians for this selection.')}</div>`;
+ const cell=(v,n)=>v?`<td class="num">${f(Math.round(v))}<span class="ea">ea: ${(v/n).toLocaleString(LANG==='en'?'en-US':'de-DE',{minimumFractionDigits:2,maximumFractionDigits:2})}</span></td>`:`<td class="num mute">0<span class="ea">ea: 0,00</span></td>`;
+ let h=`<div class="tabs2"><button class="btn" id="bAll">${L('Alle aufklappen','Expand all')}</button><button class="btn" id="bNone">${L('Alle einklappen','Collapse all')}</button></div><div class="card sc"><table id="bt"><tr><th class="l">NPC</th><th>${L('Anzahl','Count')}</th>${ks.map(k=>`<th>${KL[k]}${k.startsWith('speed')?' (min)':''}</th>`).join('')}</tr>`;
+ h+=`<tr class="tot"><td class="l">Total</td><td class="num">${f(tot.n)}</td>${ks.map(k=>cell(tot.tot[k]||0,tot.n)).join('')}</tr>`;
+ d.groups.forEach(g=>{const o=S.open[g.label];
+  h+=`<tr class="g" data-g="${g.label}"><td class="l">${o?'▾':'▸'} Barb lvl ${g.label}</td><td class="num">${f(g.n)}</td>${ks.map(k=>cell(g.tot[k]||0,g.n)).join('')}</tr>`;
+  if(o)g.levels.forEach(l=>h+=`<tr class="c"><td class="l">barb ${l.lvl}</td><td class="num">${f(l.n)}</td>${ks.map(k=>cell(l.tot[k]||0,l.n)).join('')}</tr>`)});
+ return h+`</table></div><p class="note">${L('Beute aus Barbaren-Lagern (ohne Festungen), in Einzelstücken beziehungsweise Minuten. „ea" ist der Durchschnitt pro Barbar.','Loot from barbarian camps (no forts), in single units or minutes. "ea" is the average per barbarian.')}</p>`}
+function render(){tabs();flt();const o=$('out');
+ if(!D){o.innerHTML='';return}
+ if(S.cat==='gathering'){o.innerHTML=`<div class="empty"><b>Gathering</b><br>${L('Sammel-Berichte werden vom Tracker noch nicht gelesen. Dafür brauche ich ein Beispiel einer echten Sammel-Mail aus dem Mail-Ordner.','Gathering reports are not read by the tracker yet. I need a sample of a real gathering mail from the mail folder.')}</div>`;return}
+ o.innerHTML=S.cat==='barbs'?barbs(D):pvp(D)}
+async function load(){const id=++seq,u=`/api/v2?cat=${S.cat}&from=${S.from}&to=${S.to}&account=${encodeURIComponent(S.account)}&q=${encodeURIComponent(S.q)}&abbr=${encodeURIComponent(S.abbr)}&hero=${S.hero||0}`;
+ try{const d=await fetch(u).then(r=>r.json());if(id!==seq)return;D=d;render()}catch(e){$('out').innerHTML='<div class="empty">Fehler beim Laden.</div>'}}
+$('tabs').onclick=e=>{const b=e.target.closest('button');if(!b)return;S.cat=b.dataset.c;S.sel='';save();D=null;tabs();flt();load()};
+let tq=0;
+$('flt').addEventListener('input',e=>{const t=e.target;if(t.id==='fQ'){S.q=t.value}else if(t.id==='fAb'){S.abbr=t.value}else return;clearTimeout(tq);tq=setTimeout(load,350)});
+$('flt').addEventListener('change',e=>{const t=e.target,m={fFrom:'from',fTo:'to',fAcc:'account',fHero:'hero',fGr:'group'}[t.id];if(!m)return;S[m]=t.value;if(m==='group')save();if(m==='group'){render()}else load()});
+$('flt').addEventListener('click',e=>{const b=e.target.closest('button');if(!b)return;if(b.dataset.r!==undefined){const n=+b.dataset.r;S.from=n?ago(n):'2000-01-01';S.to=iso(new Date());load();flt()}
+ if(b.id==='fReset'){Object.assign(S,{q:'',abbr:'',hero:'',account:'',from:ago(30),to:iso(new Date())});load();flt()}});
+$('out').addEventListener('click',e=>{const t=e.target.closest('.tour');if(t){S.sel=t.dataset.t;render();return}
+ const g=e.target.closest('tr.g');if(g){S.open[g.dataset.g]=!S.open[g.dataset.g];render();return}
+ if(e.target.id==='bAll'){D.groups.forEach(g=>S.open[g.label]=true);render()}if(e.target.id==='bNone'){S.open={};render()}});
+tabs();flt();load();setInterval(()=>{if(!document.hidden)load()},30000);
+</script></body></html>"""
+
+
 def make_handler(db, watcher):
     class H(BaseHTTPRequestHandler):
         def log_message(self, *a): pass
@@ -2788,6 +3016,14 @@ def make_handler(db, watcher):
                 self.send(SETTINGS_PAGE, "text/html")
             elif u.path in ("/allianz", "/allianz/"):
                 self.send(ALLIANCE_PAGE, "text/html")
+            elif u.path in ("/v2", "/v2/", "/analyse"):
+                self.send(V2_PAGE, "text/html")
+            elif u.path == "/api/v2":
+                q = parse_qs(u.query)
+                g = lambda k, d="": q.get(k, [d])[0]
+                gi = lambda k: int(g(k)) if g(k).lstrip("-").isdigit() else 0
+                self.send(json.dumps(db.v2(g("cat", "field"), g("from", "2000-01-01"), g("to", "2100-01-01"), g("account"),
+                                           dict(q=g("q"), abbr=g("abbr"), hero=gi("hero"), ehero=gi("ehero")))), "application/json")
             elif u.path == "/allianz/export":
                 lang = parse_qs(u.query).get("lang", ["de"])[0]
                 data = alliance_export_html(db, lang).encode("utf-8")
