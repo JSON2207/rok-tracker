@@ -847,10 +847,12 @@ def mit_fenster():
         if launcher and launcher_neu_starten():
             ui(lambda: (log(TR("Launcher aktualisiert, startet neu", "Launcher updated, restarting")), root.destroy()))
 
-    def start_und_oeffnen(ziel="", seite=""):
+    def start_und_oeffnen(ziel="", seite="", oeffnen=True):
         melden(TR("Starte Tracker ...", "Starting tracker ..."))
         ok, fehler = tracker_starten()
-        if ok:
+        if ok and not oeffnen:
+            melden(TR("Tracker laeuft neu. Offenes Fenster einfach aktualisieren (F5).", "Tracker is running again. Just refresh the open window (F5)."))
+        elif ok:
             browser_oeffnen(ziel, seite)
             melden(TR("Tracker laeuft. Browser geoeffnet.", "Tracker is running. Browser opened."))
         else:
@@ -862,7 +864,7 @@ def mit_fenster():
         if st["auto"]:
             update_ausfuehren()
         st["veraltet"] = False
-        start_und_oeffnen()
+        start_und_oeffnen(oeffnen=False)         # Neustart: kein neues Fenster, das offene einfach mit F5 aktualisieren
 
     def tracker_beenden():
         melden(TR("Beende Tracker ...", "Stopping tracker ..."))
