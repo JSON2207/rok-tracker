@@ -557,6 +557,7 @@ class DB:
         rows = [r for r in rows if (not q or q in (r["foe_name"] or "").lower()) and (not ab or ab in (r["foe_abbr"] or "").lower())
                 and (not hid or hid in (r["hero1"], r["hero2"])) and (not ehid or ehid in (r["ehero1"], r["ehero2"]))]
         hn = lambda h: (HEROES.get(h, "#%d" % h) if h else "")
+        names = {r["account"]: r["n"] for r in self.q("SELECT account, MAX(CASE WHEN acc_name<>'' THEN acc_name END) n FROM reports GROUP BY account")}
         tours, cur = [], None
         for r in rows:
             if cur and cur["account"] == r["account"] and r["ts"] - cur["end"] <= self.PVP_GAP:
@@ -579,6 +580,7 @@ class DB:
             t["time_end"] = datetime.fromtimestamp(t["end"]).strftime("%H:%M:%S")
             h1, h2 = rs[0]["hero1"], rs[0]["hero2"]
             t["hero1"], t["hero2"] = hn(h1), hn(h2)
+            t["account_name"] = names.get(t["account"]) or t["account"]
             fin(t, rs)
             t["enemies"] = sorted({("[%s] " % r["foe_abbr"] if r["foe_abbr"] else "") + (r["foe_name"] or "?") for r in rs})
             t["rounds"] = [dict(time=datetime.fromtimestamp(r["ts"]).strftime("%H:%M:%S"), foe=("[%s] " % r["foe_abbr"] if r["foe_abbr"] else "") + (r["foe_name"] or "?"),
@@ -2679,7 +2681,7 @@ function flt(){const a=(D&&D.accounts)||[],h=(D&&D.heroes)||[];
  <label>${L('Gegner','Enemy')}<input id="fQ" value="${esc(S.q)}" placeholder="Name"></label><label>${L('Gegner-Allianz','Enemy alliance')}<input id="fAb" value="${esc(S.abbr)}" placeholder="ABC"></label>
  <label>${L('Gruppieren','Group by')}<select id="fGr"><option value="tour"${S.group==='tour'?' selected':''}>Tour</option><option value="pair"${S.group==='pair'?' selected':''}>${L('Kommandanten-Paar','Commander pair')}</option></select></label>`}
 function card(r,x,side){const you=side==='you';
- const name=you?esc(x.account):esc(r.foe),hs=you?[x.hero1,x.hero2]:[r.eh1,r.eh2];
+ const name=you?esc(x.account_name||x.account):esc(r.foe),hs=you?[x.hero1,x.hero2]:[r.eh1,r.eh2];
  const rows=you?[[L('Einheiten','Units'),r.troops],[L('Tote','Dead'),r.dead,'bad'],[L('Schwer verwundet','Severely wounded'),r.severe,'bad'],[L('Leicht verwundet','Slightly wounded'),r.hurt],[L('Kill Points','Kill points'),r.kp,'y']]
   :[[L('Einheiten','Units'),r.etroops],[L('Tote','Dead'),r.edead,'bad'],[L('Schwer verwundet','Severely wounded'),r.esevere,'bad'],[L('Leicht verwundet','Slightly wounded'),r.ehurt],[L('Kill Points','Kill points'),r.kpl,'y']];
  return `<div><h4>${name}</h4><div class="hs">${hs.filter(Boolean).map(esc).join(' + ')||'–'}</div><table>${rows.map(z=>`<tr><td>${z[0]}</td><td class="num ${z[2]||''}">${f(z[1])}</td></tr>`).join('')}</table></div>`}
@@ -2696,7 +2698,7 @@ function body(){
  h+=`<div class="rsplit"><div class="rl"><h3><span>Reports</span><span class="mute">${f(D.n_tours)} ${L('Touren','tours')}</span></h3>`+
  D.tours.map(z=>`<button type="button" class="ti ${z.id===S.sel?'on':''}" data-t="${z.id}"><div class="a"><span>${esc(z.hero1||'–')}${z.hero2?' + '+esc(z.hero2):''}</span><span class="pill ${z.kpr!=null&&z.kpr>=1?'g':'r'}">${z.kpr==null?'–':z.kpr.toFixed(2)}</span></div><div class="b">${z.time} · ${z.battles} ${L('Kämpfe','battles')} · ${esc(z.enemies.slice(0,2).join(', '))}${z.enemies.length>2?' +'+(z.enemies.length-2):''}</div></button>`).join('')+`</div><div>`;
  const row=(m,a,b,loss,c)=>{const n=loss?b-a:a-b;return `<tr><td>${m}</td><td class="num ${c||''}">${f(a)}</td><td class="num ${c||''}">${f(b)}</td><td class="num ${n>0?'good':n<0?'bad':''}">${n>0?'+':''}${f(n)}</td></tr>`};
- h+=`<div class="rp"><h3>TOUR SUMMARY</h3><h2>${esc(x.account)} · ${esc(x.hero1||'–')}${x.hero2?' + '+esc(x.hero2):''}</h2><div class="mute">${x.time} – ${x.time_end} · ${x.battles} ${L('Kämpfe','battles')}</div></div>
+ h+=`<div class="rp"><h3>TOUR SUMMARY</h3><h2>${esc(x.account_name||x.account)} · ${esc(x.hero1||'–')}${x.hero2?' + '+esc(x.hero2):''}</h2><div class="mute">${x.time} – ${x.time_end} · ${x.battles} ${L('Kämpfe','battles')}</div></div>
  <div class="r2"><div class="rp"><h3>${L('REPORT-DATEN','REPORT METADATA')}</h3><table><tr><td>${L('Umfang','Scope')}</td><td class="num">Tour</td></tr><tr><td>${L('Kämpfe','Battles')}</td><td class="num">${x.battles}</td></tr><tr><td>${L('Zeitraum','Time range')}</td><td class="num">${x.time}<br>${x.time_end}</td></tr><tr><td>${L('Primärer Kommandant','Primary commander')}</td><td>${esc(x.hero1||'–')}</td></tr><tr><td>${L('Sekundärer Kommandant','Secondary commander')}</td><td>${esc(x.hero2||'–')}</td></tr></table></div>
  <div class="rp"><h3>SUMMARY TRADES</h3><table><tr><th>${L('Wert','Metric')}</th><th>${L('Du','You')}</th><th>${L('Gegner','Enemy')}</th><th>Trade / Net</th></tr>${row(L('Kill Points','Kill points'),x.kp_gained,x.kp_lost,false,'y')}${row(L('Tote','Dead'),x.own_dead,x.enemy_dead,true,'bad')}${row(L('Schwer verwundet','Severely wounded'),x.own_severe,x.enemy_severe,true,'bad')}${row(L('Leicht verwundet','Slightly wounded'),x.own_hurt,x.enemy_hurt,true)}</table></div></div>`;
  x.rounds.forEach(r=>{h+=`<div class="rp"><div class="bh"><span>${r.time}</span><span>${esc(r.foe)}${r.castle?' · '+L('Burg','Castle')+' '+r.castle:''}</span></div><div class="bc">${card(r,x,'you')}${card(r,x,'foe')}</div></div>`});
