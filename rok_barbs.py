@@ -1467,15 +1467,15 @@ chips();B.classList.toggle('qpopen',S.open);pull();setInterval(pull,10000);docum
 PAGE = r"""<!doctype html><html lang="de"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1"><title>Barbaren-Tracker</title>
 <style>
-:root{--bg:#090d15;--card:#0f1623;--soft:#141d2e;--ink:#e8edf6;--mute:#8793a8;--line:#1f2b42;--dash:#31425f;--acc:#3b82f6;--accsoft:rgba(59,130,246,.16);--good:#34d399;--bad:#fb7185;--warn:#fbbf24;color-scheme:dark}
-@media(prefers-color-scheme:light){:root:not([data-theme="dark"]){--bg:#eef2f8;--card:#fff;--soft:#f2f5fb;--ink:#14213a;--mute:#5b6b86;--line:#dbe3f0;--dash:#c3cfe3;--acc:#2563eb;--accsoft:rgba(37,99,235,.10);--good:#0f9f6e;--bad:#d1405a;--warn:#b45309;color-scheme:light}}
-:root[data-theme="light"]{--bg:#eef2f8;--card:#fff;--soft:#f2f5fb;--ink:#14213a;--mute:#5b6b86;--line:#dbe3f0;--dash:#c3cfe3;--acc:#2563eb;--accsoft:rgba(37,99,235,.10);--good:#0f9f6e;--bad:#d1405a;--warn:#b45309;color-scheme:light}
+:root{--bg:#0a1411;--card:#11221c;--soft:#152b23;--ink:#dcebe4;--mute:#82a095;--line:#1f3a2f;--dash:#2c5242;--acc:#52c7a0;--accsoft:rgba(82,199,160,.16);--good:#34d399;--bad:#fb7185;--warn:#fbbf24;color-scheme:dark}
+@media(prefers-color-scheme:light){:root:not([data-theme="dark"]){--bg:#eaf4ef;--card:#fff;--soft:#f0f7f3;--ink:#12261e;--mute:#587267;--line:#d3e5db;--dash:#bcd6c8;--acc:#1f8f6c;--accsoft:rgba(31,143,108,.10);--good:#0f9f6e;--bad:#d1405a;--warn:#b45309;color-scheme:light}}
+:root[data-theme="light"]{--bg:#eaf4ef;--card:#fff;--soft:#f0f7f3;--ink:#12261e;--mute:#587267;--line:#d3e5db;--dash:#bcd6c8;--acc:#1f8f6c;--accsoft:rgba(31,143,108,.10);--good:#0f9f6e;--bad:#d1405a;--warn:#b45309;color-scheme:light}
 *{box-sizing:border-box}
-body{margin:0;color:var(--ink);font:15px/1.5 Inter,"Segoe UI",system-ui,sans-serif;min-height:100vh;background:radial-gradient(900px 420px at 12% -8%,rgba(59,130,246,.18),transparent 62%) no-repeat,radial-gradient(720px 360px at 98% 0,rgba(52,211,153,.09),transparent 60%) no-repeat,var(--bg);background-attachment:fixed}
+body{margin:0;color:var(--ink);font:15px/1.5 Inter,"Segoe UI",system-ui,sans-serif;min-height:100vh;background:radial-gradient(900px 420px at 12% -8%,rgba(82,199,160,.18),transparent 62%) no-repeat,radial-gradient(720px 360px at 98% 0,rgba(52,211,153,.09),transparent 60%) no-repeat,var(--bg);background-attachment:fixed}
 html{background:var(--bg)}
 main{max-width:var(--mw,1600px);margin-left:var(--ml,auto);margin-right:var(--mr,auto);padding:22px 16px 70px}
 .hero{display:grid;grid-template-columns:auto 1fr;gap:20px;padding:22px;border:1px solid var(--line);border-radius:20px;background:linear-gradient(135deg,var(--soft),var(--card));margin-bottom:14px;box-shadow:0 18px 40px -26px rgba(0,0,0,.7)}
-.av{width:88px;height:88px;border-radius:50%;padding:3px;background:conic-gradient(from 210deg,#3b82f6,#34d399,#fbbf24,#3b82f6);position:relative;cursor:pointer}
+.av{width:88px;height:88px;border-radius:50%;padding:3px;background:conic-gradient(from 210deg,#52c7a0,#34d399,#fbbf24,#52c7a0);position:relative;cursor:pointer}
 .av img{width:100%;height:100%;border-radius:50%;object-fit:cover;display:block}
 .av::after{content:"📷";position:absolute;inset:3px;border-radius:50%;display:grid;place-items:center;background:rgba(0,0,0,.55);font-size:1.5rem;opacity:0;transition:opacity .15s}
 .av:hover::after,.av:focus-visible::after{opacity:1}
@@ -2440,7 +2440,7 @@ function png(){const w=W,c=w.cur,cv=document.createElement('canvas');cv.width=10
  const kp=[[f(c.barbs),'Barbaren'],[f(c.chains),'Chains'],[c.chains?DEC((c.cbarbs/c.chains).toFixed(1)):'–','Ø pro Chain'],[f(c.series),'Serien'],[f(c.longest),'Längste Serie'],[f(c.forts),'Festungen']];
  kp.forEach((k,i)=>{const x=60+(i%3)*330,y=340+Math.floor(i/3)*150;g.fillStyle='#16203a';g.beginPath();g.roundRect(x,y,300,126,18);g.fill();g.fillStyle='#fff';g.font='bold 50px '+F;g.fillText(k[0],x+22,y+68);g.fillStyle='#8ea2c8';g.font='26px '+F;g.fillText(k[1],x+22,y+105)});
  const mx=Math.max(1,...w.days.map(d=>d.barbs));g.fillStyle='#fff';g.font='bold 34px '+F;g.fillText('Barbaren pro Tag',60,700);
- w.days.forEach((d,i)=>{const x=60+i*144,h=d.barbs?Math.max(6,d.barbs/mx*200):4;g.fillStyle=d.barbs?'#3b82f6':'#25304a';g.beginPath();g.roundRect(x,930-h,100,h,10);g.fill();g.fillStyle='#fff';g.font='bold 26px '+F;g.textAlign='center';if(d.barbs)g.fillText(d.barbs,x+50,920-h);g.fillStyle='#8ea2c8';g.font='24px '+F;g.fillText(WD[i],x+50,965);g.textAlign='left'});
+ w.days.forEach((d,i)=>{const x=60+i*144,h=d.barbs?Math.max(6,d.barbs/mx*200):4;g.fillStyle=d.barbs?'#52c7a0':'#25304a';g.beginPath();g.roundRect(x,930-h,100,h,10);g.fill();g.fillStyle='#fff';g.font='bold 26px '+F;g.textAlign='center';if(d.barbs)g.fillText(d.barbs,x+50,920-h);g.fillStyle='#8ea2c8';g.font='24px '+F;g.fillText(WD[i],x+50,965);g.textAlign='left'});
  g.fillStyle='#fff';g.font='bold 34px '+F;g.fillText('Beute',60,1040);const l=KL.filter(k=>c.loot[k[0]]).slice(0,6);g.font='23px '+F;
  l.forEach((k,i)=>{const x=60+(i%2)*500,y=1090+Math.floor(i/2)*56;g.fillStyle='#8ea2c8';g.fillText(k[2],x,y);g.fillStyle='#fff';g.textAlign='right';g.fillText(val(k[0],c.loot[k[0]],k[3]),x+440,y);g.textAlign='left'});
  const R=REC(w).slice(0,3);g.fillStyle='#fff';g.font='bold 34px '+F;g.fillText('Rekorde',60,1290);R.forEach((r,i)=>{g.fillStyle='#16203a';g.beginPath();g.roundRect(60+i*330,1315,300,130,18);g.fill();g.fillStyle='#8ea2c8';g.font='24px '+F;g.fillText(r[1],80+i*330,1355);g.fillStyle='#fff';g.font='bold 32px '+F;g.fillText(r[2],80+i*330,1400);g.fillStyle='#d4a72c';g.font='24px '+F;g.fillText(r[4][0]==='n'?'':r[4][1],80+i*330,1435)});
