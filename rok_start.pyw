@@ -163,9 +163,21 @@ def app_browser():
                 return os.path.join(t, rel)
     return None
 
+def einmal_browser():
+    try:
+        c = config_lesen()
+        if not c.get("browser_gewaehlt"):
+            c["app_fenster"] = False
+            c["browser_gewaehlt"] = True
+            config_schreiben(c)
+    except Exception:
+        pass
+
 def browser_oeffnen(ziel="", seite=""):
+    if not seite and not ziel and kanal_lesen() == "v2":
+        seite = "v2"                                   # Kanal v2: Start direkt auf der neuen Analyse-Seite
     url = URL + seite + (("#" + ziel) if ziel else "")
-    if config_lesen().get("app_fenster", True):
+    if config_lesen().get("app_fenster", False):
         exe = app_browser()
         if exe:
             try:
@@ -768,6 +780,7 @@ def mit_fenster():
         root.after(100, pump)
     root.report_callback_exception = lambda *a: log("Window error: " + "".join(traceback.format_exception(*a)))
 
+    einmal_browser()
     cfg = config_lesen()
     chat_url = cfg.get("chat_url") or CHAT_URL
     st = dict(busy=False, installiert=installierte_version(), neueste=None, laeuft=False, veraltet=False,
@@ -1002,7 +1015,7 @@ def mit_fenster():
         c["tray"] = st["tray"]
         config_schreiben(c)
     traywahl.trace_add("write", tray_geaendert)
-    appwahl = tk.BooleanVar(value=bool(cfg.get("app_fenster", True)))
+    appwahl = tk.BooleanVar(value=bool(cfg.get("app_fenster", False)))
     def app_geaendert(*a):
         c = config_lesen()
         c["app_fenster"] = bool(appwahl.get())
