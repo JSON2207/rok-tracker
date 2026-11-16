@@ -144,8 +144,28 @@ def tracker_starten():
         time.sleep(0.3)
     return False, TR("Das Programm hat sich beendet oder antwortet nicht. Siehe ", "The program has stopped or is not responding. See ") + TRACKER_LOG
 
+def app_browser():
+    """Pfad zu Edge oder Chrome (Windows) fuer das App-Fenster ohne Adressleiste, sonst None."""
+    if os.name != "nt":
+        return None
+    teile = [os.environ.get(k) for k in ("ProgramFiles(x86)", "ProgramFiles", "LocalAppData")]
+    for rel in (r"Microsoft\Edge\Application\msedge.exe", r"Google\Chrome\Application\chrome.exe"):
+        for t in teile:
+            if t and os.path.isfile(os.path.join(t, rel)):
+                return os.path.join(t, rel)
+    return None
+
 def browser_oeffnen(ziel="", seite=""):
-    webbrowser.open(URL + seite + (("#" + ziel) if ziel else ""))
+    url = URL + seite + (("#" + ziel) if ziel else "")
+    if config_lesen().get("app_fenster", True):
+        exe = app_browser()
+        if exe:
+            try:
+                subprocess.Popen([exe, "--app=" + url], close_fds=True)
+                return
+            except Exception as e:
+                log("App window failed: %s" % e)
+    webbrowser.open(url)
 
 # ---------------------------------------------------------------- Updates
 def installierte_version():
@@ -951,7 +971,7 @@ def mit_fenster():
         c["autoupdate"] = st["auto"]
         config_schreiben(c)
     autoupdate.trace_add("write", auto_geaendert)
-    Wf("upd", 90, 316, tk.Checkbutton(main, text=TR("Beim Neustart automatisch nach Updates suchen", "Check for updates automatically on restart"), variable=autoupdate, bg=C["card"], fg=C["mute"],
+    Wf("upd", 90, 310, tk.Checkbutton(main, text=TR("Beim Neustart automatisch nach Updates suchen", "Check for updates automatically on restart"), variable=autoupdate, bg=C["card"], fg=C["mute"],
                                       selectcolor=C["soft"], activebackground=C["card"], activeforeground=C["ink"], font=(FONT, 10),
                                       highlightthickness=0, bd=0))
     autowin = tk.BooleanVar(value=autostart_aktiv())
@@ -962,7 +982,7 @@ def mit_fenster():
         else:
             melden(TR("Autostart aktiviert. Der Launcher startet mit Windows und öffnet den Tracker im Hintergrund.", "Autostart enabled. The launcher starts with Windows and runs the tracker in the background.") if autowin.get() else TR("Autostart deaktiviert.", "Autostart disabled."))
     autowin.trace_add("write", autowin_geaendert)
-    Wf("upd", 90, 346, tk.Checkbutton(main, text=TR("Mit Windows starten (Tracker läuft dann im Hintergrund)", "Start with Windows (tracker then runs in the background)"), variable=autowin, bg=C["card"], fg=C["mute"],
+    Wf("upd", 90, 338, tk.Checkbutton(main, text=TR("Mit Windows starten (Tracker läuft dann im Hintergrund)", "Start with Windows (tracker then runs in the background)"), variable=autowin, bg=C["card"], fg=C["mute"],
                                       selectcolor=C["soft"], activebackground=C["card"], activeforeground=C["ink"], font=(FONT, 10),
                                       highlightthickness=0, bd=0, state="normal" if os.name == "nt" else "disabled"))
     traywahl = tk.BooleanVar(value=st["tray"])
@@ -972,13 +992,22 @@ def mit_fenster():
         c["tray"] = st["tray"]
         config_schreiben(c)
     traywahl.trace_add("write", tray_geaendert)
-    Wf("upd", 90, 376, tk.Checkbutton(main, text=TR("Beim Schließen (X) in den Infobereich neben der Uhr minimieren", "Minimize to the notification area next to the clock when closing (X)"), variable=traywahl, bg=C["card"], fg=C["mute"],
+    appwahl = tk.BooleanVar(value=bool(cfg.get("app_fenster", True)))
+    def app_geaendert(*a):
+        c = config_lesen()
+        c["app_fenster"] = bool(appwahl.get())
+        config_schreiben(c)
+    appwahl.trace_add("write", app_geaendert)
+    Wf("upd", 90, 394, tk.Checkbutton(main, text=TR("Tracker als App-Fenster öffnen (ohne Adressleiste, Edge oder Chrome)", "Open the tracker as an app window (no address bar, Edge or Chrome)"), variable=appwahl, bg=C["card"], fg=C["mute"],
+                                      selectcolor=C["soft"], activebackground=C["card"], activeforeground=C["ink"], font=(FONT, 10),
+                                      highlightthickness=0, bd=0, state="normal" if os.name == "nt" else "disabled"))
+    Wf("upd", 90, 366, tk.Checkbutton(main, text=TR("Beim Schließen (X) in den Infobereich neben der Uhr minimieren", "Minimize to the notification area next to the clock when closing (X)"), variable=traywahl, bg=C["card"], fg=C["mute"],
                                       selectcolor=C["soft"], activebackground=C["card"], activeforeground=C["ink"], font=(FONT, 10),
                                       highlightthickness=0, bd=0, state="normal" if os.name == "nt" else "disabled"))
     k_prot = Knopf(main, TR("PROTOKOLL", "LOG"), lambda: ordner_oeffnen(DATA) if not os.path.exists(LOG) else
                    (os.startfile(LOG) if os.name == "nt" else None), klein=True, bg=C["card"])
-    Wf("upd", 92, 418, k_prot)
-    Wf("upd", 92 + int(k_prot.cget("width")) + 10, 418, Knopf(main, TR("DATENORDNER", "DATA FOLDER"), lambda: ordner_oeffnen(DATA), klein=True, bg=C["card"]))
+    Wf("upd", 92, 428, k_prot)
+    Wf("upd", 92 + int(k_prot.cget("width")) + 10, 428, Knopf(main, TR("DATENORDNER", "DATA FOLDER"), lambda: ordner_oeffnen(DATA), klein=True, bg=C["card"]))
 
     menue.add_command(label=TR("Neu starten", "Restart"), command=lambda: arbeit(neu_starten, TR("Starte neu ...", "Restarting ...")))
     menue.add_command(label=TR("Nach Update suchen", "Check for updates"), command=lambda: arbeit(update_ausfuehren, TR("Suche nach Updates ...", "Checking for updates ...")))
