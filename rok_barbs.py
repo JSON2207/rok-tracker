@@ -133,6 +133,16 @@ def parse_mail(path):
 def _account(mail):
     return str(mail.get("receiver", "")).replace("player_", "")
 
+def _hinfo(d, sfx):
+    """Kommandanten-Daten einer Seite: Stufe, Sterne, Fertigkeiten (z. B. 5555) und Ausruestung."""
+    hid = int(d.get("HId" + sfx, 0) or 0)
+    if not hid:
+        return None
+    sk = d.get("HSS" + sfx) or {}
+    skills = "".join(str(int(v.get("SkillLevel", 0))) for _, v in sorted(sk.items(), key=lambda kv: float(kv[0]))) if isinstance(sk, dict) else ""
+    eq = [[int(a), int(b), int(c), int(e)] for a, b, c, e in re.findall(r"(\d+):(\d+)_(\d+):(\d+)", str(d.get("HEq" + sfx, "")))]
+    return dict(id=hid, lv=int(d.get("HLv" + sfx, 0) or 0), st=int(d.get("HSt" + sfx, 0) or 0), sk=skills, eq=eq)
+
 def extract_battle(mail):
     """Kampfbericht: Barbaren (Lager/Festung) und Spieler, solo oder Rally."""
     if mail.get("type") != "Battle":
@@ -164,7 +174,8 @@ def extract_battle(mail):
                 own_troops=int(d["Max"]), own_dead=int(d["Death"]), own_hurt=int(d["Hurt"]),
                 own_severe=int(d["BadHurt"]), enemy_troops=int(k["Max"]), enemy_dead=int(k["Death"]),
                 enemy_hurt=int(k["Hurt"]), enemy_severe=int(k["BadHurt"]), mode=str(c.get("Role", "")),
-                kp_gained=int(d["KillScore"]), kp_lost=int(k["KillScore"]), power=int(d["Power"])))
+                kp_gained=int(d["KillScore"]), kp_lost=int(k["KillScore"]), power=int(d["Power"]),
+                hinfo=json.dumps(dict(me=[h for h in (_hinfo(me, ""), _hinfo(me, "2")) if h], foe=[h for h in (_hinfo(foe, ""), _hinfo(foe, "2")) if h]))))
     if not battles and not pvp:
         return None
     try:        # Startzeit des Marsches steht in der Marsch-Kennung (<Spieler>_<Sekunden>_..)
@@ -212,7 +223,7 @@ def extract(mail):
 
 # ---------------------------------------------------------------- Datenbank
 class DB:
-    VERSION = 7
+    VERSION = 8
 
     def __init__(self, path):
         self.lock = threading.Lock()
@@ -263,11 +274,13 @@ class DB:
             self.c.execute("ALTER TABLE battles ADD COLUMN hero2 INT")
         except sqlite3.OperationalError:
             pass
-        for col in ("hero1 INT", "hero2 INT", "ehero1 INT", "ehero2 INT"):
+        for col in ("hero1 INT", "hero2 INT", "ehero1 INT", "ehero2 INT", "hinfo TEXT"):
             try:
                 self.c.execute("ALTER TABLE pvp ADD COLUMN " + col)
             except sqlite3.OperationalError:
                 pass
+        if self.c.execute("PRAGMA user_version").fetchone()[0] < 8:
+            self.c.execute("DELETE FROM processed")         # Kommandanten-Details (Stufe, Fertigkeiten, Ausruestung) einmal nachtragen
         if self.c.execute("PRAGMA user_version").fetchone()[0] < 7:
             self.c.execute("DELETE FROM processed")         # Version 6: alle Dateien einmal lesen, um den zweiten Kommandanten nachzutragen (nichts wird geloescht)
         if self.c.execute("PRAGMA user_version").fetchone()[0] < 5:
@@ -317,11 +330,11 @@ class DB:
             if self.c.execute("SELECT 1 FROM reports WHERE mail_id=?", (r["mail_id"],)).fetchone():
                 if r["kind"] == "battle" and r.get("hero2") is not None:     # zweiten Kommandanten bei alten Berichten nachtragen
                     self.c.execute("UPDATE battles SET hero2=? WHERE mail_id=? AND hero2 IS NULL", (r["hero2"], r["mail_id"]))
-                    ids = [x[0] for x in self.c.execute("SELECT id FROM pvp WHERE mail_id=? AND hero1 IS NULL ORDER BY id", (r["mail_id"],))]
+                    ids = [x[0] for x in self.c.execute("SELECT id FROM pvp WHERE mail_id=? AND (hero1 IS NULL OR hinfo IS NULL) ORDER BY id", (r["mail_id"],))]
                     if ids and len(ids) == len(r["pvp"]):
                         for i, x in zip(ids, r["pvp"]):
-                            self.c.execute("UPDATE pvp SET hero1=?, hero2=?, ehero1=?, ehero2=? WHERE id=?",
-                                           (r["hero1"], r["hero2"], x.get("ehero1"), x.get("ehero2"), i))
+                            self.c.execute("UPDATE pvp SET hero1=?, hero2=?, ehero1=?, ehero2=?, hinfo=? WHERE id=?",
+                                           (r["hero1"], r["hero2"], x.get("ehero1"), x.get("ehero2"), x.get("hinfo"), i))
                     self.c.commit()
                 return False
             self.c.execute("INSERT INTO reports VALUES(?,?,?,?,?)", (r["mail_id"], r["ts"], day, acc, r.get("acc_name", "")))
@@ -341,11 +354,11 @@ class DB:
                     self.c.execute(
                         "INSERT INTO pvp(mail_id,ts,day,account,role,parts,foe_name,foe_abbr,foe_castle,side,own_troops,"
                         "own_dead,own_hurt,own_severe,enemy_troops,enemy_dead,kp_gained,kp_lost,power,enemy_hurt,enemy_severe,mode,"
-                        "hero1,hero2,ehero1,ehero2) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+                        "hero1,hero2,ehero1,ehero2,hinfo) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
                         (r["mail_id"], r["ts"], day, acc, r["role"], r["parts"], x["foe_name"], x["foe_abbr"],
                          x["foe_castle"], x["side"], x["own_troops"], x["own_dead"], x["own_hurt"], x["own_severe"],
                          x["enemy_troops"], x["enemy_dead"], x["kp_gained"], x["kp_lost"], x["power"],
-                         x["enemy_hurt"], x["enemy_severe"], x["mode"], r["hero1"], r.get("hero2"), x.get("ehero1"), x.get("ehero2")))
+                         x["enemy_hurt"], x["enemy_severe"], x["mode"], r["hero1"], r.get("hero2"), x.get("ehero1"), x.get("ehero2"), x.get("hinfo")))
             elif r["kind"] == "fort":
                 cur = self.c.execute("INSERT INTO forts(mail_id,ts,day,account,level,x,y,pct,tier) VALUES(?,?,?,?,?,?,?,?,?)",
                                      (r["mail_id"], r["ts"], day, acc, r["level"], r["x"], r["y"], r["pct"], r["tier"]))
@@ -557,6 +570,12 @@ class DB:
         rows = [r for r in rows if (not q or q in (r["foe_name"] or "").lower()) and (not ab or ab in (r["foe_abbr"] or "").lower())
                 and (not hid or hid in (r["hero1"], r["hero2"])) and (not ehid or ehid in (r["ehero1"], r["ehero2"]))]
         hn = lambda h: (HEROES.get(h, "#%d" % h) if h else "")
+        def hinfo(js):
+            d = json.loads(js) if js else None
+            for side in (d or {}).values():
+                for h in side:
+                    h["name"] = hn(h["id"])
+            return d
         names = {r["account"]: r["n"] for r in self.q("SELECT account, MAX(CASE WHEN acc_name<>'' THEN acc_name END) n FROM reports GROUP BY account")}
         tours, cur = [], None
         for r in rows:
@@ -586,7 +605,7 @@ class DB:
             t["rounds"] = [dict(time=datetime.fromtimestamp(r["ts"]).strftime("%H:%M:%S"), foe=("[%s] " % r["foe_abbr"] if r["foe_abbr"] else "") + (r["foe_name"] or "?"),
                                 castle=r["foe_castle"], eh1=hn(r["ehero1"]), eh2=hn(r["ehero2"]), kp=r["kp_gained"] or 0, kpl=r["kp_lost"] or 0,
                                 dead=r["own_dead"] or 0, edead=r["enemy_dead"] or 0, severe=r["own_severe"] or 0, esevere=r["enemy_severe"] or 0,
-                                troops=r["own_troops"] or 0, etroops=r["enemy_troops"] or 0, hurt=r["own_hurt"] or 0, ehurt=r["enemy_hurt"] or 0) for r in rs]
+                                hi=hinfo(r.get("hinfo")), troops=r["own_troops"] or 0, etroops=r["enemy_troops"] or 0, hurt=r["own_hurt"] or 0, ehurt=r["enemy_hurt"] or 0) for r in rs]
             out.append(t)
             g = groups.setdefault((h1, h2), dict(hero1=hn(h1), hero2=hn(h2), tours=0, rows=[]))
             g["tours"] += 1; g["rows"].extend(rs)
@@ -2651,6 +2670,7 @@ REPORTS_PAGE = r"""<!doctype html><html lang="de"><head><meta charset="utf-8">
 .bc{display:grid;grid-template-columns:1fr 1fr;gap:14px}.bc>div{border:1px solid var(--line);border-radius:14px;background:var(--soft);padding:12px 14px;min-width:0}
 .bc h4{margin:0 0 6px;font-size:.95rem;overflow-wrap:anywhere}.bc .hs{color:var(--mute);font-size:.82rem;margin-bottom:6px}
 .bc table td,.bc table th{padding:5px 0;border-bottom:1px solid var(--line)}.bc table tr:last-child td{border:0}
+.hbx{display:flex;flex-wrap:wrap;gap:10px;margin:2px 0 8px}.hb{border:1px solid var(--line);border-radius:12px;padding:8px 10px;min-width:150px;flex:1}.hp{display:flex;align-items:center;gap:8px}.hp img{width:38px;height:38px;border-radius:10px;object-fit:cover;background:var(--card)}.hm{color:var(--mute);font-size:.8rem;margin:4px 0}.eq{display:flex;flex-wrap:wrap;gap:4px}.eqi{position:relative;display:inline-flex;align-items:flex-end;justify-content:flex-end;min-width:30px;height:30px;border:1px solid var(--line);border-radius:8px;background:var(--card);font-size:.7rem;overflow:hidden}.eqi img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover}.eqi em{position:absolute;left:3px;top:2px;font-style:normal;color:var(--mute);font-size:.62rem}.eqi i{position:relative;font-style:normal;padding:0 3px;background:rgba(0,0,0,.55);color:#fff;border-radius:6px 0 0 0}
 .bh{display:flex;flex-wrap:wrap;justify-content:space-between;color:var(--mute);font-size:.82rem;margin-bottom:8px;gap:6px}
 .good{color:var(--good)}.bad{color:var(--bad)}.mute{color:var(--mute)}.y{color:#d9a21b}.o{color:#e4863b}
 @media(max-width:900px){.rsplit,.r2,.bc{grid-template-columns:1fr}.rl{max-height:40vh}}
@@ -2680,15 +2700,16 @@ function flt(){const a=(D&&D.accounts)||[],h=(D&&D.heroes)||[];
  <label>${L('Eigener Kommandant','Own commander')}<select id="fHero"><option value="">${L('Alle','All')}</option>${h.map(x=>`<option value="${x.id}"${String(x.id)===String(S.hero)?' selected':''}>${esc(x.name)}</option>`).join('')}</select></label>
  <label>${L('Gegner','Enemy')}<input id="fQ" value="${esc(S.q)}" placeholder="Name"></label><label>${L('Gegner-Allianz','Enemy alliance')}<input id="fAb" value="${esc(S.abbr)}" placeholder="ABC"></label>
  <label>${L('Gruppieren','Group by')}<select id="fGr"><option value="tour"${S.group==='tour'?' selected':''}>Tour</option><option value="pair"${S.group==='pair'?' selected':''}>${L('Kommandanten-Paar','Commander pair')}</option></select></label>`}
-function card(r,x,side){const you=side==='you';
+function card(r,x,side){const you=side==='you',hl=(r.hi&&(you?r.hi.me:r.hi.foe))||[];
  const name=you?esc(x.account_name||x.account):esc(r.foe),hs=you?[x.hero1,x.hero2]:[r.eh1,r.eh2];
  const rows=you?[[L('Einheiten','Units'),r.troops],[L('Tote','Dead'),r.dead,'bad'],[L('Schwer verwundet','Severely wounded'),r.severe,'bad'],[L('Leicht verwundet','Slightly wounded'),r.hurt],[L('Kill Points','Kill points'),r.kp,'y']]
   :[[L('Einheiten','Units'),r.etroops],[L('Tote','Dead'),r.edead,'bad'],[L('Schwer verwundet','Severely wounded'),r.esevere,'bad'],[L('Leicht verwundet','Slightly wounded'),r.ehurt],[L('Kill Points','Kill points'),r.kpl,'y']];
- return `<div><h4>${name}</h4><div class="hs">${hs.filter(Boolean).map(esc).join(' + ')||'–'}</div><table>${rows.map(z=>`<tr><td>${z[0]}</td><td class="num ${z[2]||''}">${f(z[1])}</td></tr>`).join('')}</table></div>`}
+ const hb=hl.length?`<div class="hbx">${hl.map(h=>`<div class="hb"><div class="hp"><img src="/icon/hero_${h.id}" alt="" onerror="this.style.display='none'"><b>${esc(h.name)}</b></div><div class="hm"><span class="y">${h.sk||''}</span> · Lv ${h.lv} · ★${h.st}</div><div class="eq">${h.eq.map(e=>`<span class="eqi" title="${L('Ausrüstung','Equipment')} ${e[1]}"><em>${String(e[1]).slice(-3)}</em><img src="/icon/equip_${e[1]}" alt="" onerror="this.style.display='none'"><i>${e[3]}</i></span>`).join('')}</div></div>`).join('')}</div>`:`<div class="hs">${hs.filter(Boolean).map(esc).join(' + ')||'–'}</div>`;
+ return `<div><h4>${name}</h4>${hb}<table>${rows.map(z=>`<tr><td>${z[0]}</td><td class="num ${z[2]||''}">${z[2]==='y'?'+':''}${f(z[1])}</td></tr>`).join('')}</table></div>`}
 function body(){
  const t=D.totals||{};
  let h=`<div class="rs"><div class="k"><b>${f(D.n_tours)}</b><span>${L('Touren','Tours')}</span></div><div class="k"><b>${f(t.battles||0)}</b><span>${L('Kämpfe','Battles')}</span></div>
- <div class="k"><b class="y">${f(t.kp_gained||0)}</b><span>${L('Kill Points (du)','Kill points (you)')}</span></div><div class="k"><b class="bad">${f(t.kp_lost||0)}</b><span>${L('Kill Points (Gegner)','Kill points (enemy)')}</span></div>
+ <div class="k"><b class="y">+${f(t.kp_gained||0)}</b><span>${L('Kill Points (du)','Kill points (you)')}</span></div><div class="k"><b class="bad">${f(t.kp_lost||0)}</b><span>${L('Kill Points (Gegner)','Kill points (enemy)')}</span></div>
  <div class="k"><b>${rt(t.kpr)}</b><span>KP ratio</span></div><div class="k"><b>${f(t.own_dead||0)} / ${f(t.enemy_dead||0)}</b><span>${L('Tote du / Gegner','Dead you / enemy')}</span></div></div>`;
  if(!D.tours.length)return h+`<div class="rp mute">${L('Keine Kämpfe in dieser Auswahl.','No battles for this selection.')}</div>`;
  if(S.group==='pair')return h+`<div class="rp"><h3>${L('Nach Kommandanten-Paar','By commander pair')}</h3><div style="overflow-x:auto"><table><tr><th>${L('Kommandanten','Commanders')}</th><th>Touren</th><th>${L('Kämpfe','Battles')}</th><th>KP ratio</th><th>${L('Tote-Ratio','Dead ratio')}</th><th>KP du</th><th>KP ${L('Gegner','enemy')}</th></tr>`+
@@ -2697,7 +2718,7 @@ function body(){
  const x=D.tours.find(z=>z.id===S.sel);
  h+=`<div class="rsplit"><div class="rl"><h3><span>Reports</span><span class="mute">${f(D.n_tours)} ${L('Touren','tours')}</span></h3>`+
  D.tours.map(z=>`<button type="button" class="ti ${z.id===S.sel?'on':''}" data-t="${z.id}"><div class="a"><span>${esc(z.hero1||'–')}${z.hero2?' + '+esc(z.hero2):''}</span><span class="pill ${z.kpr!=null&&z.kpr>=1?'g':'r'}">${z.kpr==null?'–':z.kpr.toFixed(2)}</span></div><div class="b">${z.time} · ${z.battles} ${L('Kämpfe','battles')} · ${esc(z.enemies.slice(0,2).join(', '))}${z.enemies.length>2?' +'+(z.enemies.length-2):''}</div></button>`).join('')+`</div><div>`;
- const row=(m,a,b,loss,c)=>{const n=loss?b-a:a-b;return `<tr><td>${m}</td><td class="num ${c||''}">${f(a)}</td><td class="num ${c||''}">${f(b)}</td><td class="num ${n>0?'good':n<0?'bad':''}">${n>0?'+':''}${f(n)}</td></tr>`};
+ const row=(m,a,b,loss,c)=>{const n=loss?b-a:a-b,pl=c==='y'?'+':'';return `<tr><td>${m}</td><td class="num ${c||''}">${pl}${f(a)}</td><td class="num ${c||''}">${pl}${f(b)}</td><td class="num ${n>0?'good':n<0?'bad':''}">${n>0?'+':''}${f(n)}</td></tr>`};
  h+=`<div class="rp"><h3>TOUR SUMMARY</h3><h2>${esc(x.account_name||x.account)} · ${esc(x.hero1||'–')}${x.hero2?' + '+esc(x.hero2):''}</h2><div class="mute">${x.time} – ${x.time_end} · ${x.battles} ${L('Kämpfe','battles')}</div></div>
  <div class="r2"><div class="rp"><h3>${L('REPORT-DATEN','REPORT METADATA')}</h3><table><tr><td>${L('Umfang','Scope')}</td><td class="num">Tour</td></tr><tr><td>${L('Kämpfe','Battles')}</td><td class="num">${x.battles}</td></tr><tr><td>${L('Zeitraum','Time range')}</td><td class="num">${x.time}<br>${x.time_end}</td></tr><tr><td>${L('Primärer Kommandant','Primary commander')}</td><td>${esc(x.hero1||'–')}</td></tr><tr><td>${L('Sekundärer Kommandant','Secondary commander')}</td><td>${esc(x.hero2||'–')}</td></tr></table></div>
  <div class="rp"><h3>SUMMARY TRADES</h3><table><tr><th>${L('Wert','Metric')}</th><th>${L('Du','You')}</th><th>${L('Gegner','Enemy')}</th><th>Trade / Net</th></tr>${row(L('Kill Points','Kill points'),x.kp_gained,x.kp_lost,false,'y')}${row(L('Tote','Dead'),x.own_dead,x.enemy_dead,true,'bad')}${row(L('Schwer verwundet','Severely wounded'),x.own_severe,x.enemy_severe,true,'bad')}${row(L('Leicht verwundet','Slightly wounded'),x.own_hurt,x.enemy_hurt,true)}</table></div></div>`;
