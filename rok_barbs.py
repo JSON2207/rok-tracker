@@ -2623,6 +2623,39 @@ ld();
 """ + _I18N + r"""</script></body></html>"""
 
 PAGE = PAGE.replace("@@QP@@", QP_BLOCK)
+# ---------------------------------------------------------------- v2: gemeinsamer Rahmen (obere Leiste statt Seitenleiste)
+_V2UI = r"""<style id="v2ui">
+.sb,.mbtn,#sbov{display:none!important}body.sbopen{padding-left:0!important}.qb{top:9px!important;right:12px!important}#v2top{padding-right:190px}
+body{background:radial-gradient(1200px 600px at 12% -10%,rgba(82,199,160,.14),transparent 60%) no-repeat,var(--bg)!important;font-family:"Segoe UI",system-ui,sans-serif}
+main{max-width:none!important;margin:0!important;padding:0 max(20px,4vw) 70px!important}
+#v2top{display:flex;flex-wrap:wrap;gap:8px 26px;align-items:center;padding:14px max(20px,4vw);border-bottom:1px solid var(--line);margin:0 calc(-1*max(20px,4vw)) 18px;background:var(--bg)}
+#v2top .brand{font-weight:700;letter-spacing:.02em;font-size:1.05rem}#v2top .brand span{color:var(--acc);font-weight:600;margin-left:6px}
+#v2top nav{display:flex;flex-wrap:wrap;gap:4px;flex:1}
+#v2top a{padding:7px 12px;border-radius:7px;color:var(--mute);text-decoration:none;display:inline-flex;gap:7px;align-items:center}#v2top a:hover{color:var(--ink);background:var(--soft)}
+#v2top a.cur{color:var(--acc);background:var(--accsoft)}#v2top .b{background:var(--acc);color:#04120d;border-radius:999px;font-size:.7rem;font-weight:700;padding:1px 7px}
+#v2top .ver{font:600 .7rem ui-monospace,Consolas,monospace;border:1px solid var(--acc);color:var(--acc);border-radius:4px;padding:2px 7px}
+.hero,.ah{border-radius:12px!important;background:var(--card)!important;box-shadow:none!important}
+.pane,.inact,details.rep,.card,.panel{border-radius:12px!important}
+.pane{background:var(--card)}
+.tabs{background:none!important;border:0!important;border-bottom:1px solid var(--line)!important;border-radius:0!important;padding:0!important;gap:4px!important}
+.tabs button{border-radius:0!important;border-bottom:3px solid transparent!important;padding:11px 20px!important;background:none!important;box-shadow:none!important}
+.tabs button.on{background:none!important;color:var(--acc)!important;border-bottom-color:var(--acc)!important;box-shadow:none!important}
+.tabs .on .cnt{background:var(--accsoft)!important;color:var(--acc)!important}
+.grid>*,.kc{border-radius:10px}
+th{background:var(--soft);text-transform:none;font-size:.78rem}
+td,.num,b{font-variant-numeric:tabular-nums}
+button,select,input{border-radius:7px!important}
+</style><script>
+(function(){const P=[["/","Loot-Tracker"],["/allianz","Allianz"],["/kvk1","KVK1"],["/kvk2","KVK2"],["/woche","Wochenbericht"],["/v2","Analyse"],["/kalender","Event-Kalender"],["/settings","Einstellungen"]],EN={"Allianz":"Alliance","Wochenbericht":"Weekly report","Analyse":"Analysis","Event-Kalender":"Event calendar","Einstellungen":"Settings"};
+document.addEventListener("DOMContentLoaded",function(){if(document.getElementById("v2top"))return;let en=false;try{en=localStorage.getItem("roklang")==="en"}catch(e){}
+const cur=(location.pathname.replace(/\/+$/,"")||"/"),h=document.createElement("header");h.id="v2top";
+h.innerHTML='<div class="brand">RoK Tracker<span>Analyse</span></div><nav>'+P.map(x=>'<a href="'+x[0]+'" class="'+(x[0]===cur?"cur":"")+'">'+(en&&EN[x[1]]||x[1])+(x[0]==="/settings"?'<b class="b" id="v2bd" hidden></b>':'')+'</a>').join("")+'</nav><span class="ver">v2</span>';
+const m=document.querySelector("main")||document.body;m.insertBefore(h,m.firstChild);
+const f=()=>fetch("/api/unk").then(r=>r.json()).then(u=>{const b=document.getElementById("v2bd");if(b){b.textContent=u.n;b.hidden=!u.n}}).catch(function(){});f();setInterval(f,30000)})})();
+</script>"""
+for _n in ("PAGE", "ALLIANCE_PAGE", "SETTINGS_PAGE", "KVK_PAGE", "WOCHE_PAGE", "CAL_PAGE", "KVK2_PAGE"):
+    globals()[_n] = globals()[_n].replace("</head>", _V2UI + "</head>", 1)
+
 ALLIANCE_PAGE = ALLIANCE_PAGE.replace("@@QP@@", QP_BLOCK)
 SETTINGS_PAGE = SETTINGS_PAGE.replace("@@QP@@", QP_BLOCK)
 KVK_PAGE = KVK_PAGE.replace("@@QP@@", QP_BLOCK)
@@ -2873,7 +2906,7 @@ V2_PAGE = r"""<!doctype html><html lang="de"><head><meta charset="utf-8">
 a{color:inherit;text-decoration:none}button,select,input{font:inherit;color:var(--ink)}
 .top{display:flex;flex-wrap:wrap;gap:14px 28px;align-items:center;padding:16px max(20px,4vw);border-bottom:1px solid var(--line)}
 .brand{font-weight:700;letter-spacing:.02em;font-size:1.05rem}.brand span{color:var(--acc);font-weight:600;margin-left:6px}.ver{font:600 .7rem var(--mono);border:1px solid var(--acc2);color:var(--acc);border-radius:4px;padding:2px 7px}
-.top nav{display:flex;gap:6px;flex:1}.top nav a{padding:7px 12px;border-radius:6px;color:var(--mute)}.top nav a:hover{color:var(--ink);background:var(--pan)}
+.top nav{display:flex;gap:6px;flex:1}.top nav a{padding:7px 12px;border-radius:6px;color:var(--mute)}.top nav a:hover{color:var(--ink);background:var(--pan)}.top nav a.cur{color:var(--acc);background:rgba(82,199,160,.16)}
 .wrap{padding:0 max(20px,4vw) 60px}
 .tabs{display:flex;gap:4px;margin:22px 0 0;border-bottom:1px solid var(--line);flex-wrap:wrap}.tabs button{background:none;border:0;border-bottom:3px solid transparent;padding:11px 22px;color:var(--mute);cursor:pointer;font-weight:600}.tabs button:hover{color:var(--ink)}.tabs button.on{color:var(--acc);border-bottom-color:var(--acc)}
 .flt{display:flex;flex-wrap:wrap;gap:12px 16px;align-items:flex-end;padding:18px 0;border-bottom:1px solid var(--line)}
@@ -2900,7 +2933,7 @@ td.num,.num{font-family:var(--mono)}.sc{overflow-x:auto}
 .tabs2{display:flex;gap:6px;margin:0 0 14px}
 @media(max-width:900px){.split,.two{grid-template-columns:1fr}.list{max-height:40vh}}
 </style></head><body>
-<header class="top"><div class="brand">RoK Tracker<span>Analyse</span></div><nav><a href="/" id="n1">Loot-Tracker</a><a href="/allianz" id="n2">Allianz</a><a href="/woche" id="n3">Wochenbericht</a><a href="/settings" id="n4">Einstellungen</a></nav><span class="ver">v2</span></header>
+<header class="top"><div class="brand">RoK Tracker<span>Analyse</span></div><nav><a href="/">Loot-Tracker</a><a href="/allianz">Allianz</a><a href="/kvk1">KVK1</a><a href="/kvk2">KVK2</a><a href="/woche">Wochenbericht</a><a href="/v2" class="cur">Analyse</a><a href="/kalender">Event-Kalender</a><a href="/settings">Einstellungen</a></nav><span class="ver">v2</span></header>
 <div class="wrap">
 <div class="tabs" id="tabs" role="tablist"></div>
 <div class="flt" id="flt"></div>
