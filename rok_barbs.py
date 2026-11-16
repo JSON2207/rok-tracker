@@ -192,6 +192,20 @@ def extract_fort_reward(mail):
                 level=int(m.group(1)), x=int(m.group(2)), y=int(m.group(3)),
                 pct=int(pct.group(1)) if pct else None, tier=int(tier.group(1)) if tier else None, loot=loot)
 
+GATHER_RES = {1: "Food", 2: "Wood", 3: "Stone", 4: "Gold", 8: "Gems"}
+
+def extract_gather(mail):
+    """Sammel-Bericht (Mail-Typ Rss): Ressourcenart, Stufe des Vorkommens und gesammelte Menge."""
+    if mail.get("type") != "Rss":
+        return None
+    c = mail.get("body", {}).get("content", {})
+    if not isinstance(c, dict) or "ResType" not in c:
+        return None
+    pos = c.get("Pos") or {}
+    return dict(kind="gather", mail_id=str(mail["id"]), ts=mail["time"] / 1e6, account=_account(mail),
+                rtype=int(c.get("ResType", 0)), level=int(c.get("Level", 0) or 0), amount=float(c.get("ResValue", 0) or 0),
+                x=int(pos.get("X", 0) or 0), y=int(pos.get("Y", 0) or 0))
+
 MAIL_NAME = re.compile(r"^persistent[._]mail[._]\d+", re.I)   # schließt MailBriefInfo aus
 DROP_KEYS = {"Udid", "Avatar", "AppUid", "CTK", "Idt", "receiver", "PId", "AId", "CId", "CtId"}
 
@@ -208,11 +222,11 @@ def extract(mail):
     box = mail.get("box")
     if box != "Report" and not (box == "Archive" and mail.get("prevBox") == "Report"):
         return None     # Favoriten zählen nur, wenn sie ursprünglich ein Bericht waren
-    return extract_battle(mail) or extract_fort_reward(mail)
+    return extract_battle(mail) or extract_fort_reward(mail) or extract_gather(mail)
 
 # ---------------------------------------------------------------- Datenbank
 class DB:
-    VERSION = 7
+    VERSION = 8
 
     def __init__(self, path):
         self.lock = threading.Lock()
@@ -224,6 +238,9 @@ class DB:
             for t in ("reports", "battles", "forts", "loot"):
                 self.c.execute("DROP TABLE IF EXISTS " + t)
         self.c.executescript("""
+        CREATE TABLE IF NOT EXISTS gather(id INTEGER PRIMARY KEY AUTOINCREMENT, mail_id TEXT, ts REAL, day TEXT, account TEXT,
+          rtype INT, level INT, amount REAL, x INT, y INT);
+        CREATE INDEX IF NOT EXISTS ix_g ON gather(day, account);
         CREATE TABLE IF NOT EXISTS reports(mail_id TEXT PRIMARY KEY, ts REAL, day TEXT, account TEXT, acc_name TEXT);
         CREATE TABLE IF NOT EXISTS battles(id INTEGER PRIMARY KEY AUTOINCREMENT, mail_id TEXT, ts REAL, day TEXT,
           account TEXT, role TEXT, parts INT, hero1 INT, foe_hid INT, foe_kind TEXT, foe_lvl INT, foe_troops INT,
@@ -253,7 +270,7 @@ class DB:
         DROP TABLE IF EXISTS others;
         DELETE FROM loot WHERE src NOT IN ('b','f');
         DELETE FROM reports WHERE mail_id NOT IN (SELECT mail_id FROM battles UNION SELECT mail_id FROM pvp
-                                                  UNION SELECT mail_id FROM forts);
+                                                  UNION SELECT mail_id FROM forts UNION SELECT mail_id FROM gather);
         """)
         try:
             self.c.execute("ALTER TABLE battles ADD COLUMN start REAL")
@@ -268,6 +285,8 @@ class DB:
                 self.c.execute("ALTER TABLE pvp ADD COLUMN " + col)
             except sqlite3.OperationalError:
                 pass
+        if self.c.execute("PRAGMA user_version").fetchone()[0] < 8:
+            self.c.execute("DELETE FROM processed")         # Version 8: Sammel-Berichte werden gelesen, alle Dateien einmal neu pruefen
         if self.c.execute("PRAGMA user_version").fetchone()[0] < 7:
             self.c.execute("DELETE FROM processed")         # Version 6: alle Dateien einmal lesen, um den zweiten Kommandanten nachzutragen (nichts wird geloescht)
         if self.c.execute("PRAGMA user_version").fetchone()[0] < 5:
@@ -346,6 +365,9 @@ class DB:
                          x["foe_castle"], x["side"], x["own_troops"], x["own_dead"], x["own_hurt"], x["own_severe"],
                          x["enemy_troops"], x["enemy_dead"], x["kp_gained"], x["kp_lost"], x["power"],
                          x["enemy_hurt"], x["enemy_severe"], x["mode"], r["hero1"], r.get("hero2"), x.get("ehero1"), x.get("ehero2")))
+            elif r["kind"] == "gather":
+                self.c.execute("INSERT INTO gather(mail_id,ts,day,account,rtype,level,amount,x,y) VALUES(?,?,?,?,?,?,?,?,?)",
+                               (r["mail_id"], r["ts"], day, acc, r["rtype"], r["level"], r["amount"], r["x"], r["y"]))
             elif r["kind"] == "fort":
                 cur = self.c.execute("INSERT INTO forts(mail_id,ts,day,account,level,x,y,pct,tier) VALUES(?,?,?,?,?,?,?,?,?)",
                                      (r["mail_id"], r["ts"], day, acc, r["level"], r["x"], r["y"], r["pct"], r["tier"]))
@@ -625,6 +647,26 @@ class DB:
                 total["tot"][k] = total["tot"].get(k, 0) + v
         return dict(kinds=list(self.V2_KINDS), total=total, groups=gl)
 
+    def v2_gather(self, d_from, d_to, account):
+        w, a = "day BETWEEN ? AND ?", [d_from, d_to]
+        if account:
+            w += " AND account=?"; a.append(account)
+        rows = self.q("SELECT * FROM gather WHERE " + w + " ORDER BY ts DESC", a)
+        groups = {}
+        for r in rows:
+            g = groups.setdefault(r["rtype"], dict(rtype=r["rtype"], label=GATHER_RES.get(r["rtype"], "Typ %d" % r["rtype"]), n=0, total=0.0, levels={}))
+            l = g["levels"].setdefault(r["level"], dict(lvl=r["level"], n=0, total=0.0))
+            for t in (g, l):
+                t["n"] += 1; t["total"] += r["amount"]
+        gl = []
+        for g in groups.values():
+            g["levels"] = sorted(g["levels"].values(), key=lambda x: x["lvl"])
+            gl.append(g)
+        gl.sort(key=lambda g: g["rtype"])
+        recent = [dict(time=datetime.fromtimestamp(r["ts"]).strftime("%d.%m.%Y %H:%M"), label=GATHER_RES.get(r["rtype"], "Typ %d" % r["rtype"]),
+                       level=r["level"], amount=r["amount"], x=r["x"], y=r["y"], account=r["account"]) for r in rows[:100]]
+        return dict(groups=gl, total=dict(n=len(rows), amount=sum(r["amount"] for r in rows)), recent=recent)
+
     def v2(self, cat, d_from, d_to, account="", f=None):
         f = f or {}
         accs = [r["account"] for r in self.q("SELECT DISTINCT account FROM reports ORDER BY account")]
@@ -637,8 +679,8 @@ class DB:
             base.update(self.v2_barbs(d_from, d_to, account, f))
         elif cat in ("field", "rally", "garrison"):
             base.update(self.v2_pvp(cat, d_from, d_to, account, f))
-        else:
-            base.update(supported=False)
+        elif cat == "gathering":
+            base.update(self.v2_gather(d_from, d_to, account))
         return base
 
     PVP_GAP = 300   # Sekunden: Mails desselben Accounts mit weniger Abstand gehören zu einem Kampf-Block
@@ -2954,7 +2996,7 @@ function flt(){const a=(D&&D.accounts)||[],h=(D&&D.heroes)||[],pv=['field','rall
  $('flt').innerHTML=`<label>${L('Von','From')}<input type="date" id="fFrom" value="${S.from}"></label><label>${L('Bis','To')}<input type="date" id="fTo" value="${S.to}"></label>
  <div class="quick"><button class="btn" data-r="7">7 ${L('Tage','days')}</button><button class="btn" data-r="30">30 ${L('Tage','days')}</button><button class="btn" data-r="0">${L('Alles','All')}</button></div>
  <label>${L('Konto','Account')}<select id="fAcc"><option value="">${L('Alle','All')}</option>${a.map(x=>`<option value="${x}"${x===S.account?' selected':''}>${x}</option>`).join('')}</select></label>
- <label>${L('Eigener Kommandant','Own commander')}<select id="fHero"><option value="">${L('Alle','All')}</option>${h.map(x=>`<option value="${x.id}"${String(x.id)===String(S.hero)?' selected':''}>${esc(x.name)}</option>`).join('')}</select></label>
+ ${S.cat==='gathering'?'':`<label>${L('Eigener Kommandant','Own commander')}<select id="fHero"><option value="">${L('Alle','All')}</option>${h.map(x=>`<option value="${x.id}"${String(x.id)===String(S.hero)?' selected':''}>${esc(x.name)}</option>`).join('')}</select></label>`}
  ${pv?`<label>${L('Gegner (Name)','Enemy (name)')}<input id="fQ" value="${esc(S.q)}" placeholder="Name"></label><label>${L('Gegner-Allianz','Enemy alliance')}<input id="fAb" value="${esc(S.abbr)}" placeholder="Tag"></label>
  <label>${L('Gruppieren','Group by')}<select id="fGr"><option value="tour"${S.group==='tour'?' selected':''}>${L('Tour','Tour')}</option><option value="pair"${S.group==='pair'?' selected':''}>${L('Kommandanten-Paar','Commander pair')}</option></select></label>`:''}
  <button class="btn" id="fReset">${L('Filter zurücksetzen','Reset filters')}</button>`}
@@ -2991,9 +3033,18 @@ function barbs(d){
   h+=`<tr class="g" data-g="${g.label}"><td class="l">${o?'▾':'▸'} Barb lvl ${g.label}</td><td class="num">${f(g.n)}</td>${ks.map(k=>cell(g.tot[k]||0,g.n)).join('')}</tr>`;
   if(o)g.levels.forEach(l=>h+=`<tr class="c"><td class="l">barb ${l.lvl}</td><td class="num">${f(l.n)}</td>${ks.map(k=>cell(l.tot[k]||0,l.n)).join('')}</tr>`)});
  return h+`</table></div><p class="note">${L('Beute aus Barbaren-Lagern (ohne Festungen), in Einzelstücken beziehungsweise Minuten. „ea" ist der Durchschnitt pro Barbar.','Loot from barbarian camps (no forts), in single units or minutes. "ea" is the average per barbarian.')}</p>`}
+function gather(d){
+ if(!d.total||!d.total.n)return `<div class="empty">${L('Keine Sammel-Berichte in dieser Auswahl.','No gathering reports for this selection.')}</div>`;
+ let h=`<div class="sum"><div class="kpi"><small>${L('Sammlungen','Gatherings')}</small><b>${f(d.total.n)}</b></div><div class="kpi"><small>${L('Menge gesamt','Total amount')}</small><b class="good">${f(Math.round(d.total.amount))}</b></div></div>
+ <div class="card sc"><table><tr><th>${L('Ressource','Resource')}</th><th>${L('Sammlungen','Gatherings')}</th><th>${L('Menge gesamt','Total amount')}</th><th>${L('Ø pro Sammlung','Avg per gathering')}</th></tr>`;
+ d.groups.forEach(g=>{h+=`<tr><td><b>${esc(g.label)}</b></td><td class="num">${f(g.n)}</td><td class="num">${f(Math.round(g.total))}</td><td class="num">${f(Math.round(g.total/g.n))}</td></tr>`;
+  if(g.levels.length>1||g.levels[0].lvl)g.levels.forEach(l=>h+=`<tr><td class="mute" style="padding-left:34px">${L('Stufe','Level')} ${l.lvl}</td><td class="num mute">${f(l.n)}</td><td class="num mute">${f(Math.round(l.total))}</td><td class="num mute">${f(Math.round(l.total/l.n))}</td></tr>`)});
+ h+=`</table></div><div class="card sc"><h3>${L('Letzte Sammlungen','Latest gatherings')}</h3><table><tr><th>${L('Zeit','Time')}</th><th>${L('Ressource','Resource')}</th><th>${L('Stufe','Level')}</th><th>${L('Menge','Amount')}</th><th>${L('Ort','Location')}</th></tr>`+
+ d.recent.map(r=>`<tr><td class="num">${r.time}</td><td>${esc(r.label)}</td><td class="num">${r.level}</td><td class="num good">${f(Math.round(r.amount))}</td><td class="num mute">X:${r.x} Y:${r.y}</td></tr>`).join('')+`</table></div>`;
+ return h+`<p class="note">${L('Quelle: Sammel-Berichte (Mail-Typ „Rss"). Die Zuordnung der Ressourcenarten ist angenommen: 1 Food, 2 Wood, 3 Stone, 4 Gold, 8 Gems. Unbekannte Arten erscheinen als „Typ N".','Source: gathering reports (mail type "Rss"). Resource types are assumed: 1 Food, 2 Wood, 3 Stone, 4 Gold, 8 Gems. Unknown types show as "Type N".')}</p>`}
 function render(){tabs();flt();const o=$('out');
  if(!D){o.innerHTML='';return}
- if(S.cat==='gathering'){o.innerHTML=`<div class="empty"><b>Gathering</b><br>${L('Sammel-Berichte werden vom Tracker noch nicht gelesen. Dafür brauche ich ein Beispiel einer echten Sammel-Mail aus dem Mail-Ordner.','Gathering reports are not read by the tracker yet. I need a sample of a real gathering mail from the mail folder.')}</div>`;return}
+ if(S.cat==='gathering'){o.innerHTML=gather(D);return}
  o.innerHTML=S.cat==='barbs'?barbs(D):pvp(D)}
 async function load(){const id=++seq,u=`/api/v2?cat=${S.cat}&from=${S.from}&to=${S.to}&account=${encodeURIComponent(S.account)}&q=${encodeURIComponent(S.q)}&abbr=${encodeURIComponent(S.abbr)}&hero=${S.hero||0}`;
  try{const d=await fetch(u).then(r=>r.json());if(id!==seq)return;D=d;render()}catch(e){$('out').innerHTML='<div class="empty">Fehler beim Laden.</div>'}}
