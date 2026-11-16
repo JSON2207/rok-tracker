@@ -5,7 +5,7 @@ Ohne tkinter oder bei einem Fehler im Fenster startet der Tracker wie frueher di
 import hashlib, json, math, os, queue, re, struct, subprocess, sys, threading, time, traceback, urllib.request, webbrowser, zlib
 
 UPDATE_BASIS = "https://raw.githubusercontent.com/JSON2207/rok-tracker/"
-KANAELE = {"classic": "Classic (Stand 16.11.2026, Backup)", "main": "Aktuell (main)", "v2": "Neu (v2)"}   # Version = Branch auf GitHub; Ordner/Datenbank bleiben gleich
+KANAELE = {"classic": "Classic (Stand 16.11.2026, Backup)", "v1": "v1 (Classic + Reports)", "main": "Aktuell (main)", "v2": "Neu (v2)"}   # Version = Branch auf GitHub; Ordner/Datenbank bleiben gleich
 UPDATE_URL = UPDATE_BASIS + "main/"
 DATEIEN = ["rok_barbs.py", "rok_diagnose.py", "rok_start.pyw"]      # fehlt eine online, wird sie uebersprungen
 
@@ -1051,7 +1051,7 @@ def mit_fenster():
         st["veraltet"] = False
         start_und_oeffnen(oeffnen=False)
     vmenue = tk.Menu(menue, tearoff=0, bg=C["card"], fg=C["ink"], activebackground=C["soft2"], activeforeground=C["ink"], bd=0, font=(FONT, 10), selectcolor=C["ink"])
-    for k, name in (("classic", TR("Classic (Backup vom 16.11.2026)", "Classic (backup of 16 Nov 2026)")), ("main", TR("Aktuell (main)", "Current (main)")), ("v2", TR("Neu (v2)", "New (v2)"))):
+    for k, name in (("classic", TR("Classic (Backup vom 16.11.2026)", "Classic (backup of 16 Nov 2026)")), ("v1", TR("v1 (Classic + Reports-Seite)", "v1 (Classic + Reports page)")), ("main", TR("Aktuell (main)", "Current (main)")), ("v2", TR("Neu (v2)", "New (v2)"))):
         vmenue.add_radiobutton(label=name, variable=kanal_var, value=k, command=lambda: arbeit(kanal_wechseln, TR("Wechsle Version ...", "Switching version ...")))
     menue.add_cascade(label=TR("Version wechseln", "Switch version"), menu=vmenue)
     menue.add_separator()
