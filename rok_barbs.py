@@ -569,6 +569,7 @@ def extract_battle(mail):
     parts = max(len(sts), 1)
     role = "solo" if parts == 1 else ("host" if str(int(me.get("PId", 0))) == acc else "joined")
     battles, pvp = [], []
+    my_hi = json.dumps(dict(me=[h for h in (_hinfo(me, ""), _hinfo(me, "2")) if h], host=(role == "joined")))
     for att in c.get("Attacks", {}).values():
         foe, k, d = att.get("CIdt", {}), att["Kill"], att["Damage"]
         if "NpcType" in foe and foe.get("PId", 0) < 0:
@@ -577,7 +578,7 @@ def extract_battle(mail):
             battles.append(dict(
                 foe_hid=int(foe.get("HId", 0)), foe_lvl=int(foe.get("HLv", 0)),
                 foe_kind="fort" if foe.get("NpcBType") == 2 else "camp",
-                foe_troops=int(k["Max"]), own_troops=int(d["Max"]), remaining=int(d["Cnt"]),
+                foe_troops=int(k["Max"]), own_troops=int(d["Max"]), remaining=int(d["Cnt"]), hinfo=my_hi,
                 hurt=int(d["Hurt"]), severe=int(d["BadHurt"]), heal=int(d["Healing"]),
                 dead=int(d["Death"]), power=int(d["Power"]), xp=int(att.get("NpcAtkExp", 0)), loot=loot))
         else:   # Spieler als Gegner. Feldzuordnung an einem Ark-of-Osiris-Bericht gegen das Spiel geprüft:
@@ -637,8 +638,23 @@ def extract(mail):
     return extract_battle(mail) or extract_fort_reward(mail)
 
 # ---------------------------------------------------------------- Datenbank
+def hinfo_names(js):
+    """Kommandanten-Daten (JSON aus der DB) mit Namen, Fertigkeiten und Ausruestungs-Werten anreichern."""
+    d = json.loads(js) if js else None
+    for side in (d or {}).values():
+        if not isinstance(side, list):
+            continue
+        for h in side:
+            h["name"] = HEROES.get(h["id"], "#%d" % h["id"]) if h["id"] else ""
+            h["skn"] = [SKILL_NAMES.get(i, "#%d" % i) for i in h.get("si", [])]
+            eqs = []
+            for slot, iid, craft, attr in h.get("eq", []):
+                eqs.append(dict(s=slot, id=iid, n=EQUIP_ITEMS.get(iid, "#%d" % iid), st=EQUIP_TYPES.get(attr // 10) if attr >= 10 else None, ic=attr % 10, **equip_info(iid)))
+            h["eq"] = eqs
+    return d
+
 class DB:
-    VERSION = 9
+    VERSION = 10
 
     def __init__(self, path):
         self.lock = threading.Lock()
@@ -689,11 +705,17 @@ class DB:
             self.c.execute("ALTER TABLE battles ADD COLUMN hero2 INT")
         except sqlite3.OperationalError:
             pass
+        try:
+            self.c.execute("ALTER TABLE battles ADD COLUMN hinfo TEXT")
+        except sqlite3.OperationalError:
+            pass
         for col in ("hero1 INT", "hero2 INT", "ehero1 INT", "ehero2 INT", "hinfo TEXT"):
             try:
                 self.c.execute("ALTER TABLE pvp ADD COLUMN " + col)
             except sqlite3.OperationalError:
                 pass
+        if self.c.execute("PRAGMA user_version").fetchone()[0] < 10:
+            self.c.execute("DELETE FROM processed")         # Version 10: Ausruestung auch bei Barbaren- und Festungskaempfen nachtragen
         if self.c.execute("PRAGMA user_version").fetchone()[0] < 9:
             self.c.execute("DELETE FROM processed")         # Version 9: Fertigkeits-Nummern der Kommandanten nachtragen
         if self.c.execute("PRAGMA user_version").fetchone()[0] < 8:
@@ -747,6 +769,8 @@ class DB:
             if self.c.execute("SELECT 1 FROM reports WHERE mail_id=?", (r["mail_id"],)).fetchone():
                 if r["kind"] == "battle" and r.get("hero2") is not None:     # zweiten Kommandanten bei alten Berichten nachtragen
                     self.c.execute("UPDATE battles SET hero2=? WHERE mail_id=? AND hero2 IS NULL", (r["hero2"], r["mail_id"]))
+                    if r["battles"] and r["battles"][0].get("hinfo"):
+                        self.c.execute("UPDATE battles SET hinfo=? WHERE mail_id=? AND (hinfo IS NULL OR hinfo NOT LIKE '%\"si\"%')", (r["battles"][0]["hinfo"], r["mail_id"]))
                     ids = [x[0] for x in self.c.execute("SELECT id FROM pvp WHERE mail_id=? AND (hero1 IS NULL OR hinfo IS NULL OR hinfo NOT LIKE '%\"si\"%') ORDER BY id", (r["mail_id"],))]
                     if ids and len(ids) == len(r["pvp"]):
                         for i, x in zip(ids, r["pvp"]):
@@ -761,11 +785,11 @@ class DB:
                 for b in r["battles"]:
                     cur = self.c.execute(
                         "INSERT INTO battles(mail_id,ts,day,account,role,parts,hero1,foe_hid,foe_kind,foe_lvl,"
-                        "foe_troops,own_troops,remaining,hurt,severe,heal,dead,power,xp,start,hero2) "
-                        "VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+                        "foe_troops,own_troops,remaining,hurt,severe,heal,dead,power,xp,start,hero2,hinfo) "
+                        "VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
                         (r["mail_id"], r["ts"], day, acc, r["role"], r["parts"], r["hero1"], b["foe_hid"],
                          b["foe_kind"], b["foe_lvl"], b["foe_troops"], b["own_troops"], b["remaining"], b["hurt"],
-                         b["severe"], b["heal"], b["dead"], b["power"], b["xp"], r.get("start"), r.get("hero2")))
+                         b["severe"], b["heal"], b["dead"], b["power"], b["xp"], r.get("start"), r.get("hero2"), b.get("hinfo")))
                     lp("b", cur.lastrowid, b["loot"])
                 for x in r["pvp"]:
                     self.c.execute(
@@ -911,13 +935,13 @@ class DB:
             if r:
                 used.add(r["id"])
             out.append(dict(key="b%d" % b["id"], rid=r["id"] if r else None, ts=b["ts"], day=b["day"], account=b["account"], role=b["role"],
-                            parts=b["parts"], hero1=b["hero1"], hero2=b["hero2"], level=r["level"] if r else None,
+                            parts=b["parts"], hero1=b["hero1"], hero2=b["hero2"], hi=hinfo_names(b.get("hinfo")), level=r["level"] if r else None,
                             x=r["x"] if r else None, y=r["y"] if r else None, pct=r["pct"] if r else None,
                             tier=r["tier"] if r else None, loot=self.loot_of("f", r["id"]) if r else []))
         for r in rs:
             if r["id"] not in used:
                 out.append(dict(key="f%d" % r["id"], rid=r["id"], ts=r["ts"], day=r["day"], account=r["account"], role=None,
-                                parts=None, hero1=None, hero2=None, level=r["level"], x=r["x"], y=r["y"], pct=r["pct"],
+                                parts=None, hero1=None, hero2=None, hi=None, level=r["level"], x=r["x"], y=r["y"], pct=r["pct"],
                                 tier=r["tier"], loot=self.loot_of("f", r["id"])))
         out.sort(key=lambda e: e["ts"], reverse=True)
         return out
@@ -962,7 +986,7 @@ class DB:
                            severe=b["severe"], xp=b["xp"], loot=self.loot_of("b", b["id"])) for b in rs]
             h, h2 = rs[0]["hero1"], rs[0]["hero2"]
             out.append(dict(mail_id=mid, ts=rs[0]["ts"], time=fmt(rs[0]["ts"]), role=rs[0]["role"], parts=rs[0]["parts"],
-                            hero=HEROES.get(h, "Kommandant #%d" % h), hero2=HEROES.get(h2, "Kommandant #%d" % h2) if h2 else "", n=len(rs), title=self._title(r["foe"] for r in rounds),
+                            hero=HEROES.get(h, "Kommandant #%d" % h), hero2=HEROES.get(h2, "Kommandant #%d" % h2) if h2 else "", hi=hinfo_names(rs[0].get("hinfo")), n=len(rs), title=self._title(r["foe"] for r in rounds),
                             totals={k: sum(r[k] for r in rounds) for k in ("foe_troops", "hurt", "severe", "xp")},
                             rounds=rounds, loot=self.merge_loot(r["loot"] for r in rounds)))
         return out
@@ -987,17 +1011,7 @@ class DB:
         rows = [r for r in rows if (not q or q in (r["foe_name"] or "").lower()) and (not ab or ab in (r["foe_abbr"] or "").lower())
                 and (not hid or hid in (r["hero1"], r["hero2"])) and (not ehid or ehid in (r["ehero1"], r["ehero2"]))]
         hn = lambda h: (HEROES.get(h, "#%d" % h) if h else "")
-        def hinfo(js):
-            d = json.loads(js) if js else None
-            for side in (d or {}).values():
-                for h in side:
-                    h["name"] = hn(h["id"])
-                    h["skn"] = [SKILL_NAMES.get(i, "#%d" % i) for i in h.get("si", [])]
-                    eqs = []
-                    for slot, iid, craft, attr in h.get("eq", []):
-                        eqs.append(dict(s=slot, id=iid, n=EQUIP_ITEMS.get(iid, "#%d" % iid), st=EQUIP_TYPES.get(attr // 10) if attr >= 10 else None, ic=attr % 10, **equip_info(iid)))
-                    h["eq"] = eqs
-            return d
+        hinfo = hinfo_names
         names = {r["account"]: r["n"] for r in self.q("SELECT account, MAX(CASE WHEN acc_name<>'' THEN acc_name END) n FROM reports GROUP BY account")}
         tours, cur = [], None
         for r in rows:
@@ -2036,7 +2050,9 @@ tr.flash td,details.flash,.mti.flash,.mcard.flash{animation:fl 2.6s ease-out}
 .topn b{font-size:1.1rem!important;overflow-wrap:anywhere}
 .mbtn{position:fixed;top:12px;left:12px;z-index:60;padding:5px 11px;font-size:1.2rem;line-height:1.2;cursor:pointer}body.sbopen .mbtn#mbtn{display:none}.sb{position:fixed;top:0;left:0;bottom:0;width:260px;z-index:70;background:var(--card);border-right:1px solid var(--line);display:flex;flex-direction:column;transform:translateX(-102%);transition:transform .18s ease;overflow-y:auto}body.sbopen .sb{transform:none}.sbh{display:flex;align-items:center;justify-content:space-between;padding:16px 14px 12px 18px}.sbt{font-weight:800;font-size:1.15rem;letter-spacing:.02em}.sbh .mbtn{position:static;padding:3px 9px;font-size:1rem}.sbn{display:flex;flex-direction:column;padding:6px 10px 20px;gap:2px}.sbl{font-size:.72rem;color:var(--mute);padding:10px 8px 4px}.sbn a{display:flex;align-items:center;gap:10px;padding:9px 10px;border-radius:9px;text-decoration:none;color:var(--ink)}.sbn a svg{flex:none;color:var(--mute)}.sbn a:hover{background:var(--soft)}.sbn a.cur{background:var(--accsoft);color:var(--acc);font-weight:700}.sbn a.cur svg{color:var(--acc)}.msep{height:1px;background:var(--line);margin:10px 2px 4px}.mrow{display:flex;flex-direction:column;gap:5px;padding:6px 8px;font-size:.82rem;color:var(--mute)}.mrow select{width:100%}.seg{display:flex;gap:4px}.seg button{flex:1;padding:5px 2px;font-size:.78rem;cursor:pointer}.seg button.on{background:var(--acc);border-color:var(--acc);color:#fff}.sbov{display:none}body{transition:padding-left .18s ease}@media(min-width:1100px){body.sbopen{padding-left:260px}}@media(max-width:1099px){body.sbopen .sbov{display:block;position:fixed;inset:0;background:#0007;z-index:65}}
 
-</style></head><body><main>
+</style>
+<style>@@EQCSS@@
+.hbx .y{color:#d9a21b}.hbx .mute{color:var(--mute)}.mcard .hbx{margin:8px 0 0}</style></head><body><main>
 <button type="button" id="mbtn" class="mbtn" aria-label="Menü" aria-expanded="true" title="Menü">☰</button><aside id="sb" class="sb" aria-label="Menü"><div class="sbh"><span class="sbt">RoK&nbsp;Tracker</span><button type="button" id="sbx" class="mbtn" aria-label="Menü schließen" title="Menü schließen">⇤</button></div><nav class="sbn"><div class="sbl">Seiten</div><a href="/" data-p="/" data-k="loot"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l8 4v5c0 4.5-3.2 7.8-8 9-4.8-1.2-8-4.5-8-9V7z"/><path d="M9 12l2 2 4-4"/></svg><span>Loot-Tracker</span></a><a href="/reports" data-p="/reports" data-k="rep"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M14 3H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"/><path d="M14 3v6h6M8 13h8M8 17h5"/></svg><span>Reports</span></a><a href="/allianz" data-p="/allianz" data-k="ali"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20V10M10 20V4M16 20v-8M22 20H2"/></svg><span>Allianz-Ranking</span></a><a href="/kvk1" data-p="/kvk1" data-k="kvk"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M14.5 17.5L3 6V3h3l11.5 11.5M13 19l6-6M16 16l4 4M19 21l2-2M14.5 6.5L18 3h3v3l-3.5 3.5M5 14l4 4M7 17l-3 3M3 19l2 2"/></svg><span>KVK1</span></a><a href="/kvk2" data-p="/kvk2" data-k="kvk2"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3a14 14 0 0 1 0 18M12 3a14 14 0 0 0 0 18"/></svg><span>KVK2</span></a><a href="/woche" data-p="/woche" data-k="wb"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="17" rx="2"/><path d="M3 9h18M8 2v4M16 2v4M8 14h3M13 14h3M8 17h3"/></svg><span>Wochenbericht</span></a><a href="/kalender" data-p="/kalender" data-k="kal"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg><span>Event-Kalender</span></a><a href="/settings" data-p="/settings" data-k="set"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.9l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.9-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1-1.5 1.7 1.7 0 0 0-1.9.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.9 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1 1.7 1.7 0 0 0-.3-1.9l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.9.3h0a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5h0a1.7 1.7 0 0 0 1.9-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.9v0a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg><span>Einstellungen</span><b class="sbb" id="sbbadge" hidden></b></a><div class="sbdiv" data-k="d1"></div><div class="sbdiv" data-k="d2"></div><div class="sbstat" data-k="prof"><div class="sbgh0">Profil</div><a href="/#profil"><span>Profil</span></a><a href="/#tag"><span>Pro Tag</span></a></div></nav></aside><div id="sbov" class="sbov"></div><script>try{var th=localStorage.getItem("roktheme");if(th)document.documentElement.dataset.theme=th}catch(e){}window.sbOrd=function(){var A=["loot","rep","ali","kvk","kvk2","wb","kal"],o=A.slice();try{var v=JSON.parse(localStorage.getItem("roksbo")||"null");if(v&&v.length){v=v.filter(function(x){return A.indexOf(x)>=0});o=v.concat(A.filter(function(x){return v.indexOf(x)<0}))}}catch(e){}var m={d1:6,prof:7,d2:8,set:9};o.forEach(function(k,i){m[k]=i});document.querySelectorAll("#sb [data-k]").forEach(function(e){e.style.order=m[e.dataset.k]})};sbOrd();window.sbUnk=function(){fetch("/api/unk").then(r=>r.json()).then(u=>{var b=document.getElementById("sbbadge");b.textContent=u.n;b.hidden=!u.n;try{var R=JSON.parse(localStorage.getItem("rokrem")||"{}"),el=document.getElementById("sbrem"),hr=(u.now-u.last)/3600;if(R.on&&u.last&&hr>=(R.h||12)&&localStorage.getItem("rokremx")!=String(u.last)){if(!el){el=document.createElement("div");el.id="sbrem";el.style.cssText="position:fixed;top:12px;left:50%;transform:translateX(-50%);z-index:80;padding:9px 14px;border-radius:12px;background:var(--card);color:var(--ink);border:1px solid var(--warn);box-shadow:0 6px 24px rgba(0,0,0,.25);font-size:.9rem;display:flex;gap:10px;align-items:center";document.body.appendChild(el)}el.innerHTML="<span>⏰ Seit "+(hr<48?Math.floor(hr)+" Std":Math.floor(hr/24)+" Tagen")+" keine neuen Berichte.</span>";var x=document.createElement("button");x.textContent="Ausblenden";x.onclick=function(){try{localStorage.setItem("rokremx",String(u.last))}catch(e){}el.remove()};el.appendChild(x)}else if(el)el.remove()}catch(e){}}).catch(function(){})};sbUnk();setInterval(sbUnk,30000)</script><script>(function(){const b=document.getElementById("mbtn"),x=document.getElementById("sbx"),ov=document.getElementById("sbov"),n=document.getElementById("sb"),R=document.documentElement,B=document.body;n.querySelectorAll("a[data-p]").forEach(a=>{if(a.dataset.p===(location.pathname.replace(/\/+$/,"")||"/"))a.className="cur"});let V={w:"1600",a:"c"},O=window.innerWidth>=1100;try{V=Object.assign(V,JSON.parse(localStorage.getItem("rokview")||"{}"));const o=localStorage.getItem("roksb");if(o!==null)O=o==="1"}catch(e){}const ap=()=>{R.style.setProperty("--mw",V.w==="100%"?"100%":V.w+"px");R.style.setProperty("--ml",V.a==="l"?"0":"auto");R.style.setProperty("--mr",V.a==="r"?"0":"auto");document.querySelectorAll("#mw button").forEach(y=>y.classList.toggle("on",y.dataset.v===V.w));document.querySelectorAll("#ma button").forEach(y=>y.classList.toggle("on",y.dataset.v===V.a))};const so=v=>{O=v;B.classList.toggle("sbopen",O);b.setAttribute("aria-expanded",O);try{localStorage.setItem("roksb",O?"1":"0")}catch(e){}};document.addEventListener("DOMContentLoaded",ap);
 document.addEventListener("click",e=>{const y=e.target.closest(".seg button");if(!y||!y.parentNode.id.match(/^m[wa]$/))return;if(y.parentNode.id==="mw")V.w=y.dataset.v;else V.a=y.dataset.v;try{localStorage.setItem("rokview",JSON.stringify(V))}catch(e){}ap()});ap();B.classList.toggle("sbopen",O);b.onclick=()=>so(!O);x.onclick=()=>so(false);ov.onclick=()=>so(false);document.addEventListener("keydown",e=>{if(e.key==="Escape"&&window.innerWidth<1100)so(false)})})()</script>@@QP@@
 <section class="hero"><div class="avc"><div class="av" id="avbox" tabindex="0" role="button" title="Avatar ändern"><span id="hav">⚔</span></div><button id="avreset" hidden>Avatar zurücksetzen</button><input type="file" id="avfile" accept="image/*" hidden></div><div>
@@ -2234,6 +2250,8 @@ async function lapLoad(force){const n=lapPer==='all'?null:+lapPer,to=iso(new Dat
   (c.ap?`<div class="loot">${lootHtml(lootBig(c.loot),100/c.ap,'Keine Beute im gewählten Zeitraum.')}</div><p class="note">${LANG==='en'?`Basis: ${f(c.ap)} AP for ${f(c.chains)} chains with ${f(c.barbs)} barbarians (only barbarians up to lvl ${c.maxlvl}, AP after the chain reduction).`.replace('Basis','Based on'):`Basis: ${f(c.ap)} AP für ${f(c.chains)} Chains mit ${f(c.barbs)} Barbaren (nur Barbaren bis Lvl ${c.maxlvl}, AP nach der Chain-Reduktion).`}</p>`:`<p class="note">Im gewählten Zeitraum gibt es keine Barbaren-Chains.</p>`)}
 $('lap').addEventListener('change',e=>{if(e.target.id==='lapsel'){lapPer=e.target.value;try{localStorage.setItem('roklap',lapPer)}catch(x){}lapLoad(true)}});
 // ===== Festungen / Barbarenkämpfe: Liste links, Details rechts =====
+const L=(d,e)=>LANG==='en'?e:d;
+@@EQJS@@
 let LS=null;const MS={ft:'',bt:''};
 const cmp=n=>n>=1e6?(n/1e6).toLocaleString(LOC,{maximumFractionDigits:2})+(LANG==='en'?' M':' Mio'):n>=1e4?(n/1e3).toLocaleString(LOC,{maximumFractionDigits:1})+(LANG==='en'?' K':' Tsd'):f(n);
 const dlab=ts=>new Date(ts*1000).toLocaleDateString(LOC,LANG==='en'?{weekday:'short',month:'short',day:'numeric'}:{weekday:'short',day:'2-digit',month:'2-digit'});
@@ -2248,18 +2266,19 @@ function lootCard(l){const a=lootAgg(l);
   (a.length?`<div class="loot">${lootHtml(a,1,'')}</div>`:'')+
   `<details class="eqd" open><summary>Einzelne Items (${f(l.length)})</summary>${lootList(l)}</details>`
   :'<p class="note">Keine Beute in diesem Bericht.</p>')+`</div>`}
+const heroCard=x=>{const h=x.hi&&x.hi.me;return h&&h.length?`<div class="mcard"><h2>${x.hi.host?L('Kommandanten des Rally-Starters','Rally leader\'s commanders'):L('Kommandanten & Ausrüstung','Commanders & equipment')}</h2>${heroBoxes(h)}${x.hi.host?`<p class="note">${L('Bei beigetretenen Rallys steht im Bericht nur die Ausrüstung des Starters, nicht deine eigene.','For joined rallies the report only contains the leader\'s equipment, not your own.')}</p>`:''}</div>`:''};
 const ftRow=x=>`<button type="button" class="mti${x._k===MS.ft?' on':''}" data-k="${x._k}"><div class="a"><span class="tm">${hhmm(x.time)}</span><b>Barbarenfestung${x.level?' Lvl '+x.level:''}</b>${x.role?role[x.role]:''}<span class="note">${x.pct==null?'':x.pct+' %'}</span></div><div class="b">${miniLoot(x.loot)}</div></button>`;
-const ftDet=x=>`<div class="mcard"><h2>Barbarenfestung${x.level?' Lvl '+x.level:''}</h2><div class="note">${x.time} ${x.role?role[x.role]:''}</div>`+
+const ftDet=x=>{EQR.length=0;return `<div class="mcard"><h2>Barbarenfestung${x.level?' Lvl '+x.level:''}</h2><div class="note">${x.time} ${x.role?role[x.role]:''}</div>`+
   facts([['Position',x.x==null?'–':`${x.x} / ${x.y}`],['Dein Schadensanteil',x.pct==null?'–':x.pct+' %'],['Tier',x.tier==null?'–':x.tier],['Teilnehmer',x.parts||'–'],['Primärer Kommandant',esc(x.hero)||'–'],['Sekundärer Kommandant',esc(x.hero2)||'–']])+
-  (x.level==null?'<p class="note">Zu dieser Festung gibt es keine Belohnungs-Mail im Ordner, deshalb fehlen Level, Position und Beute.</p>':'')+`</div>`+lootCard(x.loot);
+  (x.level==null?'<p class="note">Zu dieser Festung gibt es keine Belohnungs-Mail im Ordner, deshalb fehlen Level, Position und Beute.</p>':'')+`</div>`+heroCard(x)+lootCard(x.loot)};
 const btRow=x=>`<button type="button" class="mti${x._k===MS.bt?' on':''}" data-k="${x._k}"><div class="a"><span class="tm">${hhmm(x.time)}</span><b>${esc(x.title)}</b></div><div class="b2">${role[x.role]} ${esc(x.hero)}${x.hero2?' + '+esc(x.hero2):''}${x.ck?` · <span class="tag">${x.cnew?'Neustart · ':''}Chain ${x.ck} · ${x.ap} AP</span>`:''}</div><div class="b">${miniLoot(x.loot)}</div></button>`;
-function btDet(x){const so=x.role==='solo',t=x.totals;
+function btDet(x){EQR.length=0;const so=x.role==='solo',t=x.totals;
  return`<div class="mcard"><h2>${esc(x.title)}</h2><div class="note">${x.time} ${role[x.role]}${x.ck?` <span class="tag">${x.cnew?'Neustart · ':''}Chain ${x.ck} · ${x.ap} AP</span>`:''}</div>`+
   facts(so?[['Primärer Kommandant',esc(x.hero)||'–'],['Sekundärer Kommandant',esc(x.hero2)||'–'],['Gegner im Bericht',x.n],['Gegner-Truppen',f(t.foe_troops)],['Leicht verwundet',f(t.hurt)],['Schwer verwundet',f(t.severe),'bad'],['Kommandanten-XP',f(t.xp)]]
           :[['Primärer Kommandant',esc(x.hero)||'–'],['Sekundärer Kommandant',esc(x.hero2)||'–'],['Teilnehmer',x.parts],['Gegner im Bericht',x.n],['Kommandanten-XP',f(t.xp)]])+
   (so?`<p><button type="button" class="chr" data-id="${x.mail_id}" data-on="${x.cman?0:1}">${x.cman?'Neustart-Markierung entfernen':'Als Neustart markieren'}</button></p>`:'')+
   (so?'':'<p class="note">Truppen und Verluste gelten bei Rallys für alle Teilnehmer zusammen und werden nicht einzeln angezeigt.</p>')+`</div>`+
-  lootCard(x.loot)+
+  heroCard(x)+lootCard(x.loot)+
   (so&&x.n>1?`<div class="mcard"><h2>Die einzelnen Gegner</h2>`+tbl(['Gegner','Gegner-Truppen','Eigene Truppen','Leicht verwundet','Schwer verwundet','XP','Beute'],
         x.rounds.map(r=>`<tr><td>${esc(r.foe)}</td><td>${f(r.foe_troops)}</td><td>${f(r.own_troops)}</td><td>${f(r.hurt)}</td><td class="bad">${f(r.severe)}</td><td>${f(r.xp)}</td><td class="lt">${chipsH(r.loot)}</td></tr>`))+`</div>`:'')}
 function mdBuild(tab,title,items,rowF,empty){
@@ -2276,6 +2295,7 @@ function selMd(tab,key,quiet){MS[tab]=key;const pane=$(tab==='ft'?'p_ft':'p_bt')
  const det=pane.querySelector('.mdet'),it=LS&&(tab==='ft'?LS.forts:LS.battles).find(x=>x._k===key);if(!det||!it)return;
  det.innerHTML=(tab==='ft'?ftDet:btDet)(it);
  if(!quiet&&window.innerWidth<=900)det.scrollIntoView({behavior:'smooth',block:'start'})}
+eqBind($('p_ft'));eqBind($('p_bt'));
 $('p_ft').addEventListener('click',e=>{const b=e.target.closest('.mti');if(b)selMd('ft',b.dataset.k)});
 $('p_bt').addEventListener('click',e=>{const b=e.target.closest('.mti');if(b)selMd('bt',b.dataset.k)});
 async function load(){const[a,b]=range();
@@ -3124,6 +3144,53 @@ ld();
 """ + _I18N + r"""</script></body></html>"""
 
 PAGE = PAGE.replace("@@QP@@", QP_BLOCK)
+EQ_CSS = r""".hbx{display:flex;flex-wrap:wrap;gap:10px;margin:2px 0 8px}.hb{border:1px solid var(--line);border-radius:12px;padding:8px 10px;flex:1 1 100%;min-width:0}.hp{display:flex;align-items:center;gap:8px}.hp img{width:38px;height:38px;border-radius:10px;object-fit:cover;background:var(--card)}.hm{color:var(--mute);font-size:.8rem;margin:4px 0}.hbx .eqd{margin-top:4px;font-size:.8rem}.hbx .eqd summary{cursor:pointer;color:var(--mute)}.hbx .eqd ul{list-style:none;margin:4px 0 0;padding:0}.hbx .eqd li{display:flex;gap:6px;align-items:center;padding:2px 0;border-bottom:1px solid var(--line)}.hbx .eqd li img{width:20px;height:20px;border-radius:5px;object-fit:cover}.hbx .eqd li .mute{min-width:5.5em}.eqi{position:relative;display:inline-flex;align-items:flex-end;justify-content:flex-end;min-width:30px;height:30px;border:1px solid var(--line);border-radius:8px;background:var(--card);font-size:.7rem;overflow:hidden}.eqi img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover}.eqi em{position:absolute;left:3px;top:2px;font-style:normal;color:var(--mute);font-size:.62rem}.eqi i{position:relative;font-style:normal;padding:0 3px;background:rgba(0,0,0,.55);color:#fff;border-radius:6px 0 0 0}
+:root{--q-l:#e3ae35;--q-e:#b57bee;--q-u:#4c9aff;--q-a:#4cc26b;--q-n:#aab4c3}
+@media(prefers-color-scheme:light){:root:not([data-theme="dark"]){--q-l:#b97f00;--q-e:#8d3fd1;--q-u:#1f6fd6;--q-a:#1f8f45;--q-n:#6b7686}}
+:root[data-theme="light"]{--q-l:#b97f00;--q-e:#8d3fd1;--q-u:#1f6fd6;--q-a:#1f8f45;--q-n:#6b7686}
+.q-legendary{--q:var(--q-l)}.q-epic{--q:var(--q-e)}.q-elite{--q:var(--q-u)}.q-advanced{--q:var(--q-a)}.q-normal{--q:var(--q-n)}.q-x{--q:var(--mute)}
+.hbx .eqd li.eql{border-left:3px solid var(--q);padding-left:6px;cursor:help;border-radius:3px}.hbx .eqd li.eql:hover,.hbx .eqd li.eql:focus-visible{background:var(--soft);outline:none}.eql .en{color:var(--q);font-weight:600}.eql img{outline:1px solid var(--q)}
+.rdots{display:inline-flex;gap:3px;margin-left:6px;vertical-align:middle}.rdots i{width:8px;height:8px;border-radius:50%;background:var(--q);display:inline-block}
+#eqtip{--q-l:#e3ae35;--q-e:#b57bee;--q-u:#4c9aff;--q-a:#4cc26b;--q-n:#aab4c3;position:fixed;z-index:300;max-width:310px;padding:10px 12px;border-radius:12px;background:#060a12;color:#e8edf6;border:1px solid #2b3a57;box-shadow:0 14px 30px -10px rgba(0,0,0,.8);font-size:.82rem;line-height:1.5;pointer-events:none}
+#eqtip .th{display:flex;flex-direction:column;margin-bottom:5px;padding-bottom:5px;border-bottom:1px solid #2b3a57}#eqtip .th b{color:var(--q);font-size:.95rem}#eqtip .th span{color:var(--q);opacity:.85;font-size:.76rem}
+#eqtip .pw{color:#93a1bd}#eqtip .bn{color:#7fe3a6}#eqtip .st{color:#d9a21b}#eqtip .sr{margin-top:6px;color:#6f7e9b;font-size:.68rem}
+"""
+
+EQ_JS = r"""const SLN={1:['Waffe','Weapon'],2:['Helm','Helm'],3:['Brust','Chest'],4:['Handschuhe','Gloves'],5:['Beine','Legs'],6:['Stiefel','Boots'],7:['Accessoire','Accessory'],8:['Accessoire','Accessory']},STN={Infantry:'Infanterie',Archer:'Bogenschützen',Cavalry:'Kavallerie',Integration:'Integration',Leadership:'Führung',Engineering:'Technik'};
+const EQR=[];
+const RQN={legendary:['Legendär','Legendary'],epic:['Episch','Epic'],elite:['Selten','Elite'],advanced:['Ungewöhnlich','Advanced'],normal:['Gewöhnlich','Normal']};
+const UN={i:['Infanterie','Infantry'],a:['Bogenschützen','Archer'],c:['Kavallerie','Cavalry'],t:['Truppen','Troop'],s:['Belagerungseinheiten','Siege unit']},
+ SN2={a:['Angriff','Attack'],d:['Verteidigung','Defense'],h:['Lebenspunkte','Health']},
+ OTN={gs:['Sammelgeschwindigkeit','Gathering speed'],xp:['Kommandanten-EXP','Commander EXP gain'],bd:['Schaden gegen Barbaren','Damage to barbarians'],uc:['Truppenkapazität','Unit capacity'],ge:['Zusätzliche Rohstoffe beim Sammeln','Extra resources from gathering'],ms:['Marschgeschwindigkeit','March speed']};
+function stN(c){if(OTN[c])return L(OTN[c][0],OTN[c][1]);
+ if(/^ms[iacs]$/.test(c))return L('Marschgeschwindigkeit','March speed')+' ('+L(UN[c[2]][0],UN[c[2]][1])+')';
+ const u=UN[c[0]],t=SN2[c[1]];return u&&t?(LANG==='en'?u[1]+' '+t[1]:u[0]+'-'+t[0]):c}
+function eqTip(e){const q=RQN[e.r],sl=SLN[e.s]?L(SLN[e.s][0],SLN[e.s][1]):'',nf=v=>Number(v).toLocaleString(LANG==='en'?'en-US':'de-DE');
+ let h=`<div class="th q-${e.r||'x'}"><b>${esc(e.n)}</b><span>${q?L(q[0],q[1])+' · ':''}${esc(sl)}</span></div>`;
+ if(e.p)h+=`<div class="pw">${L('Macht','Power')} +${nf(e.p)}</div>`;
+ if(e.b&&e.b.length)h+=e.b.map(x=>`<div class="bn">+${nf(x[0])} % ${esc(stN(x[1]))}</div>`).join('');
+ else if(e.r&&e.s>=7)h+=`<div class="pw">${L('Zusatzeffekt: siehe Spiel','Special effect: see game')}</div>`;
+ if(e.st)h+=`<div class="st">${L('Spezialtalent','Special talent')}: ${esc(L(STN[e.st]||e.st,e.st))}</div>`;
+ if(e.ic)h+=`<div class="st">Iconic ${e.ic}</div>`;
+ if(e.p||e.b)h+=`<div class="sr">${L('Basiswerte laut rokstats.online','Base values per rokstats.online')}</div>`;
+ return h}
+function heroBoxes(hl){return `<div class="hbx">${hl.map(h=>`<div class="hb"><div class="hp"><img src="/icon/hero_${h.id}" alt="" onerror="this.style.display='none'"><b>${esc(h.name)}</b></div><div class="hm" title="${esc((h.skn||[]).join(' · '))}"><span class="y">${h.sk||''}</span> · Lv ${h.lv} · ★${h.st}</div>${h.eq.length?`<details class="eqd"><summary>${L('Ausrüstung','Equipment')} (${h.eq.length}) <span class="rdots">${h.eq.map(e=>`<i class="q-${e.r||'x'}"></i>`).join('')}</span></summary><ul>${h.eq.map(e=>{EQR.push(e);return `<li class="eql q-${e.r||'x'}" tabindex="0" data-q="${EQR.length-1}"><img src="/icon/equip_${e.id}" alt="" onerror="this.style.display='none'"><span class="mute">${esc(SLN[e.s]?L(SLN[e.s][0],SLN[e.s][1]):e.s)}</span> <span class="en">${esc(e.n)}</span>${e.st||e.ic?` <i class="y">${e.st?esc(L(STN[e.st]||e.st,e.st)):''}${e.st&&e.ic?' · ':''}${e.ic?'Iconic '+e.ic:''}</i>`:''}</li>`}).join('')}</ul></details>`:''}</div>`).join('')}</div>`}
+const tip=document.createElement('div');tip.id='eqtip';tip.hidden=true;document.body.appendChild(tip);
+document.addEventListener('keydown',e=>{if(e.key==='Escape')tip.hidden=true});
+function eqBind(root){
+function tipPlace(x,y){const w=tip.offsetWidth,h=tip.offsetHeight;let l=x+14,t=y+16;if(l+w>innerWidth-8)l=Math.max(8,x-w-14);if(t+h>innerHeight-8)t=Math.max(8,y-h-14);tip.style.left=l+'px';tip.style.top=t+'px'}
+function tipShow(li,x,y){const e=EQR[+li.dataset.q];if(!e)return;tip.innerHTML=eqTip(e);tip.className='q-'+(e.r||'x');tip.hidden=false;tipPlace(x,y)}
+root.addEventListener('mouseover',e=>{const li=e.target.closest('.eql');if(li)tipShow(li,e.clientX,e.clientY)});
+root.addEventListener('mousemove',e=>{if(!tip.hidden)tipPlace(e.clientX,e.clientY)});
+root.addEventListener('mouseout',e=>{const li=e.target.closest('.eql');if(li&&!(e.relatedTarget&&li.contains(e.relatedTarget)))tip.hidden=true});
+root.addEventListener('focusin',e=>{const li=e.target.closest&&e.target.closest('.eql');if(li){const b=li.getBoundingClientRect();tipShow(li,b.left+24,b.bottom-10)}});
+root.addEventListener('focusout',()=>{tip.hidden=true});
+
+}
+"""
+
+PAGE = PAGE.replace("@@EQCSS@@", EQ_CSS).replace("@@EQJS@@", EQ_JS)
+
 REPORTS_PAGE = r"""<!doctype html><html lang="de"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1"><title>Reports</title>
 """ + _STYLE + r"""
@@ -3143,18 +3210,9 @@ REPORTS_PAGE = r"""<!doctype html><html lang="de"><head><meta charset="utf-8">
 .bc{display:grid;grid-template-columns:1fr 1fr;gap:14px}.bc>div{border:1px solid var(--line);border-radius:14px;background:var(--soft);padding:12px 14px;min-width:0}
 .bc h4{margin:0 0 6px;font-size:.95rem;overflow-wrap:anywhere}.bc .hs{color:var(--mute);font-size:.82rem;margin-bottom:6px}
 .bc table td,.bc table th{padding:5px 0;border-bottom:1px solid var(--line)}.bc table tr:last-child td{border:0}
-.hbx{display:flex;flex-wrap:wrap;gap:10px;margin:2px 0 8px}.hb{border:1px solid var(--line);border-radius:12px;padding:8px 10px;flex:1 1 100%;min-width:0}.hp{display:flex;align-items:center;gap:8px}.hp img{width:38px;height:38px;border-radius:10px;object-fit:cover;background:var(--card)}.hm{color:var(--mute);font-size:.8rem;margin:4px 0}.eqd{margin-top:4px;font-size:.8rem}.eqd summary{cursor:pointer;color:var(--mute)}.eqd ul{list-style:none;margin:4px 0 0;padding:0}.eqd li{display:flex;gap:6px;align-items:center;padding:2px 0;border-bottom:1px solid var(--line)}.eqd li img{width:20px;height:20px;border-radius:5px;object-fit:cover}.eqd li .mute{min-width:5.5em}.eqi{position:relative;display:inline-flex;align-items:flex-end;justify-content:flex-end;min-width:30px;height:30px;border:1px solid var(--line);border-radius:8px;background:var(--card);font-size:.7rem;overflow:hidden}.eqi img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover}.eqi em{position:absolute;left:3px;top:2px;font-style:normal;color:var(--mute);font-size:.62rem}.eqi i{position:relative;font-style:normal;padding:0 3px;background:rgba(0,0,0,.55);color:#fff;border-radius:6px 0 0 0}
+""" + EQ_CSS + r"""
 .bh{display:flex;flex-wrap:wrap;justify-content:space-between;color:var(--mute);font-size:.82rem;margin-bottom:8px;gap:6px}
 .good{color:var(--good)}.bad{color:var(--bad)}.mute{color:var(--mute)}.y{color:#d9a21b}.o{color:#e4863b}
-:root{--q-l:#e3ae35;--q-e:#b57bee;--q-u:#4c9aff;--q-a:#4cc26b;--q-n:#aab4c3}
-@media(prefers-color-scheme:light){:root:not([data-theme="dark"]){--q-l:#b97f00;--q-e:#8d3fd1;--q-u:#1f6fd6;--q-a:#1f8f45;--q-n:#6b7686}}
-:root[data-theme="light"]{--q-l:#b97f00;--q-e:#8d3fd1;--q-u:#1f6fd6;--q-a:#1f8f45;--q-n:#6b7686}
-.q-legendary{--q:var(--q-l)}.q-epic{--q:var(--q-e)}.q-elite{--q:var(--q-u)}.q-advanced{--q:var(--q-a)}.q-normal{--q:var(--q-n)}.q-x{--q:var(--mute)}
-.eqd li.eql{border-left:3px solid var(--q);padding-left:6px;cursor:help;border-radius:3px}.eqd li.eql:hover,.eqd li.eql:focus-visible{background:var(--soft);outline:none}.eql .en{color:var(--q);font-weight:600}.eql img{outline:1px solid var(--q)}
-.rdots{display:inline-flex;gap:3px;margin-left:6px;vertical-align:middle}.rdots i{width:8px;height:8px;border-radius:50%;background:var(--q);display:inline-block}
-#eqtip{--q-l:#e3ae35;--q-e:#b57bee;--q-u:#4c9aff;--q-a:#4cc26b;--q-n:#aab4c3;position:fixed;z-index:300;max-width:310px;padding:10px 12px;border-radius:12px;background:#060a12;color:#e8edf6;border:1px solid #2b3a57;box-shadow:0 14px 30px -10px rgba(0,0,0,.8);font-size:.82rem;line-height:1.5;pointer-events:none}
-#eqtip .th{display:flex;flex-direction:column;margin-bottom:5px;padding-bottom:5px;border-bottom:1px solid #2b3a57}#eqtip .th b{color:var(--q);font-size:.95rem}#eqtip .th span{color:var(--q);opacity:.85;font-size:.76rem}
-#eqtip .pw{color:#93a1bd}#eqtip .bn{color:#7fe3a6}#eqtip .st{color:#d9a21b}#eqtip .sr{margin-top:6px;color:#6f7e9b;font-size:.68rem}
 @media(max-width:900px){.rsplit,.r2,.bc{grid-template-columns:1fr}.rl{max-height:40vh}}
 </style></head><body><main>
 """ + _SB + r"""
@@ -3169,7 +3227,6 @@ let LANG='de';try{LANG=localStorage.getItem('roklang')==='en'?'en':'de'}catch(e)
 const L=(d,e)=>LANG==='en'?e:d,$=id=>document.getElementById(id),f=n=>n==null?'–':Number(n).toLocaleString(LANG==='en'?'en-US':'de-DE'),
  esc=s=>String(s==null?'':s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
 const CATS=[['field','Field'],['rally','Rally'],['garrison','Garrison']];
-const SLN={1:['Waffe','Weapon'],2:['Helm','Helm'],3:['Brust','Chest'],4:['Handschuhe','Gloves'],5:['Beine','Legs'],6:['Stiefel','Boots'],7:['Accessoire','Accessory'],8:['Accessoire','Accessory']},STN={Infantry:'Infanterie',Archer:'Bogenschützen',Cavalry:'Kavallerie',Integration:'Integration',Leadership:'Führung',Engineering:'Technik'};
 const iso=d=>new Date(d.getTime()-d.getTimezoneOffset()*6e4).toISOString().slice(0,10),ago=n=>{const d=new Date();d.setDate(d.getDate()-n);return iso(d)};
 let lastSg='',lastU='';
 let S={cat:'field',from:ago(30),to:iso(new Date()),account:'',q:'',abbr:'',hero:'',group:'tour',sel:''},D=null,seq=0;
@@ -3184,28 +3241,12 @@ function flt(){const a=(D&&D.accounts)||[],h=(D&&D.heroes)||[];
  <label>${L('Eigener Kommandant','Own commander')}<select id="fHero"><option value="">${L('Alle','All')}</option>${h.map(x=>`<option value="${x.id}"${String(x.id)===String(S.hero)?' selected':''}>${esc(x.name)}</option>`).join('')}</select></label>
  <label>${L('Gegner','Enemy')}<input id="fQ" value="${esc(S.q)}" placeholder="Name"></label><label>${L('Gegner-Allianz','Enemy alliance')}<input id="fAb" value="${esc(S.abbr)}" placeholder="ABC"></label>
  <label>${L('Gruppieren','Group by')}<select id="fGr"><option value="tour"${S.group==='tour'?' selected':''}>Tour</option><option value="pair"${S.group==='pair'?' selected':''}>${L('Kommandanten-Paar','Commander pair')}</option></select></label>`}
-const EQR=[];
-const RQN={legendary:['Legendär','Legendary'],epic:['Episch','Epic'],elite:['Selten','Elite'],advanced:['Ungewöhnlich','Advanced'],normal:['Gewöhnlich','Normal']};
-const UN={i:['Infanterie','Infantry'],a:['Bogenschützen','Archer'],c:['Kavallerie','Cavalry'],t:['Truppen','Troop'],s:['Belagerungseinheiten','Siege unit']},
- SN2={a:['Angriff','Attack'],d:['Verteidigung','Defense'],h:['Lebenspunkte','Health']},
- OTN={gs:['Sammelgeschwindigkeit','Gathering speed'],xp:['Kommandanten-EXP','Commander EXP gain'],bd:['Schaden gegen Barbaren','Damage to barbarians'],uc:['Truppenkapazität','Unit capacity'],ge:['Zusätzliche Rohstoffe beim Sammeln','Extra resources from gathering'],ms:['Marschgeschwindigkeit','March speed']};
-function stN(c){if(OTN[c])return L(OTN[c][0],OTN[c][1]);
- if(/^ms[iacs]$/.test(c))return L('Marschgeschwindigkeit','March speed')+' ('+L(UN[c[2]][0],UN[c[2]][1])+')';
- const u=UN[c[0]],t=SN2[c[1]];return u&&t?(LANG==='en'?u[1]+' '+t[1]:u[0]+'-'+t[0]):c}
-function eqTip(e){const q=RQN[e.r],sl=SLN[e.s]?L(SLN[e.s][0],SLN[e.s][1]):'',nf=v=>Number(v).toLocaleString(LANG==='en'?'en-US':'de-DE');
- let h=`<div class="th q-${e.r||'x'}"><b>${esc(e.n)}</b><span>${q?L(q[0],q[1])+' · ':''}${esc(sl)}</span></div>`;
- if(e.p)h+=`<div class="pw">${L('Macht','Power')} +${nf(e.p)}</div>`;
- if(e.b&&e.b.length)h+=e.b.map(x=>`<div class="bn">+${nf(x[0])} % ${esc(stN(x[1]))}</div>`).join('');
- else if(e.r&&e.s>=7)h+=`<div class="pw">${L('Zusatzeffekt: siehe Spiel','Special effect: see game')}</div>`;
- if(e.st)h+=`<div class="st">${L('Spezialtalent','Special talent')}: ${esc(L(STN[e.st]||e.st,e.st))}</div>`;
- if(e.ic)h+=`<div class="st">Iconic ${e.ic}</div>`;
- if(e.p||e.b)h+=`<div class="sr">${L('Basiswerte laut rokstats.online','Base values per rokstats.online')}</div>`;
- return h}
+""" + EQ_JS + r"""
 function card(r,x,side){const you=side==='you',hl=(r.hi&&(you?r.hi.me:r.hi.foe))||[];
  const name=you?esc(x.account_name||x.account):esc(r.foe),hs=you?[x.hero1,x.hero2]:[r.eh1,r.eh2];
  const rows=you?[[L('Einheiten','Units'),r.troops],[L('Tote','Dead'),r.dead,'bad'],[L('Schwer verwundet','Severely wounded'),r.severe,'bad'],[L('Leicht verwundet','Slightly wounded'),r.hurt],[L('Kill Points','Kill points'),r.kp,'y']]
   :[[L('Einheiten','Units'),r.etroops],[L('Tote','Dead'),r.edead,'bad'],[L('Schwer verwundet','Severely wounded'),r.esevere,'bad'],[L('Leicht verwundet','Slightly wounded'),r.ehurt],[L('Kill Points','Kill points'),r.kpl,'y']];
- const hb=hl.length?`<div class="hbx">${hl.map(h=>`<div class="hb"><div class="hp"><img src="/icon/hero_${h.id}" alt="" onerror="this.style.display='none'"><b>${esc(h.name)}</b></div><div class="hm" title="${esc((h.skn||[]).join(' · '))}"><span class="y">${h.sk||''}</span> · Lv ${h.lv} · ★${h.st}</div>${h.eq.length?`<details class="eqd"><summary>${L('Ausrüstung','Equipment')} (${h.eq.length}) <span class="rdots">${h.eq.map(e=>`<i class="q-${e.r||'x'}"></i>`).join('')}</span></summary><ul>${h.eq.map(e=>{EQR.push(e);return `<li class="eql q-${e.r||'x'}" tabindex="0" data-q="${EQR.length-1}"><img src="/icon/equip_${e.id}" alt="" onerror="this.style.display='none'"><span class="mute">${esc(SLN[e.s]?L(SLN[e.s][0],SLN[e.s][1]):e.s)}</span> <span class="en">${esc(e.n)}</span>${e.st||e.ic?` <i class="y">${e.st?esc(L(STN[e.st]||e.st,e.st)):''}${e.st&&e.ic?' · ':''}${e.ic?'Iconic '+e.ic:''}</i>`:''}</li>`}).join('')}</ul></details>`:''}</div>`).join('')}</div>`:`<div class="hs">${hs.filter(Boolean).map(esc).join(' + ')||'–'}</div>`;
+ const hb=hl.length?heroBoxes(hl):`<div class="hs">${hs.filter(Boolean).map(esc).join(' + ')||'–'}</div>`;
  return `<div><h4>${name}</h4>${hb}<table>${rows.map(z=>`<tr><td>${z[0]}</td><td class="num ${z[2]||''}">${z[2]==='y'?'+':''}${f(z[1])}</td></tr>`).join('')}</table></div>`}
 function body(){
  EQR.length=0;
@@ -3235,15 +3276,7 @@ $('rf').addEventListener('input',e=>{const t=e.target;if(t.id==='fQ')S.q=t.value
 $('rf').addEventListener('change',e=>{const t=e.target,m={fFrom:'from',fTo:'to',fAcc:'account',fHero:'hero',fGr:'group'}[t.id];if(!m)return;S[m]=t.value;if(m==='group'){sv();render()}else load()});
 $('rf').addEventListener('click',e=>{const b=e.target.closest('button');if(!b||b.dataset.r===undefined)return;const n=+b.dataset.r;S.from=n?ago(n):'2000-01-01';S.to=iso(new Date());load();flt()});
 $('ro').addEventListener('click',e=>{const t=e.target.closest('.ti');if(t){S.sel=t.dataset.t;render()}});
-const tip=document.createElement('div');tip.id='eqtip';tip.hidden=true;document.body.appendChild(tip);
-function tipPlace(x,y){const w=tip.offsetWidth,h=tip.offsetHeight;let l=x+14,t=y+16;if(l+w>innerWidth-8)l=Math.max(8,x-w-14);if(t+h>innerHeight-8)t=Math.max(8,y-h-14);tip.style.left=l+'px';tip.style.top=t+'px'}
-function tipShow(li,x,y){const e=EQR[+li.dataset.q];if(!e)return;tip.innerHTML=eqTip(e);tip.className='q-'+(e.r||'x');tip.hidden=false;tipPlace(x,y)}
-$('ro').addEventListener('mouseover',e=>{const li=e.target.closest('.eql');if(li)tipShow(li,e.clientX,e.clientY)});
-$('ro').addEventListener('mousemove',e=>{if(!tip.hidden)tipPlace(e.clientX,e.clientY)});
-$('ro').addEventListener('mouseout',e=>{const li=e.target.closest('.eql');if(li&&!(e.relatedTarget&&li.contains(e.relatedTarget)))tip.hidden=true});
-$('ro').addEventListener('focusin',e=>{const li=e.target.closest&&e.target.closest('.eql');if(li){const b=li.getBoundingClientRect();tipShow(li,b.left+24,b.bottom-10)}});
-$('ro').addEventListener('focusout',()=>{tip.hidden=true});
-document.addEventListener('keydown',e=>{if(e.key==='Escape')tip.hidden=true});
+eqBind($('ro'));
 tabs();flt();load();setInterval(()=>{if(!document.hidden)load()},30000);
 """ + _I18N + r"""</script></body></html>"""
 
