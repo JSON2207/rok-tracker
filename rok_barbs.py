@@ -669,7 +669,13 @@ class DB:
 
     def v2(self, cat, d_from, d_to, account="", f=None):
         f = f or {}
-        accs = [r["account"] for r in self.q("SELECT DISTINCT account FROM reports ORDER BY account")]
+        accs = []
+        for r in self.q("SELECT account, MAX(CASE WHEN acc_name<>'' THEN acc_name END) n FROM reports GROUP BY account ORDER BY account"):
+            nm = r["n"]
+            if not nm:
+                pr = self.q("SELECT name FROM profile WHERE account=? AND name<>'' ORDER BY day DESC LIMIT 1", (r["account"],))
+                nm = pr[0]["name"] if pr else ""
+            accs.append(dict(id=r["account"], name=nm or r["account"]))
         heroes = {}
         for r in self.q("SELECT hero1 h FROM battles UNION SELECT hero2 FROM battles UNION SELECT hero1 FROM pvp UNION SELECT hero2 FROM pvp"):
             if r["h"]:
@@ -2995,7 +3001,7 @@ function tabs(){$('tabs').innerHTML=CATS.map(c=>`<button type="button" role="tab
 function flt(){const a=(D&&D.accounts)||[],h=(D&&D.heroes)||[],pv=['field','rally','garrison'].includes(S.cat);
  $('flt').innerHTML=`<label>${L('Von','From')}<input type="date" id="fFrom" value="${S.from}"></label><label>${L('Bis','To')}<input type="date" id="fTo" value="${S.to}"></label>
  <div class="quick"><button class="btn" data-r="7">7 ${L('Tage','days')}</button><button class="btn" data-r="30">30 ${L('Tage','days')}</button><button class="btn" data-r="0">${L('Alles','All')}</button></div>
- <label>${L('Konto','Account')}<select id="fAcc"><option value="">${L('Alle','All')}</option>${a.map(x=>`<option value="${x}"${x===S.account?' selected':''}>${x}</option>`).join('')}</select></label>
+ <label>${L('Konto','Account')}<select id="fAcc"><option value="">${L('Alle','All')}</option>${a.map(x=>`<option value="${x.id}"${x.id===S.account?' selected':''}>${esc(x.name)}</option>`).join('')}</select></label>
  ${S.cat==='gathering'?'':`<label>${L('Eigener Kommandant','Own commander')}<select id="fHero"><option value="">${L('Alle','All')}</option>${h.map(x=>`<option value="${x.id}"${String(x.id)===String(S.hero)?' selected':''}>${esc(x.name)}</option>`).join('')}</select></label>`}
  ${pv?`<label>${L('Gegner (Name)','Enemy (name)')}<input id="fQ" value="${esc(S.q)}" placeholder="Name"></label><label>${L('Gegner-Allianz','Enemy alliance')}<input id="fAb" value="${esc(S.abbr)}" placeholder="Tag"></label>
  <label>${L('Gruppieren','Group by')}<select id="fGr"><option value="tour"${S.group==='tour'?' selected':''}>${L('Tour','Tour')}</option><option value="pair"${S.group==='pair'?' selected':''}>${L('Kommandanten-Paar','Commander pair')}</option></select></label>`:''}
