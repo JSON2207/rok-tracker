@@ -2685,16 +2685,17 @@ const dm0=d=>LANG==='en'?(p=>p.length===3?+p[2]+' '+MON[+p[1]-1]+' '+p[0]:d)(d.s
 const dm=d=>{const q=String(d).split(' ');return dm0(q[0])+(q[1]?' '+q[1]:'')};
 function saveUi(){if(!lastAl)return;fetch('/api/alliance_ui',{method:'POST',body:JSON.stringify({order:lastAl.cats.map(c=>c.key),off:lastAl.cats.map(c=>c.key).filter(k=>!alOn.has(k)),sort:alSort,dir:alDir})}).catch(()=>{})}
 const LL=(d,e)=>LANG==='en'?e:d;let INA={asof:'',members:[]};
+const TD=()=>new Date().toLocaleDateString('sv'),dd=(a,b)=>Math.round((Date.UTC(...b.split('-').map((v,i)=>i==1?v-1:+v))-Date.UTC(...a.split('-').map((v,i)=>i==1?v-1:+v)))/864e5),dy=x=>x.days+(x.d0?Math.max(0,dd(x.d0,TD())):0);
 function inRender(){const m=INA.members,n=(lastAl&&lastAl.members||[]).length;$('ihT').textContent=LL('Inaktivitätsbericht','Inactivity Report');
  $('ihS').textContent=(INA.asof?(LL('Stand ','As of ')+INA.asof+' · '):'')+LL('Mitglieder, die seit mehr als drei Tagen nicht online waren','Members who have not logged in for more than three days')+' · '+m.length+(n?' / '+n+' ('+Math.round(m.length*100/n)+' %)':'');
  $('iadd').textContent=LL('Hinzufügen','Add');$('iclr').textContent=LL('Leeren','Clear');$('iok').textContent=LL('Speichern','Save');$('inm').placeholder=LL('Name','Name');$('idy').title=LL('Tage offline','Days offline');
- $('ilist').innerHTML=m.length?m.slice().sort((a,b)=>b.days-a.days).map((x,i)=>'<div class="ip'+(x.days>=7?' hot':'')+'"><b>'+esc(x.name)+'</b><span>'+(LANG==='en'?x.days+' days ago':'vor '+x.days+' Tagen')+'</span><button type="button" class="x" data-n="'+esc(x.name)+'" title="'+LL('Entfernen','Remove')+'">×</button></div>').join(''):'<span class="note">'+LL('Niemand inaktiv.','Nobody inactive.')+'</span>'}
+ $('ilist').innerHTML=m.length?m.slice().sort((a,b)=>dy(b)-dy(a)).map((x,i)=>'<div class="ip'+(dy(x)>=7?' hot':'')+'"><b>'+esc(x.name)+'</b><span>'+(LANG==='en'?dy(x)+' days ago':'vor '+dy(x)+' Tagen')+'</span><button type="button" class="x" data-n="'+esc(x.name)+'" title="'+LL('Entfernen','Remove')+'">×</button></div>').join(''):'<span class="note">'+LL('Niemand inaktiv.','Nobody inactive.')+'</span>'}
 function inSave(){INA.asof=new Date().toLocaleString('sv').slice(0,16).replace('T',' ');return fetch('/api/inactive',{method:'POST',body:JSON.stringify(INA)}).then(r=>r.json()).then(r=>{if(r.ok)INA=r.data;inRender()}).catch(()=>{})}
 $('iadd').onclick=()=>{const f=$('iform');f.hidden=!f.hidden;if(!f.hidden)$('inm').focus()};
 $('iclr').onclick=()=>{INA.members=[];inSave()};
-$('iform').onsubmit=e=>{e.preventDefault();const n=$('inm').value.trim(),d=Math.max(3,+$('idy').value||4);if(!n)return;INA.members=INA.members.filter(x=>x.name!==n).concat([{name:n,days:d}]);$('inm').value='';inSave()};
+$('iform').onsubmit=e=>{e.preventDefault();const n=$('inm').value.trim(),d=Math.max(3,+$('idy').value||4);if(!n)return;INA.members=INA.members.filter(x=>x.name!==n).concat([{name:n,days:d,d0:TD()}]);$('inm').value='';inSave()};
 $('ilist').onclick=e=>{const b=e.target.closest('.x');if(!b)return;INA.members=INA.members.filter(x=>x.name!==b.dataset.n);inSave()};
-fetch('/api/inactive').then(r=>r.json()).then(d=>{INA=d;inRender()}).catch(()=>{});
+fetch('/api/inactive').then(r=>r.json()).then(d=>{INA=d;inRender()}).catch(()=>{});setInterval(()=>{try{inRender()}catch(e){}},60000);
 function mobRender(a){const ms=(a.members||[]).filter(m=>m.c.mob&&m.c.mob.v!=null).sort((x,y)=>(x.c.mob.r||1e9)-(y.c.mob.r||1e9)||y.c.mob.v-x.c.mob.v);
  const u=a.ui||{},req=+u.mobreq>=0?+u.mobreq:1000;if(document.activeElement!==$('mreq'))$('mreq').value=req;$('monly').checked=!!u.mobonly;
  const R=+$('mreq').value>=0&&$('mreq').value!==''?+$('mreq').value:req,low=ms.filter(m=>m.c.mob.v<R);
@@ -3380,14 +3381,23 @@ INACT_DEFAULT = {"asof": "2026-11-15 17:21", "members": [{"name": "\u02e2\u02b0N
 
 def inact_clean(d):
     out = []
+    asof = str((d or {}).get("asof", ""))[:10] if isinstance(d, dict) else ""
     for m in (d.get("members") if isinstance(d, dict) else None) or []:
         try:
             nm = str(m.get("name", "")).strip()[:40]
             dy = max(3, min(999, int(m.get("days", 4))))
+            d0 = str(m.get("d0", ""))[:10]
+            datetime.strptime(d0, "%Y-%m-%d")
+        except ValueError:
+            try:
+                datetime.strptime(asof, "%Y-%m-%d")
+                d0 = asof                              # alte Eintraege: Tage galten zum Stand der Liste
+            except ValueError:
+                d0 = datetime.now().strftime("%Y-%m-%d")
         except Exception:
             continue
         if nm:
-            out.append({"name": nm, "days": dy})
+            out.append({"name": nm, "days": dy, "d0": d0})
     return {"asof": str((d or {}).get("asof", ""))[:20], "members": out}
 
 
