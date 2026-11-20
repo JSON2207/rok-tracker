@@ -1601,14 +1601,11 @@ class DB:
         return d if isinstance(d, dict) else {}
 
     def silk_add(self, d):
-        """Silk-Road-Lauf: es werden nur die Namen mit >= 50.000 Punkten gespeichert (keine Punkte)."""
+        """Silk-Road-Lauf: Name + Punkte; die Tabelle zeigt nur die Teilnahme (ab 50.000), die Punkte stehen im aufgeklappten Profil."""
         run = int(d.get("run", 0))
         if not 1 <= run <= 20:
             raise ValueError("run 1-20 fehlt")
-        names = []
-        for e in d.get("entries", []):
-            if len(e) >= 3 and int(e[2]) >= self.SR_MIN:
-                names.append(str(e[1])[:60])
+        names = [[str(e[1])[:60], int(e[2])] for e in d.get("entries", []) if len(e) >= 3][:500]
         cur = self.silk_get()
         cur[str(run)] = names
         self.set_setting("silkroad", json.dumps(cur))
@@ -2762,7 +2759,8 @@ function renderAlliance(a){lastAl=a;if(!a)return;try{inRender()}catch(e){}try{mo
   {const o=ms.filter(m=>m.pa!=null).map(m=>m.pa).sort((x,y)=>x-y);ms.forEach(m=>{m.bp=m.pa==null?null:o.indexOf(m.pa)+1})}
   const arr=(n,o)=>n==null||o==null||n===o?'':`<span class="ra ${o>n?'good':'bad'}" title="${LL('Platz vorher #','Previously #')}${o}">${o>n?'▲':'▼'}${Math.abs(o-n)}</span>`;
   const nk=n=>String(n).replace(/^[\u02e2\u02b0\u1d3f\u1d3a]+/,'').normalize('NFD').toLowerCase().replace(/[^a-z0-9]/g,'');
- const SRD=a.sr||{},SRN=Math.max(3,Object.keys(SRD).length),SRS=Object.values(SRD).map(l=>new Set(l.map(x=>nk(x))));
+ const SRD=a.sr||{},SRN=Math.max(3,Object.keys(SRD).length),SRK=Object.keys(SRD).sort((x,y)=>x-y),SRS=SRK.map(k=>new Set(SRD[k].filter(x=>x[1]>=50000).map(x=>nk(x[0]))));
+ const srPts=n=>SRK.map(k=>{const e=SRD[k].find(x=>nk(x[0])===nk(n));return [k,e?e[1]:null]});
  const srCell=n=>{if(!SRS.length)return '<span class="srx">–</span>';const c=SRS.filter(S=>S.has(nk(n))).length;return `<span class="sr${c>=SRN?' all':c?' some':''}" title="${LL('Teilgenommen (ab 50.000 Punkten)','Participated (50,000+ points)')}">${c}/${SRN}</span>`};
  const R4=new Set((a.ui&&a.ui.r4)||[]);
   const TR=(a.ui&&a.ui.tiers)||{},TL=['S','A','B','C','D','E'],TC=[.105,.21,.413,.622,.762].map(f=>Math.round(ms.length*f)),autoT=p=>p==null?'':p<=TC[0]?'S':p<=TC[1]?'A':p<=TC[2]?'B':p<=TC[3]?'C':p<=TC[4]?'D':'E',effT=m=>TR[m.name]||autoT(m.ap.avg_all);
@@ -2773,7 +2771,7 @@ function renderAlliance(a){lastAl=a;if(!a)return;try{inRender()}catch(e){}try{mo
  const dl=x=>x&&x.d!=null&&x.d!==0?`<span class="dl ${x.d>0?'good':'bad'}">${(x.d>0?'+':'')+f(x.d)}</span>`:'';
  const cell=(m,k)=>{const x=m.c[k];if(!x)return '<td>–</td>';if(x.v==null&&x.seen)return `<td class="note" title="Nicht mehr in der Liste, zuletzt gesehen ${dm(x.seen)}">–</td>`;
   return `<td>${x.v==null?'–':f(x.v)}${x.r!=null?`<span class="rk">#${x.r}</span>`:''}${arr(x.r,x.pr)}${dl(x)}</td>`};
- const hist=m=>`<tr class="det"><td colspan="${vc.length+4}"><div class="hist">${cats.filter(c=>m.h[c.key]).map(c=>{const h=m.h[c.key].slice().reverse();
+ const hist=m=>`<tr class="det"><td colspan="${vc.length+5}"><div class="hist">${SRK.length?`<div><h3>Silk Road</h3><table><tr><th>${LL('Lauf','Run')}</th><th>${LL('Punkte','Points')}</th><th></th></tr>${srPts(m.name).map(([k,v])=>`<tr><td>${k}</td><td>${v==null?'–':f(v)}</td><td class="${v>=50000?'good':'bad'}">${v>=50000?LL('teilgenommen','participated'):LL('nicht','no')}</td></tr>`).join('')}</table></div>`:''}${cats.filter(c=>m.h[c.key]).map(c=>{const h=m.h[c.key].slice().reverse();
    return `<div><h3>${c.label}</h3><table><tr><th>Tag</th><th>Wert</th><th>Rang</th><th>Veränderung</th></tr>${h.map((r,i)=>{const p=h[i+1],d=p&&p[1]!=null&&r[1]!=null?r[1]-p[1]:null;
      return `<tr><td>${dm(r[0])}</td><td>${r[1]==null?'–':f(r[1])}</td><td>${r[2]==null?'–':'#'+r[2]}</td><td class="${d>0?'good':d<0?'bad':''}">${d==null?'–':(d>0?'+':'')+f(d)}</td></tr>`}).join('')}</table></div>`}).join('')}</div></td></tr>`;
  $('al').innerHTML=ms.length?`<tr><th class="t">#</th><th class="t">Name</th><th class="tr" title="${LL('Silk Road: Läufe mit mindestens 50.000 Punkten','Silk Road: runs with at least 50,000 points')}">Silk Road</th><th data-k="tier" class="tr${alSort==='tier'?' on':''}" title="${LL('Eigene Einstufung S bis E, zum Sortieren klicken','Your own rating S to E, click to sort')}">Tier${alSort==='tier'?(alDir<0?' ▼':' ▲'):''}</th>${AV.map(([k,l])=>`<th data-k="${k}" class="${alSort===k?'on':''}" title="Durchschnitt der Plätze in den eingeschalteten Kategorien, niedriger ist besser">${l}${alSort===k?(alDir<0?' ▼':' ▲'):''}</th>`).join('')}${vc.map(c=>`<th data-k="${c.key}" class="${alSort===c.key?'on':''}">${c.label}${alSort===c.key?(alDir<0?' ▼':' ▲'):''}</th>`).join('')}</tr>`+
