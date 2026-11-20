@@ -1593,9 +1593,9 @@ class DB:
 
     SR_MIN = 50000
 
-    def silk_get(self):
+    def silk_get(self, key="silkroad"):
         try:
-            d = json.loads(self.get_setting("silkroad", "{}"))
+            d = json.loads(self.get_setting(key, "{}"))
         except ValueError:
             d = {}
         return d if isinstance(d, dict) else {}
@@ -1635,12 +1635,21 @@ class DB:
             self.c.execute("INSERT INTO alliance_arch SELECT ?, day, cat, name, rank, value FROM alliance", (name,))
             self.c.execute("DELETE FROM alliance")
             self.c.commit()
+        sr = self.silk_get()
+        if sr:
+            arch = self.silk_get("silkroad_arch")
+            arch[name] = sr
+            self.set_setting("silkroad_arch", json.dumps(arch))
+            self.set_setting("silkroad", "{}")
         return name
 
     def alliance_dellist(self, name):
         with self.lock:
             n = self.c.execute("DELETE FROM alliance_arch WHERE lst=?", (name,)).rowcount
             self.c.commit()
+        arch = self.silk_get("silkroad_arch")
+        if arch.pop(name, None) is not None:
+            self.set_setting("silkroad_arch", json.dumps(arch))
         return n
 
     def alliance_stats(self, sel=None, base=None, lst=None, blst=None):
@@ -1697,7 +1706,7 @@ class DB:
         names = dict(ALLIANCE_CATS)
         return dict(cats=[dict(key=k, label=names[k]) for k in ui["order"]], ui=ui, latest=latest, snaps=snaps, sel=sel, base=base, blst=blst if brows is not None else "", lists=self.alliance_lists(), lst=lst or "",
                     allsnaps=dict([("", sorted({r["day"] for r in self.q("SELECT day FROM alliance")}))] + [(n, sorted({r["day"] for r in self.q("SELECT day FROM alliance_arch WHERE lst=?", (n,))})) for n in self.alliance_lists()]),
-                    days={c: sorted(d) for c, d in days.items()}, sr=self.silk_get(), members=sorted(members.values(), key=lambda m: m["name"].lower()))
+                    days={c: sorted(d) for c, d in days.items()}, sr=(self.silk_get("silkroad_arch").get(lst, {}) if lst else self.silk_get()), members=sorted(members.values(), key=lambda m: m["name"].lower()))
 
     def profile_stats(self, d_from, d_to, account=""):
         out = []
