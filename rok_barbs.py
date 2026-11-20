@@ -2776,15 +2776,18 @@ function renderAlliance(a){lastAl=a;if(!a)return;try{inRender()}catch(e){}try{mo
   const vc=cats.filter(c=>alOn.has(c.key));if(alSort!=='avg_all'&&alSort!=='tier'&&!alOn.has(alSort)){alSort='avg_all';alDir=1}
   const ORD=alOrd(a),HSR=Object.keys(a.sr||{}).length>0,CL=Object.fromEntries(cats.map(c=>[c.key,c.label]));
   $('achips').innerHTML=ORD.filter(k=>k!=='silk'||HSR).map(k=>k==='silk'?`<button type="button" class="chip" draggable="true" data-k="silk" id="srchip" aria-pressed="${!(a.ui&&a.ui.srhide)}">Silk Road</button>`:`<button type="button" class="chip" draggable="true" data-k="${k}" aria-pressed="${alOn.has(k)}">${CL[k]}</button>`).join('');
-  const WR={};vc.forEach(c=>{const r=ms.map(m=>m.c[c.key]&&m.c[c.key].r).filter(v=>v!=null);WR[c.key]=r.length?Math.max(...r)+1:null});
-  const avg=(m,ex)=>{const cs=vc.filter(c=>!ex.includes(c.key));if(!cs.some(c=>m.c[c.key]&&m.c[c.key].r!=null))return null;const r=cs.map(c=>{const x=m.c[c.key]&&m.c[c.key].r;return x!=null?x:WR[c.key]}).filter(v=>v!=null);return r.length?r.reduce((x,y)=>x+y,0)/r.length:null};
+  const nk=n=>String(n).replace(/^[\u02e2\u02b0\u1d3f\u1d3a]+/,'').normalize('NFD').toLowerCase().replace(/[^a-z0-9]/g,'');
+  const SRD=a.sr||{},SRON=!(a.ui&&a.ui.srhide)&&Object.keys(SRD).length>0,SRK=Object.keys(SRD).sort((x,y)=>x-y);
+  {const T={};SRK.forEach(k=>SRD[k].forEach(x=>{T[nk(x[0])]=(T[nk(x[0])]||0)+x[1]}));const tv=ms.map(m=>T[nk(m.name)]||0);ms.forEach((m,i)=>m.srr=tv[i]>0?1+tv.filter(v=>v>tv[i]).length:null)}
+  const gr=(m,k)=>k==='silk'?m.srr:(m.c[k]&&m.c[k].r),AC=SRON?[...vc,{key:'silk'}]:vc;
+  const WR={};AC.forEach(c=>{const r=ms.map(m=>gr(m,c.key)).filter(v=>v!=null);WR[c.key]=r.length?Math.max(...r)+1:null});
+  const avg=(m,ex)=>{const cs=AC.filter(c=>!ex.includes(c.key));if(!cs.some(c=>gr(m,c.key)!=null))return null;const r=cs.map(c=>{const x=gr(m,c.key);return x!=null?x:WR[c.key]}).filter(v=>v!=null);return r.length?r.reduce((x,y)=>x+y,0)/r.length:null};
   ms.forEach(m=>{m.a={};AV.forEach(([k,,ex])=>m.a[k]=avg(m,ex))});
   ms.forEach(m=>m.ap={});AV.forEach(([k])=>{const o=ms.filter(m=>m.a[k]!=null).map(m=>m.a[k]).sort((x,y)=>x-y);ms.forEach(m=>{m.ap[k]=m.a[k]==null?null:o.indexOf(m.a[k])+1})});
   ms.forEach(m=>{const r=vc.map(c=>m.c[c.key]&&m.c[c.key].v!=null?m.c[c.key].pr:null).filter(v=>v!=null);m.pa=r.length?r.reduce((x,y)=>x+y,0)/r.length:null});
   {const o=ms.filter(m=>m.pa!=null).map(m=>m.pa).sort((x,y)=>x-y);ms.forEach(m=>{m.bp=m.pa==null?null:o.indexOf(m.pa)+1})}
   const arr=(n,o)=>n==null||o==null||n===o?'':`<span class="ra ${o>n?'good':'bad'}" title="${LL('Platz vorher #','Previously #')}${o}">${o>n?'▲':'▼'}${Math.abs(o-n)}</span>`;
-  const nk=n=>String(n).replace(/^[\u02e2\u02b0\u1d3f\u1d3a]+/,'').normalize('NFD').toLowerCase().replace(/[^a-z0-9]/g,'');
- const SRD=a.sr||{},SRON=!(a.ui&&a.ui.srhide)&&Object.keys(a.sr||{}).length>0,SRN=Math.max(3,Object.keys(SRD).length),SRK=Object.keys(SRD).sort((x,y)=>x-y),SRS=SRK.map(k=>new Set(SRD[k].filter(x=>x[1]>=50000).map(x=>nk(x[0]))));
+ const SRN=Math.max(3,Object.keys(SRD).length),SRS=SRK.map(k=>new Set(SRD[k].filter(x=>x[1]>=50000).map(x=>nk(x[0]))));
  const srPts=n=>SRK.map(k=>{const e=SRD[k].find(x=>nk(x[0])===nk(n));return [k,e?e[1]:null]});
  const srCell=n=>{if(!SRS.length)return '<span class="srx">–</span>';const c=SRS.filter(S=>S.has(nk(n))).length;return `<span class="sr${c>=SRN?' all':c?' some':''}" title="${LL('Teilgenommen (ab 50.000 Punkten)','Participated (50,000+ points)')}">${c}/${SRN}</span>`};
  const R4=new Set((a.ui&&a.ui.r4)||[]);
