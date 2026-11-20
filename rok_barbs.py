@@ -1235,7 +1235,7 @@ class DB:
             self.c.commit()
         return n
 
-    def add_alliance(self, snaps):
+    def add_alliance(self, snaps, lst=""):
         """Allianz-Ranglisten (aus Screenshots abgelesen). Format: {"date": "...", "categories": {"power": [{"rank", "name", "value"}]}}.
         Mehrere Dateien pro Tag werden zusammengefuehrt; derselbe Name am selben Tag wird ueberschrieben.
         Mit "replace": true ersetzt die Datei die Liste dieses Tages je Kategorie komplett."""
@@ -1255,14 +1255,20 @@ class DB:
                     if cat not in valid:
                         raise ValueError("Unbekannte Kategorie: %s" % cat)
                     if s.get("replace"):                        # vollstaendige Liste: Eintraege dieses Tages ersetzen
-                        self.c.execute("DELETE FROM alliance WHERE day=? AND cat=?", (day, cat))
+                        if lst:
+                            self.c.execute("DELETE FROM alliance_arch WHERE lst=? AND day=? AND cat=?", (lst, day, cat))
+                        else:
+                            self.c.execute("DELETE FROM alliance WHERE day=? AND cat=?", (day, cat))
                     for r in rows:
                         name = str(r["name"]).strip()
                         if not name:
                             continue
                         rank = int(r["rank"]) if r.get("rank") is not None else None
                         val = int(r["value"]) if r.get("value") is not None else None
-                        self.c.execute("INSERT OR REPLACE INTO alliance VALUES(?,?,?,?,?)", (day, cat, name, rank, val))
+                        if lst:
+                            self.c.execute("INSERT OR REPLACE INTO alliance_arch VALUES(?,?,?,?,?,?)", (lst, day, cat, name, rank, val))
+                        else:
+                            self.c.execute("INSERT OR REPLACE INTO alliance VALUES(?,?,?,?,?)", (day, cat, name, rank, val))
                         n += 1
             self.c.commit()
         return n
@@ -1602,12 +1608,17 @@ class DB:
             d = {}
         return d if isinstance(d, dict) else {}
 
-    def silk_add(self, d):
+    def silk_add(self, d, lst=""):
         """Silk-Road-Lauf: Name + Punkte; die Tabelle zeigt nur die Teilnahme (ab 50.000), die Punkte stehen im aufgeklappten Profil."""
         run = int(d.get("run", 0))
         if not 1 <= run <= 20:
             raise ValueError("run 1-20 fehlt")
         names = [[str(e[1])[:60], int(e[2])] for e in d.get("entries", []) if len(e) >= 3][:500]
+        if lst:
+            arch = self.silk_get("silkroad_arch")
+            arch.setdefault(lst, {})[str(run)] = names
+            self.set_setting("silkroad_arch", json.dumps(arch))
+            return len(names)
         cur = self.silk_get()
         cur[str(run)] = names
         self.set_setting("silkroad", json.dumps(cur))
@@ -2803,8 +2814,8 @@ $('achips').addEventListener('drop',e=>{const t=e.target.closest('.chip[data-k]'
  const cs=lastAl.cats.slice(),from=cs.findIndex(c=>c.key===dragK),at=cs.findIndex(c=>c.key===to);const [m]=cs.splice(from,1);cs.splice(at,0,m);lastAl.cats=cs;dragK=null;saveUi();renderAlliance(lastAl)});
 $('abtn').onclick=()=>$('afile').click();
 $('aexp').href='/allianz/export?lang='+LANG;
-$('afile').onchange=async e=>{let n=0,err='';for(const fl of e.target.files){try{const r=await fetch('/api/alliance',{method:'POST',body:await fl.text()}).then(r=>r.json());if(r.ok)n+=r.n;else err=r.error}catch(x){err=String(x)}}
- $('amsg').textContent=err?'Fehler: '+err:n+' Eintrag/Einträge übernommen.';e.target.value='';alLst='';alSel='';alBase='';alBlst='';lastSig='';load()};
+$('afile').onchange=async e=>{let n=0,err='';for(const fl of e.target.files){try{const r=await fetch('/api/alliance?lst='+encodeURIComponent(alLst),{method:'POST',body:await fl.text()}).then(r=>r.json());if(r.ok)n+=r.n;else err=r.error}catch(x){err=String(x)}}
+ $('amsg').textContent=err?'Fehler: '+err:n+' Eintrag/Einträge übernommen.';e.target.value='';alSel='';alBase='';alBlst='';lastSig='';load()};
 let alSel='',alBase='',alLst='',alBlst='';
 $('alst').onchange=()=>{alLst=$('alst').value;alSel='';alBase='';alBlst='';alBlst='';lastSig='';load()};
 $('anew').onclick=async()=>{if(!lastAl||!lastAl.sel)return;const wk=(d=>{const t=new Date(Date.UTC(+d[0],+d[1]-1,+d[2]));const n=t.getUTCDay()||7;t.setUTCDate(t.getUTCDate()+4-n);const y=t.getUTCFullYear();return [Math.ceil(((t-Date.UTC(y,0,1))/864e5+1)/7),y]})(lastAl.sel.slice(0,10).split('-'));
@@ -3763,10 +3774,13 @@ def make_handler(db, watcher):
                 try:
                     n = int(self.headers.get("Content-Length", 0))
                     d = json.loads(self.rfile.read(min(n, 4000000)))
+                    ls = parse_qs(urlparse(self.path).query).get("lst", [""])[0][:60]
+                    if ls and ls not in db.alliance_lists():
+                        raise ValueError("Liste nicht gefunden")
                     if isinstance(d, dict) and d.get("event") == "Silk Road":
-                        self.send(json.dumps({"ok": True, "n": db.silk_add(d)}), "application/json")
+                        self.send(json.dumps({"ok": True, "n": db.silk_add(d, ls)}), "application/json")
                         return
-                    self.send(json.dumps({"ok": True, "n": db.add_alliance(d)}), "application/json")
+                    self.send(json.dumps({"ok": True, "n": db.add_alliance(d, ls)}), "application/json")
                 except Exception as e:
                     self.send(json.dumps({"ok": False, "error": str(e)}), "application/json")
                 return
