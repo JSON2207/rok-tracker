@@ -10,7 +10,7 @@ Optional: python rok_barbs.py --folder "D:\\anderer\\pfad" --port 8765
 Das Programm liest nur Dateien. Es verändert nichts im Spielordner.
 Benötigt nur Python 3.8+ (keine zusätzlichen Pakete).
 """
-import argparse, base64, json, os, re, shutil, sqlite3, struct, sys, threading, time, webbrowser
+import argparse, base64, io, json, os, re, shutil, sqlite3, struct, sys, threading, time, webbrowser, zipfile
 from datetime import datetime, timedelta
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import urlparse, parse_qs
@@ -2460,7 +2460,7 @@ const EN=[
 [`Ø Rang`,`Avg rank`],[`Durchschnitt der Plätze in den eingeschalteten Kategorien, niedriger ist besser`,`Average of the ranks in the categories that are on, lower is better`],
 [`Tier: automatisch nach Platz im Ø Rang, in Prozent der aktuellen Mitgliederzahl (oberste 10,5 % S, bis 21 % A, bis 41 % B, bis 62 % C, bis 76 % D, Rest E; bei 143 Mitgliedern entspricht das 15/30/59/89/109). Über das Auswahlfeld kannst du einen Tier selbst setzen, „Auto“ stellt die Automatik wieder her.`,`Tier: automatic by position in the average rank, as a percentage of the current member count (top 10.5% S, up to 21% A, up to 41% B, up to 62% C, up to 76% D, rest E; with 143 members that is 15/30/59/89/109). Use the dropdown to set a tier yourself, “Auto” restores the automatic rating.`],
 [`Klick auf eine Kategorie über der Tabelle schaltet sie aus, mit der Maus ziehen ändert die Reihenfolge der Spalten. Die Einstellungen werden gespeichert. Eine ausgeschaltete Kategorie wird ausgeblendet und zählt nicht zum Ø Rang. Ø Rang ist der Durchschnitt der Plätze in den eingeschalteten Kategorien, niedriger ist besser. Fehlt ein Mitglied in einer Kategorie (–), zählt das wie 0 und damit als letzter Platz. Die Zahl dahinter ist der Platz in dieser Durchschnittswertung.`,`Click a category above the table to switch it off, drag it with the mouse to change the column order. The settings are saved. A switched-off category is hidden and does not count toward the avg rank. Avg rank is the average of the ranks in the categories that are on, lower is better. A member missing from a category (–) counts as 0, i.e. last place. The number after it is the position in that average ranking.`],
-[`Als HTML exportieren`,`Export as HTML`],[`Speichert die Rangliste als eigenständige Datei, die du weitergeben kannst`,`Saves the ranking as a standalone file you can share`],[`Allianz-Daten einfügen …`,`Import alliance data …`],[`Mitglied suchen …`,`Search member …`],[`Allianz`,`Alliance`],
+[`Als Excel exportieren`,`Export as Excel`],[`Speichert die Tabelle so, wie du sie gerade siehst (Sortierung, Spalten, Tier, Silk Road), als Excel-Datei`,`Saves the table as you currently see it (sorting, columns, tier, Silk Road) as an Excel file`],[`Allianz-Daten einfügen …`,`Import alliance data …`],[`Mitglied suchen …`,`Search member …`],[`Allianz`,`Alliance`],
 [`Ranglisten deiner Allianz aus Screenshots (ohne Resource Assistance und Armory Contributions). Die Datei, die ich dir schicke, fügst du hier ein. Frühere Stände bleiben gespeichert, so siehst du, wer wie viel dazugewonnen hat.`,`Rankings of your alliance from screenshots (without Resource Assistance and Armory Contributions). Import the file I send you here. Earlier snapshots are kept, so you can see who gained how much.`],
 [`Noch keine Allianz-Daten. Schick mir Screenshots der Ranglisten, ich erstelle dir die Datei zum Einfügen.`,`No alliance data yet. Send me screenshots of the rankings and I will create the file to import.`],
 [`Nicht mehr in der Liste, zuletzt gesehen`,`No longer listed, last seen`],[`Klick auf einen Namen zeigt den Verlauf.`,`Click a name to see the history.`],[`Noch keine Daten`,`No data yet`],
@@ -2708,7 +2708,7 @@ a.btn{font:inherit;color:var(--ink);background:var(--soft);border:1px solid var(
 <button type="button" id="mbtn" class="mbtn" aria-label="Menü" aria-expanded="true" title="Menü">☰</button><aside id="sb" class="sb" aria-label="Menü"><div class="sbh"><span class="sbt">RoK&nbsp;Tracker</span><button type="button" id="sbx" class="mbtn" aria-label="Menü schließen" title="Menü schließen">⇤</button></div><nav class="sbn"><div class="sbl">Seiten</div><a href="/" data-p="/" data-k="loot"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l8 4v5c0 4.5-3.2 7.8-8 9-4.8-1.2-8-4.5-8-9V7z"/><path d="M9 12l2 2 4-4"/></svg><span>Loot-Tracker</span></a><a href="/reports" data-p="/reports" data-k="rep"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M14 3H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"/><path d="M14 3v6h6M8 13h8M8 17h5"/></svg><span>Reports</span></a><a href="/allianz" data-p="/allianz" data-k="ali"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20V10M10 20V4M16 20v-8M22 20H2"/></svg><span>Allianz-Ranking</span></a><a href="/kvk1" data-p="/kvk1" data-k="kvk"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M14.5 17.5L3 6V3h3l11.5 11.5M13 19l6-6M16 16l4 4M19 21l2-2M14.5 6.5L18 3h3v3l-3.5 3.5M5 14l4 4M7 17l-3 3M3 19l2 2"/></svg><span>KVK1</span></a><a href="/kvk2" data-p="/kvk2" data-k="kvk2"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3a14 14 0 0 1 0 18M12 3a14 14 0 0 0 0 18"/></svg><span>KVK2</span></a><a href="/woche" data-p="/woche" data-k="wb"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="17" rx="2"/><path d="M3 9h18M8 2v4M16 2v4M8 14h3M13 14h3M8 17h3"/></svg><span>Wochenbericht</span></a><a href="/kalender" data-p="/kalender" data-k="kal"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg><span>Event-Kalender</span></a><a href="/settings" data-p="/settings" data-k="set"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.9l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.9-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1-1.5 1.7 1.7 0 0 0-1.9.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.9 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1 1.7 1.7 0 0 0-.3-1.9l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.9.3h0a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5h0a1.7 1.7 0 0 0 1.9-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.9v0a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg><span>Einstellungen</span><b class="sbb" id="sbbadge" hidden></b></a><div class="sbdiv" data-k="d1"></div><div class="sbdiv" data-k="d2"></div><div class="sbstat" data-k="prof"><div class="sbgh0">Profil</div><a href="/#profil"><span>Profil</span></a><a href="/#tag"><span>Pro Tag</span></a></div></nav></aside><div id="sbov" class="sbov"></div><script>try{var th=localStorage.getItem("roktheme");if(th)document.documentElement.dataset.theme=th}catch(e){}window.sbOrd=function(){var A=["loot","rep","ali","kvk","kvk2","wb","kal"],o=A.slice();try{var v=JSON.parse(localStorage.getItem("roksbo")||"null");if(v&&v.length){v=v.filter(function(x){return A.indexOf(x)>=0});o=v.concat(A.filter(function(x){return v.indexOf(x)<0}))}}catch(e){}var m={d1:6,prof:7,d2:8,set:9};o.forEach(function(k,i){m[k]=i});document.querySelectorAll("#sb [data-k]").forEach(function(e){e.style.order=m[e.dataset.k]})};sbOrd();window.sbUnk=function(){fetch("/api/unk").then(r=>r.json()).then(u=>{var b=document.getElementById("sbbadge");b.textContent=u.n;b.hidden=!u.n;try{var R=JSON.parse(localStorage.getItem("rokrem")||"{}"),el=document.getElementById("sbrem"),hr=(u.now-u.last)/3600;if(R.on&&u.last&&hr>=(R.h||12)&&localStorage.getItem("rokremx")!=String(u.last)){if(!el){el=document.createElement("div");el.id="sbrem";el.style.cssText="position:fixed;top:12px;left:50%;transform:translateX(-50%);z-index:80;padding:9px 14px;border-radius:12px;background:var(--card);color:var(--ink);border:1px solid var(--warn);box-shadow:0 6px 24px rgba(0,0,0,.25);font-size:.9rem;display:flex;gap:10px;align-items:center";document.body.appendChild(el)}el.innerHTML="<span>⏰ Seit "+(hr<48?Math.floor(hr)+" Std":Math.floor(hr/24)+" Tagen")+" keine neuen Berichte.</span>";var x=document.createElement("button");x.textContent="Ausblenden";x.onclick=function(){try{localStorage.setItem("rokremx",String(u.last))}catch(e){}el.remove()};el.appendChild(x)}else if(el)el.remove()}catch(e){}}).catch(function(){})};sbUnk();setInterval(sbUnk,30000)</script><script>(function(){const b=document.getElementById("mbtn"),x=document.getElementById("sbx"),ov=document.getElementById("sbov"),n=document.getElementById("sb"),R=document.documentElement,B=document.body;n.querySelectorAll("a[data-p]").forEach(a=>{if(a.dataset.p===(location.pathname.replace(/\/+$/,"")||"/"))a.className="cur"});let V={w:"1600",a:"c"},O=window.innerWidth>=1100;try{V=Object.assign(V,JSON.parse(localStorage.getItem("rokview")||"{}"));const o=localStorage.getItem("roksb");if(o!==null)O=o==="1"}catch(e){}const ap=()=>{R.style.setProperty("--mw",V.w==="100%"?"100%":V.w+"px");R.style.setProperty("--ml",V.a==="l"?"0":"auto");R.style.setProperty("--mr",V.a==="r"?"0":"auto");document.querySelectorAll("#mw button").forEach(y=>y.classList.toggle("on",y.dataset.v===V.w));document.querySelectorAll("#ma button").forEach(y=>y.classList.toggle("on",y.dataset.v===V.a))};const so=v=>{O=v;B.classList.toggle("sbopen",O);b.setAttribute("aria-expanded",O);try{localStorage.setItem("roksb",O?"1":"0")}catch(e){}};document.addEventListener("DOMContentLoaded",ap);
 document.addEventListener("click",e=>{const y=e.target.closest(".seg button");if(!y||!y.parentNode.id.match(/^m[wa]$/))return;if(y.parentNode.id==="mw")V.w=y.dataset.v;else V.a=y.dataset.v;try{localStorage.setItem("rokview",JSON.stringify(V))}catch(e){}ap()});ap();B.classList.toggle("sbopen",O);b.onclick=()=>so(!O);x.onclick=()=>so(false);ov.onclick=()=>so(false);document.addEventListener("keydown",e=>{if(e.key==="Escape"&&window.innerWidth<1100)so(false)})})()</script>@@QP@@
 <section class="ah"><div><h1>Allianz-Tracker</h1><div class="sub" id="asub">Member-Rangliste</div></div>
-<div class="bar"><a class="btn" id="aexp" href="/allianz/export?lang=de" title="Speichert die Rangliste als eigenständige Datei, die du weitergeben kannst">Als HTML exportieren</a><button id="abtn">Allianz-Daten einfügen …</button><input type="file" id="afile" accept=".json" multiple hidden></div></section>
+<div class="bar"><button type="button" id="aexp" title="Speichert die Tabelle so, wie du sie gerade siehst (Sortierung, Spalten, Tier, Silk Road), als Excel-Datei">Als Excel exportieren</button><button id="abtn">Allianz-Daten einfügen …</button><input type="file" id="afile" accept=".json" multiple hidden></div></section>
 <section class="inact" id="inact"><div class="ih"><div><h2 id="ihT"></h2><div class="note" id="ihS"></div></div><div class="ib"><button type="button" id="iadd"></button><button type="button" id="iclr"></button></div></div>
 <form id="iform" hidden><input id="inm" maxlength="40" required><input id="idy" type="number" min="3" max="999" value="4"><button type="submit" id="iok"></button></form>
 <div id="ilist" class="ilist"></div></section>
@@ -2800,6 +2800,7 @@ function renderAlliance(a){lastAl=a;if(!a)return;try{inRender()}catch(e){}try{mo
  const cell=(m,k)=>{const x=m.c[k];if(!x)return '<td>–</td>';if(x.v==null&&x.seen)return `<td class="note" title="Nicht mehr in der Liste, zuletzt gesehen ${dm(x.seen)}">–</td>`;
   return `<td>${x.v==null?'–':f(x.v)}${x.r!=null?`<span class="rk">#${x.r}</span>`:''}${arr(x.r,x.pr)}${dl(x)}</td>`};
  const COLK=ORD.filter(k=>k==='silk'?SRON:alOn.has(k)),VC=Object.fromEntries(vc.map(c=>[c.key,c])),srTh=`<th data-k="silk" class="tr${alSort==='silk'?' on':''}" title="${LL('Silk Road: Läufe mit mindestens 50.000 Punkten, Platz nach Gesamtpunkten, zum Sortieren klicken','Silk Road: runs with at least 50,000 points, rank by total points, click to sort')}">Silk Road${alSort==='silk'?(alDir<0?' ▼':' ▲'):''}</th>`;
+ a.xl=[[ '#','Name','R4','Tier',LL('Ø Rang','Avg rank'),LL('Ø Platz','Avg place'),...COLK.flatMap(k=>k==='silk'?['Silk Road',LL('Silk Road Platz','Silk Road place')]:[VC[k].label,VC[k].label+' '+LL('Platz','rank')])],...rows.map((m,i)=>[i+1,m.name,R4.has(nk(m.name))?'★':'',effT(m)||'',m.a.avg_all==null?null:Math.round(m.a.avg_all*10)/10,m.ap.avg_all,...COLK.flatMap(k=>k==='silk'?[SRS.length?SRS.filter(S=>S.has(nk(m.name))).length+'/'+SRN:'',m.srr]:[m.c[k]&&m.c[k].v!=null?m.c[k].v:null,m.c[k]&&m.c[k].r!=null?m.c[k].r:null])])];
  const hist=m=>`<tr class="det"><td colspan="${COLK.length+4}"><div class="hist">${SRON&&SRK.length?`<div><h3>Silk Road</h3><table><tr><th>${LL('Lauf','Run')}</th><th>${LL('Punkte','Points')}</th><th></th></tr>${srPts(m.name).map(([k,v])=>`<tr><td>${k}</td><td>${v==null?'–':f(v)}</td><td class="${v>=50000?'good':'bad'}">${v>=50000?LL('teilgenommen','participated'):LL('nicht','no')}</td></tr>`).join('')}</table></div>`:''}${cats.filter(c=>m.h[c.key]).map(c=>{const h=m.h[c.key].slice().reverse();
    return `<div><h3>${c.label}</h3><table><tr><th>Tag</th><th>Wert</th><th>Rang</th><th>Veränderung</th></tr>${h.map((r,i)=>{const p=h[i+1],d=p&&p[1]!=null&&r[1]!=null?r[1]-p[1]:null;
      return `<tr><td>${dm(r[0])}</td><td>${r[1]==null?'–':f(r[1])}</td><td>${r[2]==null?'–':'#'+r[2]}</td><td class="${d>0?'good':d<0?'bad':''}">${d==null?'–':(d>0?'+':'')+f(d)}</td></tr>`}).join('')}</table></div>`}).join('')}</div></td></tr>`;
@@ -2820,7 +2821,7 @@ $('achips').addEventListener('dragover',e=>{if(dragK&&e.target.closest('.chip[da
 $('achips').addEventListener('drop',e=>{const t=e.target.closest('.chip[data-k]');if(!t||!dragK||!lastAl)return;e.preventDefault();const to=t.dataset.k;if(to===dragK){dragK=null;return}
  const o=alOrd(lastAl),from=o.indexOf(dragK),at=o.indexOf(to);o.splice(from,1);o.splice(at,0,dragK);lastAl.ui.order=o;const cm=Object.fromEntries(lastAl.cats.map(c=>[c.key,c]));lastAl.cats=o.filter(k=>k!=='silk').map(k=>cm[k]);dragK=null;saveUi();renderAlliance(lastAl)});
 $('abtn').onclick=()=>$('afile').click();
-$('aexp').href='/allianz/export?lang='+LANG;
+$('aexp').onclick=async()=>{if(!lastAl||!lastAl.xl)return;try{const r=await fetch('/api/alliance_xlsx',{method:'POST',body:JSON.stringify({title:LL('Rangliste','Ranking'),rows:lastAl.xl})});if(!r.ok||(r.headers.get('content-type')||'').includes('json'))throw new Error('export');const b=await r.blob(),u=URL.createObjectURL(b),a=document.createElement('a');a.href=u;a.download=(LANG==='en'?'Alliance-Ranking_':'Allianz-Rangliste_')+String(lastAl.sel||'').slice(0,10)+'.xlsx';document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(u),2000)}catch(x){$('amsg').textContent=LL('Export fehlgeschlagen.','Export failed.')}};
 $('afile').onchange=async e=>{let n=0,err='';for(const fl of e.target.files){try{const r=await fetch('/api/alliance?lst='+encodeURIComponent(alLst),{method:'POST',body:await fl.text()}).then(r=>r.json());if(r.ok)n+=r.n;else err=r.error}catch(x){err=String(x)}}
  $('amsg').textContent=err?'Fehler: '+err:n+' Eintrag/Einträge übernommen.';e.target.value='';alSel='';alBase='';alBlst='';lastSig='';load()};
 let alSel='',alBase='',alLst='',alBlst='';
@@ -3588,6 +3589,67 @@ EXPORT_TXT = {
                note="Click a category above to switch it off. A switched-off category is hidden and does not count toward the average. Click a column header to sort. The number after each value is the rank in that category. Avg rank is the average of the ranks in the categories that are on, lower is better."),
 }
 
+def make_xlsx(rows, title="Rangliste"):
+    """Minimale .xlsx (nur Standardbibliothek): erste Zeile fett + fixiert + Filter, Zahlen als Zahlen."""
+    from xml.sax.saxutils import escape
+    def col(i):
+        s = ""
+        i += 1
+        while i:
+            i, r = divmod(i - 1, 26)
+            s = chr(65 + r) + s
+        return s
+    xs = []
+    for ri, row in enumerate(rows):
+        cs = []
+        for ci, v in enumerate(row):
+            ref = "%s%d" % (col(ci), ri + 1)
+            st = ' s="1"' if ri == 0 else ""
+            if v is None or v == "":
+                continue
+            if isinstance(v, bool):
+                v = str(v)
+            if isinstance(v, (int, float)):
+                cs.append('<c r="%s"%s><v>%s</v></c>' % (ref, st, repr(v)))
+            else:
+                t = re.sub(r"[\x00-\x08\x0b\x0c\x0e-\x1f]", "", str(v))
+                cs.append('<c r="%s"%s t="inlineStr"><is><t xml:space="preserve">%s</t></is></c>' % (ref, st, escape(t)))
+        xs.append('<row r="%d">%s</row>' % (ri + 1, "".join(cs)))
+    ncol = max((len(r) for r in rows), default=1)
+    widths = "".join('<col min="%d" max="%d" width="%d" customWidth="1"/>' % (i + 1, i + 1, 24 if i == 1 else 13) for i in range(ncol))
+    last = "%s%d" % (col(ncol - 1), max(len(rows), 1))
+    sheet = ('<?xml version="1.0" encoding="UTF-8" standalone="yes"?><worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">'
+             '<sheetViews><sheetView workbookViewId="0"><pane ySplit="1" topLeftCell="A2" activePane="bottomLeft" state="frozen"/></sheetView></sheetViews>'
+             '<cols>%s</cols><sheetData>%s</sheetData><autoFilter ref="A1:%s"/></worksheet>') % (widths, "".join(xs), last)
+    wb = ('<?xml version="1.0" encoding="UTF-8" standalone="yes"?><workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" '
+          'xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><sheets><sheet name="%s" sheetId="1" r:id="rId1"/></sheets></workbook>') % escape(re.sub(r"[\[\]:*?/\\]", "", title)[:31] or "Sheet1")
+    styles = ('<?xml version="1.0" encoding="UTF-8" standalone="yes"?><styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">'
+              '<fonts count="2"><font><sz val="11"/><name val="Calibri"/></font><font><b/><sz val="11"/><name val="Calibri"/></font></fonts>'
+              '<fills count="2"><fill><patternFill patternType="none"/></fill><fill><patternFill patternType="gray125"/></fill></fills>'
+              '<borders count="1"><border><left/><right/><top/><bottom/><diagonal/></border></borders>'
+              '<cellStyleXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/></cellStyleXfs>'
+              '<cellXfs count="2"><xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0"/><xf numFmtId="0" fontId="1" fillId="0" borderId="0" xfId="0" applyFont="1"/></cellXfs></styleSheet>')
+    ct = ('<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">'
+          '<Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/>'
+          '<Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/>'
+          '<Override PartName="/xl/worksheets/sheet1.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/>'
+          '<Override PartName="/xl/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.styles+xml"/></Types>')
+    rels = ('<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">'
+            '<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/></Relationships>')
+    wrels = ('<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">'
+             '<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/>'
+             '<Relationship Id="rId2" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/></Relationships>')
+    buf = io.BytesIO()
+    with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as z:
+        z.writestr("[Content_Types].xml", ct)
+        z.writestr("_rels/.rels", rels)
+        z.writestr("xl/workbook.xml", wb)
+        z.writestr("xl/_rels/workbook.xml.rels", wrels)
+        z.writestr("xl/styles.xml", styles)
+        z.writestr("xl/worksheets/sheet1.xml", sheet)
+    return buf.getvalue()
+
+
 def alliance_export_html(db, lang):
     """Eigenstaendige HTML-Datei mit dem neuesten Stand der Allianz-Rangliste (ohne Tracker, ohne Internet nutzbar)."""
     lang = "en" if lang == "en" else "de"
@@ -3767,6 +3829,19 @@ def make_handler(db, watcher):
                     nm = str(json.loads(self.rfile.read(min(n, 10000))).get("name", ""))
                     r = db.alliance_newlist(nm) if path.endswith("newlist") else db.alliance_dellist(nm)
                     self.send(json.dumps({"ok": True, "name": r}), "application/json")
+                except Exception as e:
+                    self.send(json.dumps({"ok": False, "error": str(e)}), "application/json")
+                return
+            if path == "/api/alliance_xlsx":
+                try:
+                    n = int(self.headers.get("Content-Length", 0))
+                    d = json.loads(self.rfile.read(min(n, 4000000)))
+                    data = make_xlsx(d["rows"], str(d.get("title") or "Rangliste"))
+                    self.send_response(200)
+                    self.send_header("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+                    self.send_header("Content-Length", str(len(data)))
+                    self.end_headers()
+                    self.wfile.write(data)
                 except Exception as e:
                     self.send(json.dumps({"ok": False, "error": str(e)}), "application/json")
                 return
