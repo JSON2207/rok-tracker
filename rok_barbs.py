@@ -1559,7 +1559,7 @@ class DB:
         order += [k for k in keys if k not in order]
         order = list(dict.fromkeys(order))
         off = [k for k in d.get("off", []) if k in keys]
-        srt = d.get("sort") if d.get("sort") in keys + ["avg_all", "tier"] else "avg_all"
+        srt = d.get("sort") if d.get("sort") in keys + ["avg_all", "tier", "silk"] else "avg_all"
         tiers = {str(n)[:60]: t for n, t in (d.get("tiers") or {}).items() if t in TIERS} if isinstance(d.get("tiers"), dict) else {}
         try:
             req = max(0, min(10 ** 8, int(d.get("mobreq", 1000))))
@@ -1575,7 +1575,7 @@ class DB:
             cur["order"] = [k for k in d["order"] if k in keys or k == "silk"]
         if isinstance(d.get("off"), list):
             cur["off"] = [k for k in d["off"] if k in keys]
-        if d.get("sort") in keys + ["avg_all", "tier"]:
+        if d.get("sort") in keys + ["avg_all", "tier", "silk"]:
             cur["sort"] = d["sort"]
         if d.get("dir") in (1, -1):
             cur["dir"] = d["dir"]
@@ -2772,13 +2772,13 @@ function renderAlliance(a){lastAl=a;if(!a)return;try{inRender()}catch(e){}try{mo
  $('adel').hidden=arch||!sn.length;$('adel').textContent=LL('Diesen Stand löschen','Delete this snapshot');
  const AV=[['avg_all','Ø Rang',[]]];
   if(alOn===null){const u=a.ui||{};alOn=new Set(cats.map(c=>c.key).filter(k=>!(u.off||[]).includes(k)));
-   if(u.sort&&(u.sort==='avg_all'||u.sort==='tier'||cats.some(c=>c.key===u.sort))){alSort=u.sort;alDir=u.dir||(u.sort==='avg_all'||u.sort==='tier'?1:-1)}}
-  const vc=cats.filter(c=>alOn.has(c.key));if(alSort!=='avg_all'&&alSort!=='tier'&&!alOn.has(alSort)){alSort='avg_all';alDir=1}
+   if(u.sort&&(u.sort==='avg_all'||u.sort==='tier'||u.sort==='silk'||cats.some(c=>c.key===u.sort))){alSort=u.sort;alDir=u.dir||(u.sort==='avg_all'||u.sort==='tier'?1:-1)}}
+  const vc=cats.filter(c=>alOn.has(c.key));if(alSort!=='avg_all'&&alSort!=='tier'&&!alOn.has(alSort)&&!(alSort==='silk'&&!(a.ui&&a.ui.srhide)&&Object.keys(a.sr||{}).length)){alSort='avg_all';alDir=1}
   const ORD=alOrd(a),HSR=Object.keys(a.sr||{}).length>0,CL=Object.fromEntries(cats.map(c=>[c.key,c.label]));
   $('achips').innerHTML=ORD.filter(k=>k!=='silk'||HSR).map(k=>k==='silk'?`<button type="button" class="chip" draggable="true" data-k="silk" id="srchip" aria-pressed="${!(a.ui&&a.ui.srhide)}">Silk Road</button>`:`<button type="button" class="chip" draggable="true" data-k="${k}" aria-pressed="${alOn.has(k)}">${CL[k]}</button>`).join('');
   const nk=n=>String(n).replace(/^[\u02e2\u02b0\u1d3f\u1d3a]+/,'').normalize('NFD').toLowerCase().replace(/[^a-z0-9]/g,'');
   const SRD=a.sr||{},SRON=!(a.ui&&a.ui.srhide)&&Object.keys(SRD).length>0,SRK=Object.keys(SRD).sort((x,y)=>x-y);
-  {const T={};SRK.forEach(k=>SRD[k].forEach(x=>{T[nk(x[0])]=(T[nk(x[0])]||0)+x[1]}));const tv=ms.map(m=>T[nk(m.name)]||0);ms.forEach((m,i)=>m.srr=tv[i]>0?1+tv.filter(v=>v>tv[i]).length:null)}
+  {const T={};SRK.forEach(k=>SRD[k].forEach(x=>{T[nk(x[0])]=(T[nk(x[0])]||0)+x[1]}));const tv=ms.map(m=>T[nk(m.name)]||0);ms.forEach((m,i)=>{m.srt=tv[i]>0?tv[i]:null;m.srr=tv[i]>0?1+tv.filter(v=>v>tv[i]).length:null})}
   const gr=(m,k)=>k==='silk'?m.srr:(m.c[k]&&m.c[k].r),AC=SRON?[...vc,{key:'silk'}]:vc;
   const WR={};AC.forEach(c=>{const r=ms.map(m=>gr(m,c.key)).filter(v=>v!=null);WR[c.key]=r.length?Math.max(...r)+1:null});
   const avg=(m,ex)=>{const cs=AC.filter(c=>!ex.includes(c.key));if(!cs.some(c=>gr(m,c.key)!=null))return null;const r=cs.map(c=>{const x=gr(m,c.key);return x!=null?x:WR[c.key]}).filter(v=>v!=null);return r.length?r.reduce((x,y)=>x+y,0)/r.length:null};
@@ -2789,22 +2789,22 @@ function renderAlliance(a){lastAl=a;if(!a)return;try{inRender()}catch(e){}try{mo
   const arr=(n,o)=>n==null||o==null||n===o?'':`<span class="ra ${o>n?'good':'bad'}" title="${LL('Platz vorher #','Previously #')}${o}">${o>n?'▲':'▼'}${Math.abs(o-n)}</span>`;
  const SRN=Math.max(3,Object.keys(SRD).length),SRS=SRK.map(k=>new Set(SRD[k].filter(x=>x[1]>=50000).map(x=>nk(x[0]))));
  const srPts=n=>SRK.map(k=>{const e=SRD[k].find(x=>nk(x[0])===nk(n));return [k,e?e[1]:null]});
- const srCell=n=>{if(!SRS.length)return '<span class="srx">–</span>';const c=SRS.filter(S=>S.has(nk(n))).length;return `<span class="sr${c>=SRN?' all':c?' some':''}" title="${LL('Teilgenommen (ab 50.000 Punkten)','Participated (50,000+ points)')}">${c}/${SRN}</span>`};
+ const srCell=(n,m)=>{if(!SRS.length)return '<span class="srx">–</span>';const c=SRS.filter(S=>S.has(nk(n))).length;return `<span class="sr${c>=SRN?' all':c?' some':''}" title="${LL('Teilgenommen (ab 50.000 Punkten)','Participated (50,000+ points)')}">${c}/${SRN}</span>${m&&m.srr?`<span class="rk">#${m.srr}</span>`:''}`};
  const R4=new Set((a.ui&&a.ui.r4)||[]);
   const TR=(a.ui&&a.ui.tiers)||{},TL=['S','A','B','C','D','E'],TC=[.105,.21,.413,.622,.762].map(f=>Math.round(ms.length*f)),autoT=p=>p==null?'':p<=TC[0]?'S':p<=TC[1]?'A':p<=TC[2]?'B':p<=TC[3]?'C':p<=TC[4]?'D':'E',effT=m=>TR[m.name]||autoT(m.ap.avg_all);
-  const q=alQ.trim().toLowerCase(),val=(m,k)=>{if(k==='tier'){const i=TL.indexOf(effT(m));return i<0?null:i}if(k.startsWith('avg_'))return m.a[k];const x=m.c[k];return x&&x.v!=null?x.v:null};
+  const q=alQ.trim().toLowerCase(),val=(m,k)=>{if(k==='tier'){const i=TL.indexOf(effT(m));return i<0?null:i}if(k==='silk')return m.srt;if(k.startsWith('avg_'))return m.a[k];const x=m.c[k];return x&&x.v!=null?x.v:null};
   const acell=(m,k)=>m.a[k]==null?'<td>–</td>':`<td>${m.a[k].toFixed(1).replace('.',LANG==='en'?'.':',')}<span class="rk">#${m.ap[k]}</span></td>`;
  const rows=ms.filter(m=>!q||m.name.toLowerCase().includes(q));
  rows.sort((x,y)=>{const a1=val(x,alSort),b1=val(y,alSort);if(a1==null&&b1==null)return x.name.localeCompare(y.name);if(a1==null)return 1;if(b1==null)return -1;return (a1-b1)*alDir||x.name.localeCompare(y.name)});
  const dl=x=>x&&x.d!=null&&x.d!==0?`<span class="dl ${x.d>0?'good':'bad'}">${(x.d>0?'+':'')+f(x.d)}</span>`:'';
  const cell=(m,k)=>{const x=m.c[k];if(!x)return '<td>–</td>';if(x.v==null&&x.seen)return `<td class="note" title="Nicht mehr in der Liste, zuletzt gesehen ${dm(x.seen)}">–</td>`;
   return `<td>${x.v==null?'–':f(x.v)}${x.r!=null?`<span class="rk">#${x.r}</span>`:''}${arr(x.r,x.pr)}${dl(x)}</td>`};
- const COLK=ORD.filter(k=>k==='silk'?SRON:alOn.has(k)),VC=Object.fromEntries(vc.map(c=>[c.key,c])),srTh=`<th class="tr" title="${LL('Silk Road: Läufe mit mindestens 50.000 Punkten','Silk Road: runs with at least 50,000 points')}">Silk Road</th>`;
+ const COLK=ORD.filter(k=>k==='silk'?SRON:alOn.has(k)),VC=Object.fromEntries(vc.map(c=>[c.key,c])),srTh=`<th data-k="silk" class="tr${alSort==='silk'?' on':''}" title="${LL('Silk Road: Läufe mit mindestens 50.000 Punkten, Platz nach Gesamtpunkten, zum Sortieren klicken','Silk Road: runs with at least 50,000 points, rank by total points, click to sort')}">Silk Road${alSort==='silk'?(alDir<0?' ▼':' ▲'):''}</th>`;
  const hist=m=>`<tr class="det"><td colspan="${COLK.length+4}"><div class="hist">${SRON&&SRK.length?`<div><h3>Silk Road</h3><table><tr><th>${LL('Lauf','Run')}</th><th>${LL('Punkte','Points')}</th><th></th></tr>${srPts(m.name).map(([k,v])=>`<tr><td>${k}</td><td>${v==null?'–':f(v)}</td><td class="${v>=50000?'good':'bad'}">${v>=50000?LL('teilgenommen','participated'):LL('nicht','no')}</td></tr>`).join('')}</table></div>`:''}${cats.filter(c=>m.h[c.key]).map(c=>{const h=m.h[c.key].slice().reverse();
    return `<div><h3>${c.label}</h3><table><tr><th>Tag</th><th>Wert</th><th>Rang</th><th>Veränderung</th></tr>${h.map((r,i)=>{const p=h[i+1],d=p&&p[1]!=null&&r[1]!=null?r[1]-p[1]:null;
      return `<tr><td>${dm(r[0])}</td><td>${r[1]==null?'–':f(r[1])}</td><td>${r[2]==null?'–':'#'+r[2]}</td><td class="${d>0?'good':d<0?'bad':''}">${d==null?'–':(d>0?'+':'')+f(d)}</td></tr>`}).join('')}</table></div>`}).join('')}</div></td></tr>`;
  $('al').innerHTML=ms.length?`<tr><th class="t">#</th><th class="t">Name</th><th data-k="tier" class="tr${alSort==='tier'?' on':''}" title="${LL('Eigene Einstufung S bis E, zum Sortieren klicken','Your own rating S to E, click to sort')}">Tier${alSort==='tier'?(alDir<0?' ▼':' ▲'):''}</th>${AV.map(([k,l])=>`<th data-k="${k}" class="${alSort===k?'on':''}" title="Durchschnitt der Plätze in den eingeschalteten Kategorien, niedriger ist besser">${l}${alSort===k?(alDir<0?' ▼':' ▲'):''}</th>`).join('')}${COLK.map(k=>k==='silk'?srTh:`<th data-k="${k}" class="${alSort===k?'on':''}">${VC[k].label}${alSort===k?(alDir<0?' ▼':' ▲'):''}</th>`).join('')}</tr>`+
-  rows.map((m,i)=>`<tr class="m" data-n="${esc(m.name)}"><td class="r">${i+1}</td><td class="n nm">${alOpen.has(m.name)?'▾':'▸'} ${esc(m.name)}<span class="r4s${R4.has(nk(m.name))?'':' off'}" data-k="${esc(nk(m.name))}" title="${R4.has(nk(m.name))?LL('R4 – zum Entfernen klicken','R4 – click to remove'):LL('Als R4 markieren','Mark as R4')}">${R4.has(nk(m.name))?'★':'☆'}</span>${arr(m.ap.avg_all,m.bp)}${(a.snaps||[]).length>1?(m.native?`<span class="tg nat" title="${LL('Im ersten getrackten Stand dabei','Present in the first tracked snapshot')}">Native</span>`:`<span class="tg" title="${LL('Zum ersten Mal getrackt am ','First tracked on ')}${dm(m.first)}">${LL('neu ','new ')}${dm(m.first)}</span>`):''}</td><td class="tr"><select class="tsel${effT(m)?' t-'+effT(m):''}${TR[m.name]?'':' auto'}" data-n="${esc(m.name)}" aria-label="Tier" title="${TR[m.name]?LL('Manuell gesetzt. „Auto“ wählen, um wieder nach Platz im Ø Rang einzustufen.','Set manually. Choose "Auto" to rate by position in the average rank again.'):LL('Automatisch nach Platz im Ø Rang','Automatic by position in the average rank')}"><option value="">${autoT(m.ap.avg_all)?autoT(m.ap.avg_all)+' · Auto':'Auto'}</option>${TL.map(t=>`<option value="${t}"${TR[m.name]===t?' selected':''}>${t}</option>`).join('')}</select></td>${AV.map(([k])=>acell(m,k)).join('')}${COLK.map(k=>k==='silk'?`<td class="tr">${srCell(m.name)}</td>`:cell(m,k)).join('')}</tr>${alOpen.has(m.name)?hist(m):''}`).join(''):
+  rows.map((m,i)=>`<tr class="m" data-n="${esc(m.name)}"><td class="r">${i+1}</td><td class="n nm">${alOpen.has(m.name)?'▾':'▸'} ${esc(m.name)}<span class="r4s${R4.has(nk(m.name))?'':' off'}" data-k="${esc(nk(m.name))}" title="${R4.has(nk(m.name))?LL('R4 – zum Entfernen klicken','R4 – click to remove'):LL('Als R4 markieren','Mark as R4')}">${R4.has(nk(m.name))?'★':'☆'}</span>${arr(m.ap.avg_all,m.bp)}${(a.snaps||[]).length>1?(m.native?`<span class="tg nat" title="${LL('Im ersten getrackten Stand dabei','Present in the first tracked snapshot')}">Native</span>`:`<span class="tg" title="${LL('Zum ersten Mal getrackt am ','First tracked on ')}${dm(m.first)}">${LL('neu ','new ')}${dm(m.first)}</span>`):''}</td><td class="tr"><select class="tsel${effT(m)?' t-'+effT(m):''}${TR[m.name]?'':' auto'}" data-n="${esc(m.name)}" aria-label="Tier" title="${TR[m.name]?LL('Manuell gesetzt. „Auto“ wählen, um wieder nach Platz im Ø Rang einzustufen.','Set manually. Choose "Auto" to rate by position in the average rank again.'):LL('Automatisch nach Platz im Ø Rang','Automatic by position in the average rank')}"><option value="">${autoT(m.ap.avg_all)?autoT(m.ap.avg_all)+' · Auto':'Auto'}</option>${TL.map(t=>`<option value="${t}"${TR[m.name]===t?' selected':''}>${t}</option>`).join('')}</select></td>${AV.map(([k])=>acell(m,k)).join('')}${COLK.map(k=>k==='silk'?`<td class="tr">${srCell(m.name,m)}</td>`:cell(m,k)).join('')}</tr>${alOpen.has(m.name)?hist(m):''}`).join(''):
   '<tr><td class="note">Noch keine Allianz-Daten. Schick mir Screenshots der Ranglisten, ich erstelle dir die Datei zum Einfügen.</td></tr>';
  $('ainfo').textContent=ms.length?`${rows.length} / ${ms.length} Mitglieder`:''}
 $('al').addEventListener('click',e=>{const th=e.target.closest('th[data-k]');if(th){if(alSort===th.dataset.k)alDir=-alDir;else{alSort=th.dataset.k;alDir=alSort.startsWith('avg_')||alSort==='tier'?1:-1}saveUi();return renderAlliance(lastAl)}
