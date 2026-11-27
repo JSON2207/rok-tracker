@@ -1716,7 +1716,7 @@ class DB:
         for m in members.values():
             m["first"] = first[m["name"]]
             m["native"] = first[m["name"]] == first0
-            m["isnew"] = bool(thr) and first[m["name"]] >= thr
+            m["isnew"] = first[m["name"]] in snaps and not m["native"]      # neu = erstmals in DIESER Liste getrackt (nicht schon in einer aelteren Liste)
             for cat, hist in list(m["h"].items()):
                 last = hist[-1]
                 if last[0] != latest[cat]:                      # in der gewaehlten Liste nicht aufgefuehrt
