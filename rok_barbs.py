@@ -468,7 +468,7 @@ PROFILE_FIELDS = [("power", "Macht"), ("highest_power", "Höchste Macht"), ("kil
                   ("ap", "Aktionspunkte")]
 # Allianz-Rangliste: Kategorien (Schluessel, Spieltitel). Resource Assistance und Armory Contributions werden bewusst nicht erfasst.
 ALLIANCE_CATS = [("power", "Individual Power"), ("kills", "Killing Machine"), ("tech", "Mad Scientist"),
-                 ("build", "Master Builder"), ("help", "Alliance Help"), ("forts", "Fort Destroyer"), ("mob", "Alliance Mobilization"), ("aoo", "Ark of Osiris"), ("honor", "Honor Roll")]
+                 ("build", "Master Builder"), ("help", "Alliance Help"), ("forts", "Fort Destroyer"), ("mob", "Alliance Mobilization"), ("aoo", "Ark of Osiris"), ("honor", "Honor Roll"), ("thanks", "Thanksgiving Dinner")]
 MODES = {"dungeon": "Ark of Osiris"}     # alle anderen Modi heißen "Spielerkampf (<Kennung>)"
 KINDS = {"speed_training", "speed_universal", "speed_healing", "wood", "stone", "gold", "food", "gems",
          "xp_books", "packs", "ap", "other"}
