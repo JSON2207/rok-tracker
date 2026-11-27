@@ -2730,7 +2730,7 @@ document.addEventListener("click",e=>{const y=e.target.closest(".seg button");if
 <section class="inact mobs" id="mobsec"><div class="ih"><div><h2 id="mhT"></h2><div class="note" id="mhS"></div></div>
 <div class="ib mreq"><button type="button" id="mhide"></button><label><span id="mrL"></span> <input id="mreq" type="number" min="0" step="100" value="1000"></label><label class="mchk"><input type="checkbox" id="monly"> <span id="moL"></span></label><button type="button" id="mcp"></button></div></div>
 <div class="note" id="msum"></div><div class="wrap mwrap"><table id="mtab"></table></div></section>
-<div class="pane" style="margin-top:0"><div class="snapbar"><label>Liste <select id="alst"></select></label><button type="button" id="anew">Neue Liste</button><button type="button" id="adl" hidden>Liste löschen</button><label>Stand <select id="asel"></select></label><label>Vergleich mit <select id="abase"></select></label><button type="button" id="adel">Diesen Stand löschen</button></div><div class="chips" id="achips" role="group" aria-label="Kategorien im Durchschnitt"></div><div class="nmbar"><input id="asearch" type="search" placeholder="Mitglied suchen …"> <span class="note" id="ainfo"></span> <span class="note" id="amsg"></span></div><div class="nmbar"><input id="amh" list="amhl" type="search" style="min-width:300px" placeholder="Member-Verlauf (alle Wochen &amp; Listen) …" autocomplete="off"><datalist id="amhl"></datalist></div><div id="amhr" style="overflow-x:auto"></div>
+<div class="pane" style="margin-top:0"><div class="snapbar"><label>Liste <select id="alst"></select></label><button type="button" id="anew">Neue Liste</button><button type="button" id="adl" hidden>Liste löschen</button><label>Stand <select id="asel"></select></label><label>Vergleich mit <select id="abase"></select></label><button type="button" id="adel">Diesen Stand löschen</button></div><div class="chips" id="achips" role="group" aria-label="Kategorien im Durchschnitt"></div><div class="nmbar"><input id="asearch" type="search" placeholder="Mitglied suchen …"> <span class="note" id="ainfo"></span> <button type="button" id="atop" title="Top 10 nach Ø Rang (nur die gerade aktiven Kategorien) als Chat-Text kopieren">Top 10 kopieren</button> <span class="note" id="amsg"></span></div><div class="nmbar"><input id="amh" list="amhl" type="search" style="min-width:300px" placeholder="Member-Verlauf (alle Wochen &amp; Listen) …" autocomplete="off"><datalist id="amhl"></datalist></div><div id="amhr" style="overflow-x:auto"></div>
 <div class="wrap"><table id="al"></table></div>
 <p class="note">Tier: automatisch nach Platz im Ø Rang, in Prozent der aktuellen Mitgliederzahl (oberste 10,5 % S, bis 21 % A, bis 41 % B, bis 62 % C, bis 76 % D, Rest E; bei 143 Mitgliedern entspricht das 15/30/59/89/109). Über das Auswahlfeld kannst du einen Tier selbst setzen, „Auto“ stellt die Automatik wieder her.</p>
 <p class="note">Klick auf eine Spaltenüberschrift sortiert die Liste. Grün und rot zeigen die Veränderung seit dem vorherigen Stand. Ranglisten ohne Resource Assistance und Armory Contributions.</p>
@@ -2773,7 +2773,7 @@ $('mhide').onclick=()=>{if(!lastAl)return;lastAl.ui.mobhide=!lastAl.ui.mobhide;m
 $('monly').onchange=()=>{if(lastAl){lastAl.ui.mobonly=$('monly').checked;mobRender(lastAl)}fetch('/api/alliance_ui',{method:'POST',body:JSON.stringify({mobonly:$('monly').checked})}).catch(()=>{})};
 $('mcp').onclick=()=>{const t=mobLow.join(', ');const ok=()=>{$('amsg').textContent=LL(mobLow.length+' Namen kopiert.',mobLow.length+' names copied.')};
  (navigator.clipboard?navigator.clipboard.writeText(t):Promise.reject()).then(ok).catch(()=>{const ta=document.createElement('textarea');ta.value=t;document.body.appendChild(ta);ta.select();try{document.execCommand('copy');ok()}catch(e){}ta.remove()})};
-let lastAl=null,lastSig='',alSort='power',alDir=-1,alQ='',alOn=null;const alOpen=new Set();
+let lastAl=null,lastSig='',alSort='power',alDir=-1,alQ='',alOn=null;const alOpen=new Set();let alRows=[];
 function renderAlliance(a){lastAl=a;if(!a)return;try{$('amhl').innerHTML=(a.allnames||[]).map(n=>`<option value="${esc(n)}"></option>`).join('')}catch(e){}try{inRender()}catch(e){}try{mobRender(a)}catch(e){}const cats=a.cats,ms=a.members;
  const newest=a.sel||Object.values(a.latest||{}).sort().pop();
  $('asub').textContent=newest?LL('Member-Rangliste · Stand ','Member ranking · as of ')+dm(newest):LL('Member-Rangliste','Member ranking');
@@ -2811,6 +2811,7 @@ function renderAlliance(a){lastAl=a;if(!a)return;try{$('amhl').innerHTML=(a.alln
   const acell=(m,k)=>m.a[k]==null?'<td>–</td>':`<td>${m.a[k].toFixed(1).replace('.',LANG==='en'?'.':',')}<span class="rk">#${m.ap[k]}</span></td>`;
  const rows=ms.filter(m=>!q||m.name.toLowerCase().includes(q));
  rows.sort((x,y)=>{const a1=val(x,alSort),b1=val(y,alSort);if(a1==null&&b1==null)return x.name.localeCompare(y.name);if(a1==null)return 1;if(b1==null)return -1;return (a1-b1)*alDir||x.name.localeCompare(y.name)});
+ alRows=rows;
  const dl=x=>x&&x.d!=null&&x.d!==0?`<span class="dl ${x.d>0?'good':'bad'}">${(x.d>0?'+':'')+f(x.d)}</span>`:'';
  const cell=(m,k)=>{const x=m.c[k];if(!x)return '<td>–</td>';if(x.v==null&&x.seen)return `<td class="note" title="Nicht mehr in der Liste, zuletzt gesehen ${dm(x.seen)}">–</td>`;
   return `<td>${x.v==null?'–':f(x.v)}${x.r!=null?`<span class="rk">#${x.r}</span>`:''}${arr(x.r,x.pr)}${dl(x)}</td>`};
@@ -2830,6 +2831,10 @@ $('al').addEventListener('click',e=>{const th=e.target.closest('th[data-k]');if(
 $('al').addEventListener('change',e=>{const sl=e.target.closest('.tsel');if(!sl||!lastAl)return;const n=sl.dataset.n,t=sl.value;lastAl.ui.tiers=lastAl.ui.tiers||{};if(t)lastAl.ui.tiers[n]=t;else delete lastAl.ui.tiers[n];
  fetch('/api/alliance_ui',{method:'POST',body:JSON.stringify({tier:{name:n,t:t}})}).catch(()=>{});renderAlliance(lastAl)});
 $('asearch').oninput=()=>{alQ=$('asearch').value;renderAlliance(lastAl)};
+$('atop').onclick=()=>{const tag=/^(ˢʰ|ᴺˢ|ᴺᴿ|ᴿˢʰ|ᵀᴾ|ᴰᴿ|ˢⁿ)\s*/,top=alRows.filter(m=>m.a&&m.a.avg_all!=null).sort((x,y)=>x.a.avg_all-y.a.avg_all).slice(0,10),
+ t=top.map((m,i)=>(i+1)+'. '+m.name.replace(tag,'').trim()+' ('+m.a.avg_all.toFixed(1)+')').join('\n');
+ const ok=()=>{$('amsg').textContent=LL('Top 10 kopiert.','Top 10 copied.')};
+ (navigator.clipboard?navigator.clipboard.writeText(t):Promise.reject()).then(ok).catch(()=>{const ta=document.createElement('textarea');ta.value=t;document.body.appendChild(ta);ta.select();try{document.execCommand('copy');ok()}catch(e){}ta.remove()})};
 async function amhShow(){const n=$('amh').value.trim(),box=$('amhr');if(!n){box.innerHTML='';return}
  try{const r=await (await fetch('/api/alliance_member?name='+encodeURIComponent(n))).json();
   if(!r.length){box.innerHTML=`<div class="note">${LL('Kein Mitglied mit diesem Namen (Schreibweise genau wie in der Liste).','No member with this exact name.')}</div>`;return}
