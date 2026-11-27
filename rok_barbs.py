@@ -1666,6 +1666,15 @@ class DB:
             self.set_setting("silkroad_arch", json.dumps(arch))
         return n
 
+    def alliance_member(self, name):
+        """Alle Staende eines Mitglieds ueber alle Listen: [{lst, day, c:{cat:{v,r}}}] (aelteste zuerst)."""
+        rs = self.q("SELECT '' lst, day, cat, rank, value FROM alliance WHERE name=? UNION ALL SELECT lst, day, cat, rank, value FROM alliance_arch WHERE name=?", (name, name))
+        out = {}
+        for r in rs:
+            e = out.setdefault((r["day"], r["lst"]), {"lst": r["lst"], "day": r["day"], "c": {}})
+            e["c"][r["cat"]] = {"v": r["value"], "r": r["rank"]}
+        return sorted(out.values(), key=lambda e: (e["day"], e["lst"]))
+
     def alliance_stats(self, sel=None, base=None, lst=None, blst=None):
         """sel = gewaehlter Stand (Tag oder 'Tag HH:MM'), base = Vergleichsstand (leer: jeweils der vorherige Stand).
         Native = Mitglieder des ersten getrackten Standes; alle anderen bekommen das Datum des ersten Auftauchens (first)."""
@@ -1691,9 +1700,10 @@ class DB:
                 if r["day"] <= base:
                     bmap[(r["cat"], r["name"])] = (r["day"], r["value"], r["rank"])
         first, days, members = {}, {}, {}
-        for r in sorted(list(rows) + (list(brows) if brows is not None else []), key=lambda x: x["day"]):   # Erstes Auftauchen: auch ueber die Vergleichsliste
-            first.setdefault(r["name"], r["day"])
+        gall = self.q("SELECT name, MIN(day) d FROM (SELECT name, day FROM alliance UNION ALL SELECT name, day FROM alliance_arch) GROUP BY name")
+        first = {r["name"]: r["d"] for r in gall}                # Erstes Auftauchen ueber ALLE Listen der App
         first0 = min(first.values()) if first else None
+        gdays = self.q("SELECT COUNT(DISTINCT day) n FROM (SELECT day FROM alliance UNION SELECT day FROM alliance_arch)")[0]["n"]
         for r in rows:
             if sel and r["day"] > sel:
                 continue
@@ -1720,7 +1730,7 @@ class DB:
                                    pr=prev[2] if prev else None)
         ui = self.alliance_ui()
         names = dict(ALLIANCE_CATS)
-        return dict(cats=[dict(key=k, label=names[k]) for k in ui["order"] if k != "silk"], ui=ui, latest=latest, snaps=snaps, sel=sel, base=base, blst=blst if brows is not None else "", lists=self.alliance_lists(), lst=lst or "",
+        return dict(cats=[dict(key=k, label=names[k]) for k in ui["order"] if k != "silk"], ui=ui, latest=latest, snaps=snaps, gdays=gdays, allnames=sorted(first), sel=sel, base=base, blst=blst if brows is not None else "", lists=self.alliance_lists(), lst=lst or "",
                     allsnaps=dict([("", sorted({r["day"] for r in self.q("SELECT day FROM alliance")}))] + [(n, sorted({r["day"] for r in self.q("SELECT day FROM alliance_arch WHERE lst=?", (n,))})) for n in self.alliance_lists()]),
                     days={c: sorted(d) for c, d in days.items()}, sr=(self.silk_get("silkroad_arch").get(lst, {}) if lst else self.silk_get()), members=sorted(members.values(), key=lambda m: m["name"].lower()))
 
@@ -2717,7 +2727,7 @@ document.addEventListener("click",e=>{const y=e.target.closest(".seg button");if
 <section class="inact mobs" id="mobsec"><div class="ih"><div><h2 id="mhT"></h2><div class="note" id="mhS"></div></div>
 <div class="ib mreq"><button type="button" id="mhide"></button><label><span id="mrL"></span> <input id="mreq" type="number" min="0" step="100" value="1000"></label><label class="mchk"><input type="checkbox" id="monly"> <span id="moL"></span></label><button type="button" id="mcp"></button></div></div>
 <div class="note" id="msum"></div><div class="wrap mwrap"><table id="mtab"></table></div></section>
-<div class="pane" style="margin-top:0"><div class="snapbar"><label>Liste <select id="alst"></select></label><button type="button" id="anew">Neue Liste</button><button type="button" id="adl" hidden>Liste löschen</button><label>Stand <select id="asel"></select></label><label>Vergleich mit <select id="abase"></select></label><button type="button" id="adel">Diesen Stand löschen</button></div><div class="chips" id="achips" role="group" aria-label="Kategorien im Durchschnitt"></div><div class="nmbar"><input id="asearch" type="search" placeholder="Mitglied suchen …"> <span class="note" id="ainfo"></span> <span class="note" id="amsg"></span></div>
+<div class="pane" style="margin-top:0"><div class="snapbar"><label>Liste <select id="alst"></select></label><button type="button" id="anew">Neue Liste</button><button type="button" id="adl" hidden>Liste löschen</button><label>Stand <select id="asel"></select></label><label>Vergleich mit <select id="abase"></select></label><button type="button" id="adel">Diesen Stand löschen</button></div><div class="chips" id="achips" role="group" aria-label="Kategorien im Durchschnitt"></div><div class="nmbar"><input id="asearch" type="search" placeholder="Mitglied suchen …"> <span class="note" id="ainfo"></span> <span class="note" id="amsg"></span></div><div class="nmbar"><input id="amh" list="amhl" type="search" placeholder="Member-Verlauf (alle Wochen &amp; Listen) …" autocomplete="off"><datalist id="amhl"></datalist></div><div id="amhr" style="overflow-x:auto"></div>
 <div class="wrap"><table id="al"></table></div>
 <p class="note">Tier: automatisch nach Platz im Ø Rang, in Prozent der aktuellen Mitgliederzahl (oberste 10,5 % S, bis 21 % A, bis 41 % B, bis 62 % C, bis 76 % D, Rest E; bei 143 Mitgliedern entspricht das 15/30/59/89/109). Über das Auswahlfeld kannst du einen Tier selbst setzen, „Auto“ stellt die Automatik wieder her.</p>
 <p class="note">Klick auf eine Spaltenüberschrift sortiert die Liste. Grün und rot zeigen die Veränderung seit dem vorherigen Stand. Ranglisten ohne Resource Assistance und Armory Contributions.</p>
@@ -2761,7 +2771,7 @@ $('monly').onchange=()=>{if(lastAl){lastAl.ui.mobonly=$('monly').checked;mobRend
 $('mcp').onclick=()=>{const t=mobLow.join(', ');const ok=()=>{$('amsg').textContent=LL(mobLow.length+' Namen kopiert.',mobLow.length+' names copied.')};
  (navigator.clipboard?navigator.clipboard.writeText(t):Promise.reject()).then(ok).catch(()=>{const ta=document.createElement('textarea');ta.value=t;document.body.appendChild(ta);ta.select();try{document.execCommand('copy');ok()}catch(e){}ta.remove()})};
 let lastAl=null,lastSig='',alSort='power',alDir=-1,alQ='',alOn=null;const alOpen=new Set();
-function renderAlliance(a){lastAl=a;if(!a)return;try{inRender()}catch(e){}try{mobRender(a)}catch(e){}const cats=a.cats,ms=a.members;
+function renderAlliance(a){lastAl=a;if(!a)return;try{$('amhl').innerHTML=(a.allnames||[]).map(n=>`<option value="${esc(n)}"></option>`).join('')}catch(e){}try{inRender()}catch(e){}try{mobRender(a)}catch(e){}const cats=a.cats,ms=a.members;
  const newest=a.sel||Object.values(a.latest||{}).sort().pop();
  $('asub').textContent=newest?LL('Member-Rangliste · Stand ','Member ranking · as of ')+dm(newest):LL('Member-Rangliste','Member ranking');
  const sn=a.snaps||[];$('asel').innerHTML=sn.slice().reverse().map(d=>`<option value="${d}"${d===a.sel?' selected':''}>${dm(d)}</option>`).join('');
@@ -2807,7 +2817,7 @@ function renderAlliance(a){lastAl=a;if(!a)return;try{inRender()}catch(e){}try{mo
    return `<div><h3>${c.label}</h3><table><tr><th>Tag</th><th>Wert</th><th>Rang</th><th>Veränderung</th></tr>${h.map((r,i)=>{const p=h[i+1],d=p&&p[1]!=null&&r[1]!=null?r[1]-p[1]:null;
      return `<tr><td>${dm(r[0])}</td><td>${r[1]==null?'–':f(r[1])}</td><td>${r[2]==null?'–':'#'+r[2]}</td><td class="${d>0?'good':d<0?'bad':''}">${d==null?'–':(d>0?'+':'')+f(d)}</td></tr>`}).join('')}</table></div>`}).join('')}</div></td></tr>`;
  $('al').innerHTML=ms.length?`<tr><th class="t">#</th><th class="t">Name</th><th data-k="tier" class="tr${alSort==='tier'?' on':''}" title="${LL('Eigene Einstufung S bis E, zum Sortieren klicken','Your own rating S to E, click to sort')}">Tier${alSort==='tier'?(alDir<0?' ▼':' ▲'):''}</th>${AV.map(([k,l])=>`<th data-k="${k}" class="${alSort===k?'on':''}" title="Durchschnitt der Plätze in den eingeschalteten Kategorien, niedriger ist besser">${l}${alSort===k?(alDir<0?' ▼':' ▲'):''}</th>`).join('')}${COLK.map(k=>k==='silk'?srTh:`<th data-k="${k}" class="${alSort===k?'on':''}">${VC[k].label}${alSort===k?(alDir<0?' ▼':' ▲'):''}</th>`).join('')}</tr>`+
-  rows.map((m,i)=>`<tr class="m" data-n="${esc(m.name)}"><td class="r">${i+1}</td><td class="n nm">${alOpen.has(m.name)?'▾':'▸'} ${esc(m.name)}<span class="r4s${R4.has(nk(m.name))?'':' off'}" data-k="${esc(nk(m.name))}" title="${R4.has(nk(m.name))?LL('R4 – zum Entfernen klicken','R4 – click to remove'):LL('Als R4 markieren','Mark as R4')}">${R4.has(nk(m.name))?'★':'☆'}</span>${arr(m.ap.avg_all,m.bp)}${((a.snaps||[]).length>1||a.base)?(m.native?`<span class="tg nat" title="${LL('Im ersten getrackten Stand dabei','Present in the first tracked snapshot')}">Native</span>`:`<span class="tg nw" title="${LL('Zum ersten Mal getrackt am ','First tracked on ')}${dm(m.first)}">${LL('neu ','new ')}${dm(m.first)}</span>`):''}</td><td class="tr"><select class="tsel${effT(m)?' t-'+effT(m):''}${TR[m.name]?'':' auto'}" data-n="${esc(m.name)}" aria-label="Tier" title="${TR[m.name]?LL('Manuell gesetzt. „Auto“ wählen, um wieder nach Platz im Ø Rang einzustufen.','Set manually. Choose "Auto" to rate by position in the average rank again.'):LL('Automatisch nach Platz im Ø Rang','Automatic by position in the average rank')}"><option value="">${autoT(m.ap.avg_all)?autoT(m.ap.avg_all)+' · Auto':'Auto'}</option>${TL.map(t=>`<option value="${t}"${TR[m.name]===t?' selected':''}>${t}</option>`).join('')}</select></td>${AV.map(([k])=>acell(m,k)).join('')}${COLK.map(k=>k==='silk'?`<td class="tr">${srCell(m.name,m)}</td>`:cell(m,k)).join('')}</tr>${alOpen.has(m.name)?hist(m):''}`).join(''):
+  rows.map((m,i)=>`<tr class="m" data-n="${esc(m.name)}"><td class="r">${i+1}</td><td class="n nm">${alOpen.has(m.name)?'▾':'▸'} ${esc(m.name)}<span class="r4s${R4.has(nk(m.name))?'':' off'}" data-k="${esc(nk(m.name))}" title="${R4.has(nk(m.name))?LL('R4 – zum Entfernen klicken','R4 – click to remove'):LL('Als R4 markieren','Mark as R4')}">${R4.has(nk(m.name))?'★':'☆'}</span>${arr(m.ap.avg_all,m.bp)}${(a.gdays||0)>1?(m.native?`<span class="tg nat" title="${LL('Im ersten getrackten Stand dabei','Present in the first tracked snapshot')}">Native</span>`:`<span class="tg nw" title="${LL('Zum ersten Mal getrackt am ','First tracked on ')}${dm(m.first)}">${LL('neu ','new ')}${dm(m.first)}</span>`):''}</td><td class="tr"><select class="tsel${effT(m)?' t-'+effT(m):''}${TR[m.name]?'':' auto'}" data-n="${esc(m.name)}" aria-label="Tier" title="${TR[m.name]?LL('Manuell gesetzt. „Auto“ wählen, um wieder nach Platz im Ø Rang einzustufen.','Set manually. Choose "Auto" to rate by position in the average rank again.'):LL('Automatisch nach Platz im Ø Rang','Automatic by position in the average rank')}"><option value="">${autoT(m.ap.avg_all)?autoT(m.ap.avg_all)+' · Auto':'Auto'}</option>${TL.map(t=>`<option value="${t}"${TR[m.name]===t?' selected':''}>${t}</option>`).join('')}</select></td>${AV.map(([k])=>acell(m,k)).join('')}${COLK.map(k=>k==='silk'?`<td class="tr">${srCell(m.name,m)}</td>`:cell(m,k)).join('')}</tr>${alOpen.has(m.name)?hist(m):''}`).join(''):
   '<tr><td class="note">Noch keine Allianz-Daten. Schick mir Screenshots der Ranglisten, ich erstelle dir die Datei zum Einfügen.</td></tr>';
  $('ainfo').textContent=ms.length?`${rows.length} / ${ms.length} Mitglieder`:''}
 $('al').addEventListener('click',e=>{const th=e.target.closest('th[data-k]');if(th){if(alSort===th.dataset.k)alDir=-alDir;else{alSort=th.dataset.k;alDir=alSort.startsWith('avg_')||alSort==='tier'?1:-1}saveUi();return renderAlliance(lastAl)}
@@ -2817,6 +2827,15 @@ $('al').addEventListener('click',e=>{const th=e.target.closest('th[data-k]');if(
 $('al').addEventListener('change',e=>{const sl=e.target.closest('.tsel');if(!sl||!lastAl)return;const n=sl.dataset.n,t=sl.value;lastAl.ui.tiers=lastAl.ui.tiers||{};if(t)lastAl.ui.tiers[n]=t;else delete lastAl.ui.tiers[n];
  fetch('/api/alliance_ui',{method:'POST',body:JSON.stringify({tier:{name:n,t:t}})}).catch(()=>{});renderAlliance(lastAl)});
 $('asearch').oninput=()=>{alQ=$('asearch').value;renderAlliance(lastAl)};
+async function amhShow(){const n=$('amh').value.trim(),box=$('amhr');if(!n){box.innerHTML='';return}
+ try{const r=await (await fetch('/api/alliance_member?name='+encodeURIComponent(n))).json();
+  if(!r.length){box.innerHTML=`<div class="note">${LL('Kein Mitglied mit diesem Namen (Schreibweise genau wie in der Liste).','No member with this exact name.')}</div>`;return}
+  const cs=(lastAl&&lastAl.cats)||[],f0=r[0],ln=l=>l||LL('Aktuelle Liste','Current list');
+  box.innerHTML=`<div style="margin:8px 0 4px"><b>${esc(n)}</b> · ${LL('erstmals getrackt am ','first tracked on ')}<b>${dm(f0.day)}</b> (${esc(ln(f0.lst))}) · ${r.length} ${LL('Stände','snapshots')}</div><table style="border-collapse:collapse;font-size:.85rem"><tr><th style="text-align:left;padding:3px 10px">${LL('Liste','List')}</th><th style="text-align:left;padding:3px 10px">${LL('Stand','Date')}</th>${cs.map(c=>`<th style="text-align:right;padding:3px 10px">${esc(c.label)}</th>`).join('')}</tr>`+
+   r.slice().reverse().map(e=>`<tr style="border-top:1px solid var(--line)"><td style="padding:3px 10px">${esc(ln(e.lst))}</td><td style="padding:3px 10px">${dm(e.day)}</td>${cs.map(c=>{const x=e.c[c.key];return `<td style="text-align:right;padding:3px 10px">${x?(x.v!=null?f(x.v):'–')+(x.r!=null?` <span class="mm">#${x.r}</span>`:''):'–'}</td>`}).join('')}</tr>`).join('')+'</table>'}
+ catch(e){box.innerHTML=''}}
+$('amh').onchange=amhShow;$('amh').onkeydown=e=>{if(e.key==='Enter')amhShow()};
+
 $('achips').addEventListener('click',e=>{const b=e.target.closest('.chip');if(!b||!alOn)return;if(b.id==='srchip'){if(!lastAl)return;lastAl.ui.srhide=!lastAl.ui.srhide;fetch('/api/alliance_ui',{method:'POST',body:JSON.stringify({srhide:lastAl.ui.srhide})}).catch(()=>{});return renderAlliance(lastAl)}const k=b.dataset.k;alOn.has(k)?alOn.delete(k):alOn.add(k);saveUi();renderAlliance(lastAl)});
 let dragK=null;$('achips').addEventListener('dragstart',e=>{const b=e.target.closest('.chip');if(!b)return;if(!b.dataset.k)return;dragK=b.dataset.k;e.dataTransfer.effectAllowed='move';try{e.dataTransfer.setData('text/plain',dragK)}catch(x){}});
 $('achips').addEventListener('dragover',e=>{if(dragK&&e.target.closest('.chip[data-k]'))e.preventDefault()});
@@ -3757,6 +3776,8 @@ def make_handler(db, watcher):
                 self.wfile.write(data)
             elif u.path == "/api/quick":
                 self.send(json.dumps(db.quick(parse_qs(u.query).get("account", ["main"])[0])), "application/json")
+            elif u.path == "/api/alliance_member":
+                self.send(json.dumps(db.alliance_member(parse_qs(u.query).get("name", [""])[0])), "application/json")
             elif u.path == "/api/alliance":
                 q = parse_qs(u.query)
                 self.send(json.dumps(db.alliance_stats(q.get("sel", [""])[0] or None, q.get("base", [""])[0] or None, q.get("lst", [""])[0] or None, q.get("blst", [""])[0] or None)), "application/json")
